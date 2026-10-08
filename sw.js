@@ -1,7 +1,7 @@
 // Motherboard service worker — v4
 // Page (HTML) : réseau d'abord => chaque mise à jour poussée sur GitHub apparaît
 // à la prochaine ouverture, sans réinstaller. Cache seulement en secours hors-ligne.
-const CACHE_NAME = 'motherboard-v4';
+const CACHE_NAME = 'motherboard-v5';
 const SHELL = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', event => {
@@ -20,7 +20,7 @@ self.addEventListener('fetch', event => {
   const req = event.request;
   const url = new URL(req.url);
   // Ne jamais intercepter Google / API externes
-  if (req.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (req.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
   event.respondWith(
     fetch(req)

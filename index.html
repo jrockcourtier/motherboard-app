@@ -419,7 +419,17 @@
     .month-head .nav-btn { height: 34px; }
     .month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; padding: 8px 12px 16px; }
     .month-label { text-align: center; font-size: 9px; font-weight: 600; color: var(--text-secondary); }
-    .month-cell { min-height: 58px; padding: 4px; border: 1px solid var(--border-light); border-radius: 4px; cursor: pointer; background: var(--white); }
+    .month-chip { font-size: 8.5px; line-height: 1.25; padding: 2px 3px; margin-bottom: 2px; border-radius: 3px; border-left: 2px solid; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary); }
+    .month-cell.is-now .month-chip { color: var(--white); }
+    .month-chip.visite { border-left-color: var(--visite); background: rgba(215, 189, 226, 0.45); }
+    .month-chip.appel { border-left-color: var(--appel); background: rgba(0, 121, 107, 0.18); }
+    .month-chip.reunion { border-left-color: var(--reunion); background: rgba(25, 118, 210, 0.18); }
+    .month-chip.matrix { border-left-color: var(--matrix); background: rgba(245, 124, 0, 0.18); }
+    .month-chip.docs { border-left-color: var(--docs); background: rgba(194, 24, 91, 0.18); }
+    .month-chip.marketing { border-left-color: var(--marketing); background: rgba(85, 139, 47, 0.18); }
+    .month-chip.urgent { border-left-color: var(--urgent); background: rgba(198, 40, 40, 0.18); }
+    .month-grid { gap: 3px !important; padding: 8px 6px 16px !important; }
+    .month-cell { min-width: 0; min-height: 92px; padding: 4px; border: 1px solid var(--border-light); border-radius: 4px; cursor: pointer; background: var(--white); }
     .month-cell.other { opacity: .4; }
     .month-cell.is-now { background: var(--primary-dark); }
     .month-cell.is-now .month-num { color: var(--primary-gold); }
@@ -430,7 +440,9 @@
     .month-bar.reunion { background: var(--reunion); } .month-bar.matrix { background: var(--matrix); }
     .month-bar.docs { background: var(--docs); } .month-bar.marketing { background: var(--marketing); }
     .month-bar.urgent { background: var(--urgent); }
-    .month-more { font-size: 8px; color: var(--text-secondary); }
+    .month-more { font-size: 8px; color: var(--text-secondary); font-weight: 600; }
+    @media (max-width: 899px) { .month-chip { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word; font-size: 8px; } .month-chip b { display: none; } }
+    @media (min-width: 900px) { .month-cell { min-height: 130px; padding: 6px; } .month-chip { font-size: 11px; padding: 3px 5px; } .month-num { font-size: 13px; } }
   </style>
 </head>
 <body>
@@ -440,7 +452,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v4</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v5</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -472,7 +484,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
-    const APP_VERSION = 'v4';
+    const APP_VERSION = 'v5';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -547,7 +559,27 @@
       });
     }
 
+    // Connexion permanente : le serveur (Vercel) garde l'autorisation Google ; l'app demande un accès frais quand il faut.
+    let serverAuth = null;      // true = connexion permanente disponible, false = pas encore configurée
+    let refreshTimer = null;
+    async function getServerToken() {
+      try {
+        const r = await fetch('/api/token', { cache: 'no-store', credentials: 'same-origin' });
+        if (r.status === 503 || r.status === 404) { serverAuth = false; return false; }
+        serverAuth = true;
+        if (!r.ok) return false;
+        const d = await r.json();
+        accessToken = d.access_token;
+        store('mb_connected', true);
+        clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(getServerToken, Math.max(60, (d.expires_in || 3600) - 300) * 1000);
+        updateLoginButton();
+        return true;
+      } catch (e) { return false; }
+    }
+
     function connectGoogle() {
+      if (serverAuth) { location.href = '/api/auth/start'; return; }
       if (!tokenClient) { setStatus('Google se charge, réessayez dans 2 secondes…'); return; }
       tokenClient.requestAccessToken({ prompt: load('mb_connected') ? '' : 'consent' });
     }
@@ -558,8 +590,9 @@
       else { btn.classList.remove('logged-in'); btn.textContent = load('mb_connected') ? '↻ Reconnecter Google' : 'Connecter Google'; }
     }
 
-    async function gcal(path) {
+    async function gcal(path, retried) {
       const r = await fetch('https://www.googleapis.com/calendar/v3/' + path, { headers: { Authorization: 'Bearer ' + accessToken } });
+      if (r.status === 401 && !retried && serverAuth && await getServerToken()) return gcal(path, true);
       if (r.status === 401) { accessToken = null; store('mb_token', null); updateLoginButton(); throw new Error('expired'); }
       if (!r.ok) throw new Error('Google ' + r.status + ' ' + (await r.text()).slice(0, 200));
       return r.json();
@@ -582,7 +615,7 @@
 
     async function fetchRange(start, end) {
       const list = await gcal('users/me/calendarList?minAccessRole=reader');
-      const cals = (list.items || []).filter(c => c.selected !== false && !c.hidden);
+      const cals = (list.items || []).filter(c => !/#(holiday|contacts)@group\.v\.calendar\.google\.com$/.test(c.id));
       const all = [];
       await Promise.all(cals.map(async cal => {
         let pageToken = '';
@@ -730,6 +763,7 @@
     }
 
     function renderMoisView() {
+      const MONTH_MAX = window.innerWidth >= 900 ? 5 : 3;
       const first = monthCursor, today = startOfDay(new Date());
       const gridStart = startOfWeek(first);
       let html = `<div class="month-head"><button class="nav-btn" onclick="shiftMonth(-1)">‹</button><div class="section-title" style="flex:1;text-align:center;background:none">${MOIS[first.getMonth()]} ${first.getFullYear()}</div><button class="nav-btn" onclick="shiftMonth(1)">›</button></div>`;
@@ -740,8 +774,8 @@
         const cls = (d.getMonth() !== first.getMonth() ? ' other' : '') + (sameDay(d, today) ? ' is-now' : '') + (sameDay(d, selectedDate) ? ' selected' : '');
         const evs = eventsOn(d);
         html += `<div class="month-cell${cls}" onclick="selectDate(new Date(${d.getTime()}))"><div class="month-num">${d.getDate()}</div>` +
-          evs.slice(0, 4).map(e => `<div class="month-bar ${e.type}"></div>`).join('') +
-          (evs.length > 4 ? `<div class="month-more">+${evs.length - 4}</div>` : '') + `</div>`;
+          evs.slice(0, MONTH_MAX).map(e => `<div class="month-chip ${e.type}">${e.allDay ? '' : `<b>${hhmm(e.start)}</b> `}${esc(e.title)}</div>`).join('') +
+          (evs.length > MONTH_MAX ? `<div class="month-more">+${evs.length - MONTH_MAX} autres</div>` : '') + `</div>`;
       }
       html += '</div>';
       document.getElementById('mois').innerHTML = html;
@@ -794,12 +828,22 @@
         if (btn) btn.click();
       }
       initGoogle();
-      if (accessToken) ensureLoaded(true);
-      else if (load('mb_connected')) setStatus('Touchez « Reconnecter Google » pour rafraîchir', true);
+      const qs = new URLSearchParams(location.search);
+      const authErr = qs.get('auth_error');
+      if (qs.has('connected') || authErr) history.replaceState({}, document.title, location.pathname);
+      getServerToken().then(ok => {
+        if (accessToken) ensureLoaded(true);
+        else if (authErr) setStatus('Connexion Google : ' + authErr, true);
+        else if (load('mb_connected')) setStatus('Touchez « Connecter Google »', true);
+      });
     });
 
     // Rafraîchir quand on revient dans l'app
-    document.addEventListener('visibilitychange', () => { if (!document.hidden && accessToken) ensureLoaded(true); });
+    document.addEventListener('visibilitychange', async () => {
+      if (document.hidden) return;
+      if (serverAuth) await getServerToken();
+      if (accessToken) ensureLoaded(true);
+    });
 
     // Mises à jour automatiques de l'app (pas besoin de réinstaller)
     if ('serviceWorker' in navigator) {
