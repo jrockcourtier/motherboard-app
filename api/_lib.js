@@ -61,4 +61,69 @@ function json(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-module.exports = { CLIENT_ID, SCOPE, RT_COOKIE, MAX_AGE, configured, encrypt, decrypt, cookies, setCookie, origin, json };
+// ---------- Session (refresh token + courriel du compte Google) ----------
+const ALLOWED = (process.env.ALLOWED_EMAILS || 'jrockcourtier@gmail.com').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+function allowed(email) { return !!email && ALLOWED.includes(String(email).toLowerCase()); }
+
+function readSession(req) {
+  const raw = decrypt(cookies(req)[RT_COOKIE] || '');
+  if (!raw) return null;
+  try { const s = JSON.parse(raw); if (s && s.rt) return s; } catch (e) {}
+  return { rt: raw, email: null }; // ancien format (avant v8)
+}
+function writeSession(res, s) { setCookie(res, RT_COOKIE, encrypt(JSON.stringify(s)), MAX_AGE); }
+function clearSession(res) { setCookie(res, RT_COOKIE, '', 0); }
+
+function emailFromIdToken(idt) {
+  try { return JSON.parse(Buffer.from(String(idt).split('.')[1], 'base64url').toString('utf8')).email || null; }
+  catch (e) { return null; }
+}
+
+async function refresh(rt) {
+  const r = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET, refresh_token: rt, grant_type: 'refresh_token' })
+  });
+  const data = await r.json().catch(() => ({}));
+  return { ok: r.ok, data };
+}
+
+// Vérifie que la requête vient bien de Julien (cookie valide + courriel autorisé). Renvoie le courriel ou null.
+async function requireOwner(req, res) {
+  if (!configured()) { json(res, 503, { error: 'not_configured' }); return null; }
+  const s = readSession(req);
+  if (!s) { json(res, 401, { error: 'not_connected' }); return null; }
+  let email = s.email;
+  if (!email) {
+    const { ok, data } = await refresh(s.rt);
+    if (!ok) { json(res, 401, { error: 'reconnect' }); return null; }
+    email = emailFromIdToken(data.id_token);
+    if (email) writeSession(res, { rt: s.rt, email });
+  }
+  if (!allowed(email)) { json(res, 403, { error: 'not_allowed' }); return null; }
+  return email;
+}
+
+// ---------- Supabase (base de données) ----------
+const SUPABASE_URL = (process.env.SUPABASE_URL || 'https://luynpgieqbszzsqucldal.supabase.co').replace(/\/$/, '');
+function supabaseKey() { return process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''; }
+async function sb(path, opts = {}) {
+  const key = supabaseKey();
+  const headers = Object.assign({ apikey: key, 'Content-Type': 'application/json' }, opts.headers || {});
+  if (key.startsWith('eyJ')) headers.Authorization = 'Bearer ' + key; // ancienne clé "service_role" (JWT)
+  const r = await fetch(SUPABASE_URL + '/rest/v1/' + path, Object.assign({}, opts, { headers }));
+  const text = await r.text();
+  let body = null; try { body = text ? JSON.parse(text) : null; } catch (e) { body = text; }
+  return { ok: r.ok, status: r.status, body };
+}
+
+async function readBody(req) {
+  if (req.body && typeof req.body === 'object') return req.body;
+  if (typeof req.body === 'string') { try { return JSON.parse(req.body); } catch (e) { return null; } }
+  const chunks = []; for await (const c of req) chunks.push(c);
+  try { return JSON.parse(Buffer.concat(chunks).toString('utf8') || 'null'); } catch (e) { return null; }
+}
+
+module.exports = { CLIENT_ID, SCOPE, RT_COOKIE, MAX_AGE, configured, encrypt, decrypt, cookies, setCookie, origin, json,
+  allowed, readSession, writeSession, clearSession, emailFromIdToken, refresh, requireOwner, sb, supabaseKey, readBody };

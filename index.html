@@ -521,7 +521,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v7.1</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v8</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -553,7 +553,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v7.1';
+    const APP_VERSION = 'v8';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -682,6 +682,7 @@
         location: ev.location || '',
         link: ev.htmlLink || '',
         cal: cal.summaryOverride || cal.summary,
+        contactId: (ev.extendedProperties && ev.extendedProperties.private && ev.extendedProperties.private.mbContact) || null,
         type: detectType(ev)
       };
     }
@@ -755,6 +756,7 @@
       document.getElementById(name).classList.add('active');
       event.target.classList.add('active');
       store('mb_tab', name);
+      document.body.dataset.tab = name;
       if (name === 'semaine') renderSemaine();
     }
 
@@ -951,20 +953,7 @@
       document.getElementById('transactions').innerHTML = html;
     }
 
-    function renderContactsView() {
-      let html = `<div class="section-title">CONTACTS IMPORTANTS (démo)</div>`;
-      const contacts = [
-        { nom: 'Marie Dupont', tel: '(514) 123-4567', role: 'Acheteur', note: 'Intéressée par: Outremont, 400k-500k' },
-        { nom: 'Jean Smith', tel: '(514) 234-5678', role: 'Vendeur', note: 'Propriété: 456 Rue Saint-Laurent' },
-        { nom: 'Sophie Roy', tel: '(514) 345-6789', role: 'Acheteur', note: 'Intéressée par: Plateau, condo' },
-        { nom: 'Pierre Levesque', tel: '(514) 456-7890', role: 'Vendeur', note: 'Propriété: 321 Chemin Côte-Sainte-Catherine' },
-        { nom: 'Nathalie Bergeron', tel: '(514) 567-8901', role: 'Acheteur', note: 'Intéressée par: Griffintown, loft' }
-      ];
-      contacts.forEach(c => {
-        html += `<div class="contact-card"><div class="contact-name">${c.nom}</div><div class="contact-info">📞 ${c.tel} | ${c.role}</div><div class="contact-info">${c.note}</div></div>`;
-      });
-      document.getElementById('contacts').innerHTML = html;
-    }
+    function renderContactsView() {} // remplacé par crm.js
 
 
     // ================== AJOUTER UN RENDEZ-VOUS ==================
@@ -982,6 +971,7 @@
     }
 
     function openAddForm(start) {
+      window.pendingContactId = null;
       if (!accessToken) { connectGoogle(); return; }
       if (!start) {
         const now = new Date();
@@ -1031,7 +1021,7 @@
         location: f.location.value.trim() || undefined,
         description: f.notes.value.trim() || undefined,
         colorId: GCOLORS[formType],
-        extendedProperties: { private: { mbType: formType } }
+        extendedProperties: { private: Object.assign({ mbType: formType }, window.pendingContactId ? { mbContact: window.pendingContactId } : {}) }
       };
       if (allDay) {
         const d = new Date(date + 'T00:00:00');
@@ -1062,6 +1052,8 @@
         const created = await r.json();
         const cal = { summary: (writableCals.find(c => c.id === calId) || {}).name || '' };
         events.push(normalize(created, cal));
+        if (window.pendingContactId && window.CRM && CRM.logMeeting) CRM.logMeeting(window.pendingContactId, title, allDay ? date : `${date} ${f.time.value}`);
+        window.pendingContactId = null;
         closeAddForm();
         selectDate(new Date(date + 'T00:00:00'));
         setStatus('Rendez-vous ajouté ✓');
@@ -1115,7 +1107,7 @@
     }
   </script>
 
-  <button class="fab" onclick="openAddForm()" aria-label="Ajouter un rendez-vous">+</button>
+  <button class="fab" onclick="document.body.dataset.tab==='contacts' && window.CRM ? CRM.edit() : openAddForm()" aria-label="Ajouter">+</button>
   <div class="modal" id="add-modal" onclick="if(event.target===this)closeAddForm()">
     <form class="sheet" id="add-form" onsubmit="saveEvent(event)">
       <div class="sheet-head"><button type="button" class="sheet-x" onclick="closeAddForm()">✕</button><b>Nouveau rendez-vous</b><button type="submit" id="add-save" class="sheet-save">Enregistrer</button></div>
@@ -1147,5 +1139,7 @@
       <a id="add-auth" class="cta-btn auth-link" style="display:none" href="/api/auth/start" target="_self" rel="external">Autoriser l'ajout de rendez-vous</a>
     </form>
   </div>
+  <link rel="stylesheet" href="crm.css">
+  <script src="crm.js"></script>
 </body>
 </html>

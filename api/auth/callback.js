@@ -23,7 +23,9 @@ module.exports = async (req, res) => {
   const data = await r.json().catch(() => ({}));
   if (!r.ok || !data.refresh_token) return back('auth_error=' + encodeURIComponent(data.error || 'no_refresh_token'));
 
+  const email = L.emailFromIdToken(data.id_token);
   L.setCookie(res, 'mb_state', '', 0);
-  L.setCookie(res, L.RT_COOKIE, L.encrypt(data.refresh_token), L.MAX_AGE);
+  if (!L.allowed(email)) return back('auth_error=' + encodeURIComponent('compte non autorisé (' + (email || '?') + ')'));
+  L.writeSession(res, { rt: data.refresh_token, email });
   back('connected=1');
 };
