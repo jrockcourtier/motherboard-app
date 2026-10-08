@@ -25,7 +25,6 @@
       --text-primary: #000000;
       --text-secondary: #888888;
       --border-light: #E0E0E0;
-      
       --visite: #D7BDE2;
       --appel: #00796B;
       --reunion: #1976D2;
@@ -273,12 +272,116 @@
       font-weight: 600;
     }
 
-    .loading {
-      text-align: center;
-      padding: 20px;
-      color: var(--text-secondary);
-      font-size: 12px;
+    .week-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      gap: 0;
     }
+
+    .week-times {
+      width: 60px;
+      background: var(--light-bg);
+      border-right: 1px solid var(--border-light);
+      overflow-y: auto;
+      padding-top: 12px;
+    }
+
+    .week-hour {
+      height: 60px;
+      padding: 4px 8px;
+      font-size: 9px;
+      color: var(--text-secondary);
+      text-align: center;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .week-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      overflow-y: auto;
+      background: var(--white);
+      background-image: repeating-linear-gradient(0deg, var(--border-light) 1px, transparent 1px);
+      background-size: 100% 60px;
+    }
+
+    .week-day {
+      border-right: 1px solid var(--border-light);
+      position: relative;
+      min-height: 1440px;
+    }
+
+    .week-day:last-child {
+      border-right: none;
+    }
+
+    .week-day-header {
+      position: sticky;
+      top: 0;
+      background: var(--light-bg);
+      padding: 8px 4px;
+      text-align: center;
+      border-bottom: 1px solid var(--border-light);
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      z-index: 10;
+    }
+
+    .week-event {
+      position: absolute;
+      left: 2px;
+      right: 2px;
+      padding: 4px 6px;
+      border-radius: 4px;
+      border-left: 3px solid;
+      font-size: 9px;
+      font-weight: 600;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .week-event.visite { border-left-color: var(--visite); background: rgba(215, 189, 226, 0.3); }
+    .week-event.appel { border-left-color: var(--appel); background: rgba(0, 121, 107, 0.3); }
+    .week-event.reunion { border-left-color: var(--reunion); background: rgba(25, 118, 210, 0.3); }
+    .week-event.matrix { border-left-color: var(--matrix); background: rgba(245, 124, 0, 0.3); }
+    .week-event.docs { border-left-color: var(--docs); background: rgba(194, 24, 91, 0.3); }
+    .week-event.marketing { border-left-color: var(--marketing); background: rgba(85, 139, 47, 0.3); }
+    .week-event.urgent { border-left-color: var(--urgent); background: rgba(198, 40, 40, 0.3); }
+
+    .contact-card, .transaction-card {
+      padding: 12px 16px;
+      margin: 8px 12px;
+      border: 1px solid var(--border-light);
+      border-radius: 6px;
+      background: var(--white);
+    }
+
+    .contact-name {
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .contact-info {
+      font-size: 10px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .transaction-status {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: 600;
+      margin-top: 6px;
+    }
+
+    .status-draft { background: #FFF3CD; color: #856404; }
+    .status-active { background: #D4EDDA; color: #155724; }
+    .status-complete { background: #D1ECF1; color: #0C5460; }
   </style>
 </head>
 <body>
@@ -299,30 +402,33 @@
   <div class="stats-grid" id="stats-grid"></div>
 
   <div class="tabs-container">
-    <button class="tab-btn active" onclick="showTab('jour')">Jour</button>
-    <button class="tab-btn" onclick="showTab('semaine')">Semaine</button>
-    <button class="tab-btn" onclick="showTab('mois')">Mois</button>
-    <button class="tab-btn" onclick="showTab('transactions')">Transactions</button>
-    <button class="tab-btn" onclick="showTab('contacts')">Contacts</button>
+    <button class="tab-btn active" onclick="showTab(event, 'jour')">Jour</button>
+    <button class="tab-btn" onclick="showTab(event, 'semaine')">Semaine</button>
+    <button class="tab-btn" onclick="showTab(event, 'mois')">Mois</button>
+    <button class="tab-btn" onclick="showTab(event, 'transactions')">Transactions</button>
+    <button class="tab-btn" onclick="showTab(event, 'contacts')">Contacts</button>
   </div>
 
   <div class="mini-calendar" id="mini-calendar"></div>
 
   <div class="tabs-content">
     <div class="tab-content active" id="jour"></div>
-    <div class="tab-content" id="semaine"><div class="loading">Chargement...</div></div>
-    <div class="tab-content" id="mois"><div class="loading">Chargement...</div></div>
-    <div class="tab-content" id="transactions"><div class="loading">Chargement...</div></div>
-    <div class="tab-content" id="contacts"><div class="loading">Chargement...</div></div>
+    <div class="tab-content" id="semaine">
+      <div class="week-container">
+        <div class="week-times" id="week-times"></div>
+        <div class="week-grid" id="week-grid"></div>
+      </div>
+    </div>
+    <div class="tab-content" id="mois" style="padding: 20px; overflow-y: auto;"></div>
+    <div class="tab-content" id="transactions"></div>
+    <div class="tab-content" id="contacts"></div>
   </div>
 
   <script>
     const SUPABASE_URL = 'https://luynpgieqbszzsqucldal.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_Oxx4gkbcjWk84TVgXgHukQ_UWxgX0cj';
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
-    let accessToken = null;
 
     const dayEvents = {
       24: { label: 'DIMANCHE 24 OCTOBRE', events: [{ time: '10:00', text: 'Appel prospect', type: 'appel' }] },
@@ -334,28 +440,41 @@
       30: { label: 'SAMEDI 30 OCTOBRE', events: [] }
     };
 
+    const weekEvents = {
+      24: [{ time: '10:00', duration: 1, text: 'Appel', type: 'appel' }],
+      25: [{ time: '09:30', duration: 1.5, text: 'Matrix', type: 'matrix' }, { time: '14:00', duration: 1, text: 'Visite', type: 'visite' }],
+      26: [{ time: '11:00', duration: 1, text: 'Réunion', type: 'reunion' }, { time: '15:30', duration: 1, text: 'Docs', type: 'docs' }],
+      27: [{ time: '09:00', duration: 1, text: 'Matrix', type: 'matrix' }, { time: '10:30', duration: 1, text: 'Appel', type: 'appel' }, { time: '12:00', duration: 1, text: 'Réunion', type: 'reunion' }, { time: '14:00', duration: 1, text: 'Visite', type: 'visite' }, { time: '15:30', duration: 1, text: 'Docs', type: 'docs' }, { time: '16:00', duration: 1, text: 'URGENT', type: 'urgent' }, { time: '17:00', duration: 1, text: 'Marketing', type: 'marketing' }],
+      28: [{ time: '09:00', duration: 1, text: 'Appel', type: 'appel' }, { time: '11:00', duration: 1, text: 'Visite', type: 'visite' }, { time: '14:30', duration: 1, text: 'Réunion', type: 'reunion' }],
+      29: [{ time: '10:00', duration: 1, text: 'Matrix', type: 'matrix' }, { time: '15:00', duration: 1, text: 'Docs', type: 'docs' }],
+      30: []
+    };
+
     let currentDay = 27;
 
     window.onload = function() {
-      google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: handleCredentialResponse
-      });
-      
+      google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleCredentialResponse });
       buildMiniCalendar();
       updateStats();
       pickDay(null, 27);
+      renderMoisView();
+      renderTransactionsView();
+      renderContactsView();
     };
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW error:', err));
     }
 
-    function showTab(name) {
+    function showTab(event, name) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
       document.getElementById(name).classList.add('active');
       event.target.classList.add('active');
+      
+      if (name === 'semaine') {
+        setTimeout(buildWeekView, 100);
+      }
     }
 
     function buildMiniCalendar() {
@@ -374,12 +493,10 @@
         document.querySelectorAll('.mini-day').forEach(d => d.classList.remove('today'));
         el.classList.add('today');
       }
-      
       const evt = dayEvents[day].events;
       let html = `<div class="section-title">${dayEvents[day].label}</div>`;
       if (evt.length === 0) html += '<p style="text-align:center;padding:20px;color:var(--text-secondary);font-size:12px;">Aucun événement</p>';
       else evt.forEach(e => html += `<div class="event-card ${e.type}"><div class="event-time">${e.time}</div><div class="event-content"><div class="event-text">${e.text}</div></div></div>`);
-      
       document.getElementById('jour').innerHTML = html;
       updateStats();
     }
@@ -387,16 +504,81 @@
     function updateStats() {
       const today = dayEvents[currentDay];
       const counts = {};
-      today.events.forEach(e => {
-        counts[e.type] = (counts[e.type] || 0) + 1;
-      });
-      
+      today.events.forEach(e => { counts[e.type] = (counts[e.type] || 0) + 1; });
       let html = `<div class="stat-card"><div class="stat-value">${today.events.length}</div><div class="stat-label">ÉVÉNEMENTS</div></div>`;
       const labels = { matrix: 'Matrix', appel: 'Appels', reunion: 'Réunions', visite: 'Visites', docs: 'Docs', urgent: 'Urgent', marketing: 'Marketing' };
       for (const [type, count] of Object.entries(counts)) {
         html += `<div class="stat-card"><div class="stat-value">${count}</div><div class="stat-label">${labels[type] || type}</div></div>`;
       }
       document.getElementById('stats-grid').innerHTML = html;
+    }
+
+    function buildWeekView() {
+      let timesHtml = '';
+      for (let h = 0; h < 24; h++) {
+        timesHtml += `<div class="week-hour">${String(h).padStart(2, '0')}:00</div>`;
+      }
+      document.getElementById('week-times').innerHTML = timesHtml;
+
+      let gridHtml = '';
+      const daysOfWeek = ['DIM 24', 'LUN 25', 'MAR 26', 'MER 27', 'JEU 28', 'VEN 29', 'SAM 30'];
+      const daysOfMonth = [24, 25, 26, 27, 28, 29, 30];
+
+      for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
+        let dayHtml = `<div class="week-day"><div class="week-day-header">${daysOfWeek[dayIdx]}</div>`;
+        const events = weekEvents[daysOfMonth[dayIdx]] || [];
+        events.forEach(evt => {
+          const [hour, minute] = evt.time.split(':').map(Number);
+          const topPos = (hour * 60 + minute) / 60 * 60;
+          const height = evt.duration * 60;
+          dayHtml += `<div class="week-event ${evt.type}" style="top: ${topPos}px; height: ${height}px;">${evt.time} ${evt.text}</div>`;
+        });
+        dayHtml += '</div>';
+        gridHtml += dayHtml;
+      }
+      document.getElementById('week-grid').innerHTML = gridHtml;
+    }
+
+    function renderMoisView() {
+      let html = `<div class="section-title">OCTOBRE 2026</div>`;
+      html += `<div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; padding: 12px;">`;
+      const dayLabels = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
+      dayLabels.forEach(d => html += `<div style="text-align: center; font-size: 9px; font-weight: 600; color: var(--text-secondary);">${d}</div>`);
+      for (let d = 24; d <= 30; d++) {
+        const style = d === 27 ? 'background: var(--primary-dark); color: var(--primary-gold);' : '';
+        html += `<div onclick="pickDay(null, ${d})" style="padding: 8px; text-align: center; border: 1px solid var(--border-light); border-radius: 4px; cursor: pointer; ${style}">${d}</div>`;
+      }
+      html += `</div>`;
+      document.getElementById('mois').innerHTML = html;
+    }
+
+    function renderTransactionsView() {
+      let html = `<div class="section-title">TRANSACTIONS ACTIVES</div>`;
+      const transactions = [
+        { adresse: '123 Avenue Mont-Royal - VENDU', prix: '450 000 $', client: 'Marie Dupont', status: 'complete', label: 'Complétée' },
+        { adresse: '456 Rue Saint-Laurent - EN COURS', prix: '525 000 $', client: 'Jean Smith', status: 'active', label: 'En inspection' },
+        { adresse: '789 Boulevard Décarie - NOUVEAU', prix: '395 000 $', client: 'Sophie Roy', status: 'draft', label: 'Offre soumise' },
+        { adresse: '321 Chemin Côte-Sainte-Catherine', prix: '650 000 $', client: 'Pierre Levesque', status: 'draft', label: 'Visite programmée' }
+      ];
+      transactions.forEach(t => {
+        html += `<div class="transaction-card"><div class="contact-name">${t.adresse}</div><div class="contact-info">Prix: ${t.prix} | Client: ${t.client}</div><span class="transaction-status status-${t.status}">${t.status === 'complete' ? '✓ ' : ''}${t.label}</span></div>`;
+      });
+      document.getElementById('transactions').innerHTML = html;
+    }
+
+    function renderContactsView() {
+      let html = `<div class="section-title">CONTACTS IMPORTANTS</div>`;
+      const contacts = [
+        { nom: 'Marie Dupont', tel: '(514) 123-4567', role: 'Acheteur', note: 'Intéressée par: Outremont, 400k-500k' },
+        { nom: 'Jean Smith', tel: '(514) 234-5678', role: 'Vendeur', note: 'Propriété: 456 Rue Saint-Laurent' },
+        { nom: 'Sophie Roy', tel: '(514) 345-6789', role: 'Acheteur', note: 'Intéressée par: Plateau, condo' },
+        { nom: 'Pierre Levesque', tel: '(514) 456-7890', role: 'Vendeur', note: 'Propriété: 321 Chemin Côte-Sainte-Catherine' },
+        { nom: 'Nathalie Bergeron', tel: '(514) 567-8901', role: 'Acheteur', note: 'Intéressée par: Griffintown, loft' }
+      ];
+      contacts.forEach(c => {
+        html += `<div class="contact-card"><div class="contact-name">${c.nom}</div><div class="contact-info">📞 ${c.tel} | ${c.role}</div><div class="contact-info">${c.note}</div></div>`;
+      });
+      document.getElementById('contacts').innerHTML = html;
     }
 
     function loginWithGoogle() {
@@ -407,7 +589,6 @@
     }
 
     function handleCredentialResponse(response) {
-      console.log('Google sign-in successful');
       document.getElementById('google-signin-btn').classList.add('logged-in');
       document.getElementById('google-signin-btn').textContent = '✓ Connecté';
     }
@@ -415,8 +596,7 @@
     const hash = window.location.hash;
     if (hash.includes('access_token')) {
       const params = new URLSearchParams(hash.substring(1));
-      accessToken = params.get('access_token');
-      console.log('Access token obtained');
+      const accessToken = params.get('access_token');
       document.getElementById('google-signin-btn').classList.add('logged-in');
       document.getElementById('google-signin-btn').textContent = '✓ Connecté à Google';
       window.history.replaceState({}, document.title, window.location.pathname);
