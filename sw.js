@@ -1,8 +1,8 @@
 // Motherboard service worker — v4
 // Page (HTML) : réseau d'abord => chaque mise à jour poussée sur GitHub apparaît
 // à la prochaine ouverture, sans réinstaller. Cache seulement en secours hors-ligne.
-const CACHE_NAME = 'motherboard-v8';
-const SHELL = ['./', './index.html', './manifest.json', './crm.js', './crm.css'];
+const CACHE_NAME = 'motherboard-v9';
+const SHELL = ['./', './index.html', './manifest.json', './crm.js', './crm.css', './voice.js'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(SHELL)).catch(() => {}));

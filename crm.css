@@ -63,3 +63,18 @@
 /* onglets sans calendrier : on masque le mini-calendrier et les stats */
 body[data-tab="contacts"] .mini-calendar, body[data-tab="contacts"] .stats-grid,
 body[data-tab="transactions"] .mini-calendar, body[data-tab="transactions"] .stats-grid { display: none; }
+
+/* ===== Commande vocale ===== */
+.fab-mic { bottom: calc(90px + env(safe-area-inset-bottom)) !important; width: 50px !important; height: 50px !important; right: 22px !important; font-size: 22px !important; background: var(--white) !important; border-color: var(--primary-dark) !important; }
+.voice-sheet { text-align: center; }
+.voice-mic { width: 84px; height: 84px; border-radius: 50%; border: 3px solid var(--primary-gold); background: var(--primary-dark); font-size: 36px; cursor: pointer; margin: 8px auto 6px; display: block; }
+.voice-mic.on { animation: vpulse 1.2s infinite; background: #C62828; border-color: #C62828; }
+@keyframes vpulse { 0% { box-shadow: 0 0 0 0 rgba(198,40,40,.5); } 70% { box-shadow: 0 0 0 18px rgba(198,40,40,0); } 100% { box-shadow: 0 0 0 0 rgba(198,40,40,0); } }
+.voice-hint { font-size: 13px; color: var(--text-secondary); margin-bottom: 10px; }
+#voice-text { width: 100%; font-size: 16px; padding: 10px; border: 1px solid var(--border-light); border-radius: 8px; font-family: inherit; resize: vertical; text-align: left; }
+.voice-preview { text-align: left; margin-top: 10px; border-radius: 10px; overflow: hidden; }
+.voice-preview div { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; font-size: 13px; background: var(--light-bg); border-bottom: 1px solid var(--white); }
+.voice-preview span { color: var(--text-secondary); }
+.voice-preview b { text-align: right; font-weight: 600; }
+.voice-go { width: 100%; margin-top: 12px; padding: 12px !important; font-size: 15px; }
+.voice-ex { text-align: left; font-size: 11px; color: var(--text-secondary); margin-top: 14px; line-height: 1.6; }
