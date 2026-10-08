@@ -200,6 +200,36 @@
   }
 
 
+
+  // ---------- comprendre l'intention (un seul micro pour tout) ----------
+  const TABS = [['semaine', /\bsemaine\b/], ['mois', /\bmois\b/], ['contacts', /\bcontacts?\b|\bclients\b|crm/], ['transactions', /transactions?/], ['jour', /journee|aujourd'hui|demain|\bjour\b|agenda|calendrier|horaire|horaire|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche/]];
+  function route(raw, now = new Date()) {
+    const t = strip(raw).trim();
+    const contact = findContact(raw);
+    const hasTime = new RegExp(`\\b${TIME_RX}`).test(t);
+    // ✅ suivi fait
+    if (/(suivi|rappel|appel)\s+(?:est\s+|a ete\s+)?(?:fait|faite|termine|complete|reglee?)|(?:j'ai|c'est)\s+(?:fait|termine|complete|reglee?)\s+(?:mon|le|ma|la)?\s*(?:suivi|rappel|appel)|coche(?:r)?\s+(?:le|mon)?\s*suivi|suivi\s+(?:avec\s+\S+.*?\s+)?(?:fait|termine)/.test(t))
+      return { intent: 'done', contact };
+    // 📂 ouvrir une fiche
+    if (contact && /^(?:\w+\s+)?(?:ouvre|ouvrir|ouvre-moi|montre|montre-moi|affiche|affiche-moi|trouve|cherche|va (?:a|dans|sur)|sors|sort)\b/.test(t) && !hasTime)
+      return { intent: 'open', contact };
+    // 🗓 naviguer
+    const shortNav = /^(?:(?:ma|mon|mes|la|le)\s+)?(?:journee|semaine|mois|agenda|calendrier|contacts|transactions|aujourd'hui|demain|semaine prochaine)[.!]?$/.test(t);
+    if (shortNav || /^(?:\w+\s+)?(?:montre|montre-moi|affiche|affiche-moi|ouvre|ouvre-moi|va (?:a|dans|sur)|voir|je veux voir|qu'est-ce que j'ai|c'est quoi mon|quel est mon)\b/.test(t) && !hasTime && !/ajoute|rajoute|mets|cree|planifie/.test(t)) {
+      let tab = 'jour'; for (const [k, rx] of TABS) if (rx.test(t)) { tab = k; break; }
+      return { intent: 'nav', tab, date: parseDate(t, now) };
+    }
+    // 👤 fiche contact / note d'appel
+    const contactWords = /discussion|\bnote\b|parle (?:a|avec)|j'ai parle|nouveau (?:client|contact|lead|prospect)|nouvelle (?:cliente|fiche)|\bfiche\b|acheteu|vendeu|proprio|proprietaire|il cherche|elle cherche|ils cherchent|budget|preapprouv|veut vendre|veut acheter|referen|refere par/;
+    if (contactWords.test(t) && !(hasTime && /rendez-vous|rdv|visite|rencontre|reunion/.test(t))) return { intent: 'contact', contact };
+    // 📅 rendez-vous (par défaut)
+    return { intent: 'event', p: parseCommand(raw, now) };
+  }
+  function goTab(tab) {
+    const btn = [...document.querySelectorAll('.tab-btn')].find(b => (b.getAttribute('onclick') || '').includes(`'${tab}'`));
+    if (btn) btn.click();
+  }
+
   // ---------- interface ----------
   const fmtMin = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
   let rec = null, listening = false, gotResult = false, watchdog = null;
@@ -219,14 +249,14 @@
     m.id = 'voice-modal'; m.className = 'modal';
     m.addEventListener('click', ev => { if (ev.target === m) Voice.close(); });
     m.innerHTML = `<div class="sheet voice-sheet">
-      <div class="sheet-head"><button type="button" class="sheet-x" onclick="Voice.close()">✕</button><b>Dites-le à votre Motherboard</b><span style="width:60px"></span></div>
+      <div class="sheet-head"><button type="button" class="sheet-x" onclick="Voice.close()">✕</button><b>Que voulez-vous faire ?</b><span style="width:60px"></span></div>
       <button type="button" id="voice-mic" class="voice-mic" onclick="Voice.toggle()">🎤</button>
       <div id="voice-hint" class="voice-hint">Touchez le micro et parlez.</div>
-      <textarea id="voice-text" rows="4" autocomplete="off" autocorrect="on" spellcheck="false" placeholder="Ex. : Ajoute-moi un rendez-vous demain de midi à midi et demi avec Marc Tremblay, titre rencontre client"></textarea>
+      <textarea id="voice-text" rows="4" autocomplete="off" autocorrect="on" spellcheck="false" placeholder="Ex. : Rendez-vous lundi à 9 h 30, appel registre des entreprises — ou — Discussion avec Danny Bouchard, acheteur…"></textarea>
       <div id="voice-preview" class="voice-preview"></div>
       <button type="button" class="sheet-save voice-go" onclick="Voice.go()">Préparer le rendez-vous</button>
       <button type="button" class="vc-switch" onclick="VoiceCRM.open(document.getElementById('voice-text').value)">👤 Plutôt une fiche contact / une note d'appel →</button>
-      <div class="voice-ex">Exemples :<br>• « Visite vendredi à 14 h au 4521 rue Fabre avec Marc Tremblay »<br>• « Appel avec Sophie Roy le 15 octobre à 10 h pendant 15 minutes »<br>• « Rendez-vous lundi de 9 h à 10 h 30, titre signature notaire »</div>
+      <div class="voice-ex">Vous pouvez dire :<br>• 📅 « Rendez-vous vendredi à 14 h, business plan »<br>• 👤 « Discussion avec Danny Bouchard, acheteur, il cherche à Rosemont… »<br>• 📂 « Ouvre la fiche de Marc Tremblay »<br>• ✅ « Suivi fait avec Lara »<br>• 🗓 « Montre-moi demain » · « Ma semaine »</div>
     </div>`;
     document.body.appendChild(m);
     const ta = m.querySelector('#voice-text');
@@ -241,15 +271,36 @@
   function preview() {
     const txt = document.getElementById('voice-text').value;
     const box = document.getElementById('voice-preview');
-    if (!txt.trim()) { box.innerHTML = ''; return; }
-    const p = parseCommand(txt);
-    const date = p.date ? p.date.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' }) : '<i>date ? (aujourd\'hui par défaut)</i>';
-    const time = p.allDay ? 'toute la journée' : p.start != null ? `${fmtMin(p.start)}${p.duration ? ' – ' + fmtMin(p.start + p.duration) : ''}` : '<i>heure ?</i>';
-    box.innerHTML = `<div><span>Titre</span><b>${esc(p.title)}</b></div><div><span>Quand</span><b>${date} · ${time}</b></div>` +
-      `<div><span>Client</span><b>${p.contact ? '👤 ' + esc(p.contact.name) : '<i>aucun contact reconnu</i>'}</b></div>` +
-      (p.location ? `<div><span>Lieu</span><b>📍 ${esc(p.location)}</b></div>` : '') +
-      `<div><span>Catégorie</span><b>${({ visite: '🏡 Visite', reunion: '💼 Rendez-vous', travail: '💻 Travail', suivi: '📱 Suivi', personnel: '🌿 Personnel', urgent: '‼️ Urgent' })[p.type] || p.type}${p.color ? ' · couleur ' + p.color.replace('lavande', 'mauve pâle') : ''}</b></div>`;
+    const go = document.querySelector('#voice-modal .voice-go');
+    if (!txt.trim()) { box.innerHTML = ''; if (go) go.textContent = 'Continuer'; return; }
+    const r = route(txt);
+    const line = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
+    if (r.intent === 'done') {
+      box.innerHTML = line('Action', '✅ Suivi fait') + line('Client', r.contact ? '👤 ' + esc(r.contact.name) : '<i>aucun contact reconnu</i>');
+      if (go) go.textContent = 'Cocher le suivi';
+    } else if (r.intent === 'open') {
+      box.innerHTML = line('Action', '📂 Ouvrir la fiche') + line('Client', '👤 ' + esc(r.contact.name));
+      if (go) go.textContent = 'Ouvrir la fiche';
+    } else if (r.intent === 'nav') {
+      const lbl = { jour: 'Ma journée', semaine: 'Ma semaine', mois: 'Mon mois', contacts: 'Mes contacts', transactions: 'Transactions' }[r.tab];
+      box.innerHTML = line('Action', '🗓 Afficher') + line('Écran', lbl + (r.date ? ' · ' + r.date.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' }) : ''));
+      if (go) go.textContent = 'Afficher';
+    } else if (r.intent === 'contact') {
+      const pc = window.VoiceCRM ? VoiceCRM.parse(txt) : null;
+      box.innerHTML = line('Action', '👤 Fiche contact + note') + (pc ? line('Client', pc.name ? (pc.existing ? '👤 ' : '🆕 ') + esc(pc.name) : '<i>nom ? (je vous le demanderai)</i>') +
+        (pc.followUp && pc.followUp.date ? line('Rappel', '📅 ' + pc.followUp.date.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' })) : '') : '');
+      if (go) go.textContent = 'Continuer la fiche';
+    } else {
+      const p = r.p;
+      const date = p.date ? p.date.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' }) : '<i>date ? (aujourd\'hui par défaut)</i>';
+      const time = p.allDay ? 'toute la journée' : p.start != null ? `${fmtMin(p.start)}${p.duration ? ' – ' + fmtMin(p.start + p.duration) : ''}` : '<i>heure ?</i>';
+      box.innerHTML = line('Action', '📅 Nouveau rendez-vous') + line('Titre', esc(p.title)) + line('Quand', `${date} · ${time}`) +
+        (p.contact ? line('Client', '👤 ' + esc(p.contact.name)) : '') + (p.location ? line('Lieu', '📍 ' + esc(p.location)) : '') +
+        line('Catégorie', `${({ visite: '🏡 Visite', reunion: '💼 Rendez-vous', travail: '💻 Travail', suivi: '📱 Suivi', personnel: '🌿 Personnel', urgent: '‼️ Urgent' })[p.type] || p.type}${p.color ? ' · couleur ' + p.color.replace('lavande', 'mauve pâle') : ''}`);
+      if (go) go.textContent = 'Préparer le rendez-vous';
+    }
   }
+
 
   function fillForm(p) {
     const now = new Date();
@@ -276,7 +327,9 @@
   window.Voice = {
     parse: parseCommand,
     findContact,
+    route,
     open() {
+      document.querySelectorAll('.mb-toast').forEach(x => x.remove());
       const m = sheet(); m.classList.add('open');
       document.getElementById('voice-text').value = ''; preview();
       if (useSR()) { document.getElementById('voice-hint').textContent = 'Touchez le micro et parlez.'; Voice.toggle(); }
@@ -314,11 +367,31 @@
     go() {
       const txt = document.getElementById('voice-text').value;
       if (!txt.trim()) { document.getElementById('voice-hint').textContent = 'Dites ou tapez votre demande d\'abord.'; return; }
-      const p = parseCommand(txt);
+      const r = route(txt);
+      const hint = document.getElementById('voice-hint');
+      if (r.intent === 'done') {
+        if (!r.contact) {
+          // pas de contact : chercher un suivi d'aujourd'hui dont le titre correspond
+          const words = strip(txt).split(/\W+/).filter(w => w.length > 3 && !/suivi|fait|faite|termine|rappel|appel/.test(w));
+          const today = typeof eventsOn === 'function' ? eventsOn(new Date()).filter(x => typeOf(x) === 'suivi') : [];
+          const hit = today.find(x => words.some(w => strip(x.title).includes(w)));
+          if (hit) { Voice.close(); markEventDone(hit.key); return; }
+          hint.textContent = 'Je n\'ai pas trouvé ce suivi. Dites le nom du client, ex. « suivi fait avec Lara Gagnon ».'; return;
+        }
+        Voice.close(); CRM.doneFollowUp(r.contact.id); return;
+      }
+      if (r.intent === 'open') { Voice.close(); CRM.open(r.contact.id); return; }
+      if (r.intent === 'nav') {
+        Voice.close(); goTab(r.tab);
+        if (r.date && typeof selectDate === 'function' && ['jour', 'semaine', 'mois'].includes(r.tab)) selectDate(r.date);
+        return;
+      }
+      if (r.intent === 'contact') { Voice.close(); VoiceCRM.open(txt); VoiceCRM.analyze(); return; }
+      const p = r.p;
       if (typeof accessToken !== 'undefined' && !accessToken && typeof getServerToken === 'function') {
-        document.getElementById('voice-hint').textContent = 'Connexion à Google…';
+        hint.textContent = 'Connexion à Google…';
         getServerToken().then(ok => {
-          if (!ok) { document.getElementById('voice-hint').innerHTML = 'Google n\'est pas connecté sur cet appareil. <a href="/api/auth/start">Touchez ici pour connecter Google</a>, puis réessayez.'; return; }
+          if (!ok) { hint.innerHTML = 'Google n\'est pas connecté sur cet appareil. <a href="/api/auth/start">Touchez ici pour connecter Google</a>, puis réessayez.'; return; }
           Voice.close(); fillForm(p);
         });
         return;

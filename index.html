@@ -575,6 +575,14 @@
     #ev-types button.suivi { background: #FFB74D; color: #3E2000; border-color: #E65100; }
     #ev-types button.personnel { background: #81C784; color: #0B2E0D; border-color: #1B5E20; }
     #ev-types button.urgent { background: #E53935; color: #fff; border-color: #B71C1C; }
+
+    .event-card { position: relative; }
+    .done-btn { margin-left: auto; align-self: center; flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; border: 2px solid currentColor; background: rgba(255,255,255,.55); color: inherit; font-size: 18px; font-weight: 800; cursor: pointer; }
+    .done-btn:active { background: #2E7D32; color: #fff; }
+    .ev-done { display: block; width: 100%; margin-top: 16px; padding: 12px; border: 0; border-radius: 8px; background: #2E7D32; color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
+    .mb-toast { position: fixed; left: 12px; right: 12px; bottom: calc(160px + env(safe-area-inset-bottom)); background: #222; color: #fff; padding: 12px 14px; border-radius: 10px; font-size: 13px; z-index: 300; display: flex; align-items: center; justify-content: space-between; gap: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+    .mb-toast button { border: 0; background: var(--primary-gold); color: #000; font-weight: 700; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+    .crm-done { width: 36px; height: 36px; border-radius: 50%; border: 2px solid #2E7D32; background: #fff; color: #2E7D32; font-size: 18px; font-weight: 800; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -584,7 +592,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v11</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v12</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -617,7 +625,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v11';
+    const APP_VERSION = 'v12';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -677,7 +685,7 @@
     function esc(s) { return String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
     function eventsOn(day) {
       const s = startOfDay(day), e = addDays(s, 1);
-      return events.filter(ev => ev.start < e && ev.end > s)
+      return events.filter(ev => !ev.done && ev.start < e && ev.end > s)
         .sort((a, b) => (b.allDay - a.allDay) || (a.start - b.start));
     }
 
@@ -759,6 +767,7 @@
         cal: cal.summaryOverride || cal.summary,
         contactId: (ev.extendedProperties && ev.extendedProperties.private && ev.extendedProperties.private.mbContact) || null,
         type: detectType(ev),
+        done: !!(ev.extendedProperties && ev.extendedProperties.private && ev.extendedProperties.private.mbDone === '1') || /^✅/.test(ev.summary || ''),
         color: (ev.extendedProperties && ev.extendedProperties.private && COLORS[ev.extendedProperties.private.mbColor]) ? ev.extendedProperties.private.mbColor : null
       };
     }
@@ -870,10 +879,10 @@
       return `<div class="event-card ${clsOf(e)}" onclick="openEvent('${esc(e.key || '')}')">
         <div class="event-time">${time}</div>
         <div class="event-content"><div>
-          <div class="event-text">${esc(e.title)} ${t.icon}</div>
+          <div class="event-text">${esc(e.title)} ${t.icon && !e.title.includes(t.icon) ? t.icon : ''}</div>
           ${e.location ? `<div class="event-meta">📍 ${esc(e.location)}</div>` : ''}
           <div class="event-meta">${esc(e.cal)}</div>
-        </div></div></div>`;
+        </div></div>${typeOf(e) === 'suivi' ? `<button class="done-btn" title="Suivi fait" onclick="event.stopPropagation();markEventDone('${esc(e.key || '')}')">✓</button>` : ''}</div>`;
     }
 
     function renderJour() {
@@ -1039,6 +1048,45 @@
 
 
 
+
+    // ================== SUIVIS FAITS ==================
+    function toast(html, ms = 6000) {
+      document.querySelectorAll('.mb-toast').forEach(x => x.remove());
+      const d = document.createElement('div'); d.className = 'mb-toast'; d.innerHTML = html;
+      document.body.appendChild(d); setTimeout(() => d.remove(), ms); return d;
+    }
+    async function patchEvent(e, body) {
+      if (!e.calId || !e.evId) return false;
+      const send = () => fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(e.calId)}/events/${encodeURIComponent(e.evId)}`, {
+        method: 'PATCH', headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!accessToken && serverAuth) await getServerToken();
+      let r = await send();
+      if (r.status === 401 && serverAuth && await getServerToken()) r = await send();
+      return r.ok;
+    }
+    function saveCache() { store('mb_cache', events.map(x => ({ ...x, start: x.start.getTime(), end: x.end.getTime() }))); }
+    async function markEventDone(key, opts = {}) {
+      const e = events.find(x => x.key === key); if (!e || e.done) return;
+      e.done = true; renderAll(); saveCache();
+      if (!opts.silent) {
+        const t = toast(`✓ « ${esc(e.title)} » fait <button onclick="undoEventDone('${esc(key)}')">Annuler</button>`);
+      }
+      if (e.contactId && window.CRM && CRM.doneFollowUp && !opts.fromCrm) CRM.doneFollowUp(e.contactId, { fromEvent: true, title: e.title });
+      const ok = await patchEvent(e, { summary: '✅ ' + e.title.replace(/^✅\s*/, ''), extendedProperties: { private: { mbDone: '1', mbType: typeOf(e) } } }).catch(() => false);
+      if (!ok && !opts.silent) toast("Retiré de l'app. (Google Agenda n'a pas pu être mis à jour : connexion ou agenda en lecture seule.)");
+    }
+    async function undoEventDone(key) {
+      const e = events.find(x => x.key === key); if (!e) return;
+      e.done = false; renderAll(); saveCache();
+      document.querySelectorAll('.mb-toast').forEach(x => x.remove());
+      await patchEvent(e, { summary: e.title.replace(/^✅\s*/, ''), extendedProperties: { private: { mbDone: '' } } }).catch(() => false);
+    }
+    // suivis du calendrier liés à un contact (appelé par le CRM quand on coche un suivi)
+    function doneEventsForContact(contactId) {
+      const end = addDays(startOfDay(new Date()), 1);
+      events.filter(x => !x.done && x.contactId === contactId && typeOf(x) === 'suivi' && x.start < end).forEach(x => markEventDone(x.key, { silent: true, fromCrm: true }));
+    }
+
     // ================== FICHE D'UN RENDEZ-VOUS (changer catégorie / couleur) ==================
     function openEvent(key) {
       const e = events.find(x => x.key === key);
@@ -1059,6 +1107,7 @@
         <div class="chips" id="ev-types">${Object.entries(TYPES).map(([k, v]) => `<button type="button" class="${k}${!e.color && t === k ? ' on' : ''}" onclick="changeEvent('${esc(key)}', '${k}', null)">${v.icon ? v.icon + ' ' : ''}${v.label.replace(/s$/, '')}</button>`).join('')}</div>
         <div class="f-label">Couleur</div>
         <div class="chips color-chips">${Object.entries(COLORS).map(([k, v]) => `<button type="button" title="${v.label}" class="${e.color === k ? 'on' : ''}" style="--sw:${v.hex}" onclick="changeEvent('${esc(key)}', null, '${k}')"></button>`).join('')}</div>
+        <button type="button" class="ev-done" onclick="markEventDone('${esc(key)}');document.getElementById('ev-modal').classList.remove('open')">✓ Fait — retirer de mon agenda</button>
         <div id="ev-msg" class="f-msg"></div>
         ${e.link ? `<a class="ev-gcal" href="${esc(e.link)}" target="_blank" rel="noopener">Ouvrir dans Google Agenda ↗</a>` : ''}`;
       m.classList.add('open');
@@ -1250,7 +1299,7 @@
     }
   </script>
 
-  <button class="fab fab-mic" onclick="document.body.dataset.tab==='contacts' && window.VoiceCRM ? VoiceCRM.open() : Voice.open()" aria-label="Commande vocale">🎤</button>
+  <button class="fab fab-mic" onclick="Voice.open()" aria-label="Commande vocale">🎤</button>
   <button class="fab" onclick="document.body.dataset.tab==='contacts' && window.CRM ? CRM.edit() : openAddForm()" aria-label="Ajouter">+</button>
   <div class="modal" id="add-modal" onclick="if(event.target===this)closeAddForm()">
     <form class="sheet" id="add-form" onsubmit="saveEvent(event)">

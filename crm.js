@@ -271,7 +271,7 @@
       const late = c.nextFollowUp < todayStr();
       return `<div class="crm-card" onclick="CRM.open('${c.id}')"><div class="crm-av" style="background:${t.color}">${e(initials(c.name))}</div>
         <div class="crm-main"><div class="crm-name">${e(c.name)}</div><div class="crm-sub">${t.label} · ${e(c.stage || '')}${late ? ` · <span class="crm-due-txt">en retard (${fmtDate(c.nextFollowUp)})</span>` : ''}</div></div>
-        <div class="crm-right">${c.phone ? `<a class="crm-call" href="${telHref(c.phone)}" onclick="event.stopPropagation()">📞</a>` : ''}</div></div>`;
+        <div class="crm-right" style="flex-direction:row;align-items:center">${c.phone ? `<a class="crm-call" href="${telHref(c.phone)}" onclick="event.stopPropagation()">📞</a>` : ''}<button class="crm-done" title="Suivi fait" onclick="event.stopPropagation();CRM.doneFollowUp('${c.id}')">✓</button></div></div>`;
     }).join('');
     const title = box.querySelector('.section-title');
     if (title && title.nextSibling) box.insertBefore(el, title.nextSibling); else box.appendChild(el);
@@ -331,6 +331,21 @@
       c.notes = c.notes || []; c.notes.push({ id: uuid(), at: new Date().toISOString(), text: `📅 Rendez-vous planifié : ${title} (${when})` });
       c.lastContact = todayStr(); save(c);
     },
+    doneFollowUp(id, opts = {}) {
+      const c = contacts[id]; if (!c) return;
+      const prev = c.nextFollowUp;
+      c.nextFollowUp = '';
+      c.lastContact = todayStr();
+      c.notes = c.notes || [];
+      c.notes.push({ id: uuid(), at: new Date().toISOString(), text: '✅ Suivi fait' + (opts.title ? ` (${opts.title.replace(/^✅\s*/, '')})` : '') });
+      save(c);
+      if (!opts.fromEvent && typeof doneEventsForContact === 'function') doneEventsForContact(id);
+      if (!opts.fromEvent && typeof toast === 'function') {
+        window.__undoFU = () => { c.nextFollowUp = prev; c.notes = c.notes.filter(n => !/^✅ Suivi fait/.test(n.text) || n.at < new Date(Date.now() - 60000).toISOString()); save(c); document.querySelectorAll('.mb-toast').forEach(x => x.remove()); };
+        toast(`✓ Suivi fait : ${e(c.name)} <button onclick="__undoFU()">Annuler</button>`);
+      }
+    },
+    find(name) { return window.Voice && Voice.findContact ? Voice.findContact(name) : null; },
     dueToday() { return list().filter(c => isDue(c)).length; },
     _all: () => contacts
   };
