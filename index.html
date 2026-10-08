@@ -476,6 +476,7 @@
     .f-check { flex-direction: row !important; align-items: center; gap: 6px !important; text-transform: none !important; font-size: 14px !important; padding-bottom: 10px; color: var(--text-primary) !important; font-weight: 500 !important; }
     .f-msg { margin-top: 12px; font-size: 13px; color: var(--urgent); }
     .tg-day { cursor: copy; }
+    .auth-link { display: block; text-align: center; text-decoration: none; width: 100%; padding: 14px; margin-top: 12px; position: relative; z-index: 2; }
     /* ===== v6 : grille horaire semaine ===== */
     .tg-toggle { display: flex; justify-content: flex-end; gap: 4px; padding: 6px 10px; background: var(--light-bg); }
     .tg-toggle button { border: 1px solid var(--border-light); background: var(--white); border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 700; cursor: pointer; }
@@ -520,7 +521,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v7</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v7.1</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -552,7 +553,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v7';
+    const APP_VERSION = 'v7.1';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -651,7 +652,7 @@
     }
 
     function connectGoogle() {
-      if (serverAuth) { location.href = '/api/auth/start'; return; }
+      if (serverAuth) { window.location.assign('/api/auth/start'); return; }
       if (!tokenClient) { setStatus('Google se charge, réessayez dans 2 secondes…'); return; }
       tokenClient.requestAccessToken({ prompt: load('mb_connected') ? '' : 'consent' });
     }
@@ -1143,7 +1144,7 @@
       <label class="f-block">Notes<textarea name="notes" rows="2" placeholder="Optionnel"></textarea></label>
       <label class="f-block">Agenda<select name="cal"></select></label>
       <div id="add-msg" class="f-msg"></div>
-      <button type="button" id="add-auth" class="cta-btn" style="display:none;width:100%" onclick="location.href='/api/auth/start'">Autoriser l'ajout de rendez-vous</button>
+      <a id="add-auth" class="cta-btn auth-link" style="display:none" href="/api/auth/start" target="_self" rel="external">Autoriser l'ajout de rendez-vous</a>
     </form>
   </div>
 </body>
