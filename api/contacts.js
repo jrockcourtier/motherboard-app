@@ -5,6 +5,11 @@ const L = require('./_lib');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 module.exports = async (req, res) => {
+  try { return await handler(req, res); }
+  catch (e) { L.json(res, 502, { error: 'db_unreachable', detail: e.cause && e.cause.code ? e.cause.code : e.message }); }
+};
+
+async function handler(req, res) {
   const email = await L.requireOwner(req, res);
   if (!email) return;
   if (!L.supabaseKey()) return L.json(res, 503, { error: 'db_not_configured' });
@@ -33,4 +38,4 @@ module.exports = async (req, res) => {
 
   res.setHeader('Allow', 'GET, POST');
   L.json(res, 405, { error: 'method_not_allowed' });
-};
+}
