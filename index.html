@@ -160,3 +160,267 @@
       font-weight: 600;
       cursor: pointer;
       border-bottom: 2px solid transparent;
+      white-space: nowrap;
+    }
+
+    .tab-btn.active {
+      color: var(--text-primary);
+      background: var(--primary-dark);
+      border-bottom: 2px solid var(--primary-gold);
+    }
+
+    .mini-calendar {
+      display: flex;
+      gap: 8px;
+      padding: 12px;
+      background: var(--light-bg);
+      overflow-x: auto;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .mini-day {
+      flex: 0 0 auto;
+      width: 50px;
+      padding: 8px 4px;
+      text-align: center;
+      border-radius: 4px;
+      cursor: pointer;
+      background: var(--white);
+      border: 1px solid var(--border-light);
+    }
+
+    .mini-day.today {
+      background: var(--primary-dark);
+      border: 1px solid var(--primary-gold);
+    }
+
+    .mini-day-label {
+      font-size: 9px;
+      color: var(--text-secondary);
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .mini-day-number {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-top: 2px;
+    }
+
+    .mini-day.today .mini-day-number {
+      color: var(--primary-gold);
+    }
+
+    .tabs-content {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .tab-content {
+      display: none;
+      height: 100%;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .section-title {
+      padding: 12px 16px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      background: var(--light-bg);
+      text-transform: uppercase;
+    }
+
+    .event-card {
+      display: flex;
+      gap: 10px;
+      padding: 12px 16px;
+      margin: 8px 12px;
+      border-radius: 6px;
+      border-left: 4px solid;
+      background: var(--white);
+      border: 1px solid var(--border-light);
+    }
+
+    .event-card.visite { border-left-color: var(--visite); background: rgba(215, 189, 226, 0.15); }
+    .event-card.appel { border-left-color: var(--appel); background: rgba(0, 121, 107, 0.15); }
+    .event-card.reunion { border-left-color: var(--reunion); background: rgba(25, 118, 210, 0.15); }
+    .event-card.matrix { border-left-color: var(--matrix); background: rgba(245, 124, 0, 0.15); }
+    .event-card.docs { border-left-color: var(--docs); background: rgba(194, 24, 91, 0.15); }
+    .event-card.marketing { border-left-color: var(--marketing); background: rgba(85, 139, 47, 0.15); }
+    .event-card.urgent { border-left-color: var(--urgent); background: rgba(198, 40, 40, 0.15); }
+
+    .event-time {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .event-content {
+      display: flex;
+      gap: 6px;
+      flex: 1;
+    }
+
+    .event-text {
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header-main">
+    <div class="header-logo-section">
+      <div class="logo-circle">JR</div>
+      <div class="header-titles">
+        <div class="header-name">JULIEN ROCK</div>
+        <div class="header-subtitle">COURTIER IMMOBILIER</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button id="google-signin-btn" onclick="loginWithGoogle()">Google Login</button>
+    </div>
+  </div>
+
+  <div class="stats-grid" id="stats-grid"></div>
+
+  <div class="tabs-container">
+    <button class="tab-btn active" onclick="showTab('jour')">Jour</button>
+    <button class="tab-btn" onclick="showTab('semaine')">Semaine</button>
+    <button class="tab-btn" onclick="showTab('mois')">Mois</button>
+    <button class="tab-btn" onclick="showTab('transactions')">Transactions</button>
+    <button class="tab-btn" onclick="showTab('contacts')">Contacts</button>
+  </div>
+
+  <div class="mini-calendar" id="mini-calendar"></div>
+
+  <div class="tabs-content">
+    <div class="tab-content active" id="jour"></div>
+    <div class="tab-content" id="semaine"><div class="loading">Chargement...</div></div>
+    <div class="tab-content" id="mois"><div class="loading">Chargement...</div></div>
+    <div class="tab-content" id="transactions"><div class="loading">Chargement...</div></div>
+    <div class="tab-content" id="contacts"><div class="loading">Chargement...</div></div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://luynpgieqbszzsqucldal.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_Oxx4gkbcjWk84TVgXgHukQ_UWxgX0cj';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
+    let accessToken = null;
+
+    const dayEvents = {
+      24: { label: 'DIMANCHE 24 OCTOBRE', events: [{ time: '10:00', text: 'Appel prospect', type: 'appel' }] },
+      25: { label: 'LUNDI 25 OCTOBRE', events: [{ time: '09:30', text: 'Matrix', type: 'matrix' }, { time: '14:00', text: 'Visite - 789 Bd', type: 'visite' }] },
+      26: { label: 'MARDI 26 OCTOBRE', events: [{ time: '11:00', text: 'Réunion', type: 'reunion' }, { time: '15:30', text: 'Docs', type: 'docs' }] },
+      27: { label: 'MERCREDI 27 OCTOBRE', events: [{ time: '09:00', text: 'Matrix', type: 'matrix' }, { time: '10:30', text: 'Appel', type: 'appel' }, { time: '12:00', text: 'Réunion', type: 'reunion' }, { time: '14:00', text: 'Visite', type: 'visite' }, { time: '15:30', text: 'Docs', type: 'docs' }, { time: '16:00', text: 'URGENT', type: 'urgent' }, { time: '17:00', text: 'Marketing', type: 'marketing' }] },
+      28: { label: 'JEUDI 28 OCTOBRE', events: [{ time: '09:00', text: 'Appel', type: 'appel' }, { time: '11:00', text: 'Visite', type: 'visite' }, { time: '14:30', text: 'Réunion', type: 'reunion' }] },
+      29: { label: 'VENDREDI 29 OCTOBRE', events: [{ time: '10:00', text: 'Matrix', type: 'matrix' }, { time: '15:00', text: 'Docs', type: 'docs' }] },
+      30: { label: 'SAMEDI 30 OCTOBRE', events: [] }
+    };
+
+    let currentDay = 27;
+
+    window.onload = function() {
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleCredentialResponse
+      });
+      
+      buildMiniCalendar();
+      updateStats();
+      pickDay(null, 27);
+    };
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW error:', err));
+    }
+
+    function showTab(name) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById(name).classList.add('active');
+      event.target.classList.add('active');
+    }
+
+    function buildMiniCalendar() {
+      let html = '';
+      const days = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
+      for (let d = 24; d <= 30; d++) {
+        const isToday = d === 27 ? ' today' : '';
+        html += `<div class="mini-day${isToday}" onclick="pickDay(this, ${d})"><div class="mini-day-label">${days[d-24]}</div><div class="mini-day-number">${d}</div></div>`;
+      }
+      document.getElementById('mini-calendar').innerHTML = html;
+    }
+
+    function pickDay(el, day) {
+      currentDay = day;
+      if (el) {
+        document.querySelectorAll('.mini-day').forEach(d => d.classList.remove('today'));
+        el.classList.add('today');
+      }
+      
+      const evt = dayEvents[day].events;
+      let html = `<div class="section-title">${dayEvents[day].label}</div>`;
+      if (evt.length === 0) html += '<p style="text-align:center;padding:20px;color:var(--text-secondary);font-size:12px;">Aucun événement</p>';
+      else evt.forEach(e => html += `<div class="event-card ${e.type}"><div class="event-time">${e.time}</div><div class="event-content"><div class="event-text">${e.text}</div></div></div>`);
+      
+      document.getElementById('jour').innerHTML = html;
+      updateStats();
+    }
+
+    function updateStats() {
+      const today = dayEvents[currentDay];
+      const counts = {};
+      today.events.forEach(e => {
+        counts[e.type] = (counts[e.type] || 0) + 1;
+      });
+      
+      let html = `<div class="stat-card"><div class="stat-value">${today.events.length}</div><div class="stat-label">ÉVÉNEMENTS</div></div>`;
+      const labels = { matrix: 'Matrix', appel: 'Appels', reunion: 'Réunions', visite: 'Visites', docs: 'Docs', urgent: 'Urgent', marketing: 'Marketing' };
+      for (const [type, count] of Object.entries(counts)) {
+        html += `<div class="stat-card"><div class="stat-value">${count}</div><div class="stat-label">${labels[type] || type}</div></div>`;
+      }
+      document.getElementById('stats-grid').innerHTML = html;
+    }
+
+    function loginWithGoogle() {
+      const scope = 'https://www.googleapis.com/auth/calendar.readonly';
+      const redirectUri = window.location.origin + window.location.pathname;
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scope)}`;
+      window.location.href = authUrl;
+    }
+
+    function handleCredentialResponse(response) {
+      console.log('Google sign-in successful');
+      document.getElementById('google-signin-btn').classList.add('logged-in');
+      document.getElementById('google-signin-btn').textContent = '✓ Connecté';
+    }
+
+    const hash = window.location.hash;
+    if (hash.includes('access_token')) {
+      const params = new URLSearchParams(hash.substring(1));
+      accessToken = params.get('access_token');
+      console.log('Access token obtained');
+      document.getElementById('google-signin-btn').classList.add('logged-in');
+      document.getElementById('google-signin-btn').textContent = '✓ Connecté à Google';
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  </script>
+</body>
+</html>
