@@ -4,7 +4,7 @@
 const crypto = require('crypto');
 
 const CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
-const SCOPE = 'openid email https://www.googleapis.com/auth/calendar.readonly';
+const SCOPE = 'openid email https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
 const RT_COOKIE = 'mb_rt';
 const MAX_AGE = 400 * 24 * 3600; // maximum permis par les navigateurs
 

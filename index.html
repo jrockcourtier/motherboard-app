@@ -444,6 +444,38 @@
     @media (max-width: 899px) { .month-chip { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word; font-size: 8px; } .month-chip b { display: none; } }
     @media (min-width: 900px) { .month-cell { min-height: 130px; padding: 6px; } .month-chip { font-size: 11px; padding: 3px 5px; } .month-num { font-size: 13px; } }
 
+
+    /* ===== v7 : ajout de rendez-vous ===== */
+    .fab { position: fixed; right: 18px; bottom: calc(22px + env(safe-area-inset-bottom)); width: 58px; height: 58px; border-radius: 50%; border: 2px solid var(--primary-gold); background: var(--primary-dark); color: var(--primary-gold); font-size: 32px; line-height: 1; box-shadow: 0 4px 14px rgba(0,0,0,.25); cursor: pointer; z-index: 50; }
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: flex-end; justify-content: center; z-index: 100; }
+    .modal.open { display: flex; }
+    @media (min-width: 700px) { .modal { align-items: center; } .sheet { border-radius: 14px !important; } }
+    .sheet { background: var(--white); width: 100%; max-width: 520px; max-height: 92vh; overflow-y: auto; border-radius: 14px 14px 0 0; padding: 0 16px calc(18px + env(safe-area-inset-bottom)); }
+    .sheet-head { position: sticky; top: 0; background: var(--white); display: flex; align-items: center; justify-content: space-between; padding: 14px 0 10px; z-index: 1; }
+    .sheet-head b { font-size: 15px; }
+    .sheet-x { border: 0; background: none; font-size: 18px; cursor: pointer; padding: 4px 8px; }
+    .sheet-save { border: 0; background: var(--primary-dark); color: var(--primary-gold); font-weight: 700; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+    .sheet-save:disabled { opacity: .5; }
+    .f-title { width: 100%; font-size: 18px; font-weight: 600; border: 0; border-bottom: 2px solid var(--border-light); padding: 10px 2px; outline: none; }
+    .f-title:focus { border-color: var(--primary-gold); }
+    .f-label { font-size: 11px; font-weight: 700; color: var(--text-secondary); margin: 14px 0 6px; text-transform: uppercase; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chips button { border: 1px solid var(--border-light); background: var(--white); border-radius: 16px; padding: 7px 11px; font-size: 13px; cursor: pointer; }
+    .chips button.on { background: var(--primary-dark); color: var(--primary-gold); border-color: var(--primary-dark); }
+    #add-types button.on.visite { background: #9C27B0; color: #fff; border-color: #9C27B0; }
+    #add-types button.on.appel { background: var(--appel); color: #fff; border-color: var(--appel); }
+    #add-types button.on.reunion { background: var(--reunion); color: #fff; border-color: var(--reunion); }
+    #add-types button.on.docs { background: var(--docs); color: #fff; border-color: var(--docs); }
+    #add-types button.on.marketing { background: var(--marketing); color: #fff; border-color: var(--marketing); }
+    #add-types button.on.matrix { background: var(--matrix); color: #fff; border-color: var(--matrix); }
+    #add-types button.on.urgent { background: var(--urgent); color: #fff; border-color: var(--urgent); }
+    .f-row { display: flex; gap: 12px; align-items: flex-end; margin-top: 14px; }
+    .f-row label, .f-block { display: flex; flex-direction: column; font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; gap: 5px; }
+    .f-block { margin-top: 14px; }
+    .f-row input[type=date], .f-row input[type=time], .f-block input, .f-block textarea, .f-block select { font-size: 16px; padding: 9px 10px; border: 1px solid var(--border-light); border-radius: 6px; font-family: inherit; text-transform: none; font-weight: 400; color: var(--text-primary); background: var(--white); }
+    .f-check { flex-direction: row !important; align-items: center; gap: 6px !important; text-transform: none !important; font-size: 14px !important; padding-bottom: 10px; color: var(--text-primary) !important; font-weight: 500 !important; }
+    .f-msg { margin-top: 12px; font-size: 13px; color: var(--urgent); }
+    .tg-day { cursor: copy; }
     /* ===== v6 : grille horaire semaine ===== */
     .tg-toggle { display: flex; justify-content: flex-end; gap: 4px; padding: 6px 10px; background: var(--light-bg); }
     .tg-toggle button { border: 1px solid var(--border-light); background: var(--white); border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 700; cursor: pointer; }
@@ -488,7 +520,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v6</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v7</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -519,8 +551,8 @@
   <script>
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
-    const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
-    const APP_VERSION = 'v6';
+    const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
+    const APP_VERSION = 'v7';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -539,13 +571,15 @@
     const TYPE_RULES = [
       ['urgent',    /urgent|‼/i],
       ['visite',    /visite|domodo|showing|centris|prise de rendez-vous/i],
-      ['appel',     /appel|call|t[ée]l[ée]phon|proprio|rappel/i],
+      ['appel',     /appel|call|t[ée]l[ée]phon|proprio|rappel|prospect/i],
       ['docs',      /\bged\b|\bdocs?\b|document|compta|notaire|signature|easysign|easymax|facture/i],
       ['marketing', /marketing|instagram|facebook|publicit|\bpub\b|\bpost\b|vid[ée]o|photo|contenu/i],
       ['matrix',    /matrix|recherche|envoi propri/i],
       ['reunion',   /r[ée]union|\brdv\b|rendez-vous|rencontre|meeting|zoom|teams|lunch|d[îi]ner|caf[ée]/i]
     ];
     function detectType(ev) {
+      const saved = ev.extendedProperties && ev.extendedProperties.private && ev.extendedProperties.private.mbType;
+      if (saved && TYPES[saved]) return saved;
       const txt = `${ev.summary || ''} ${ev.description || ''} ${(ev.organizer && ev.organizer.email) || ''}`;
       for (const [type, re] of TYPE_RULES) if (re.test(txt)) return type;
       return 'matrix';
@@ -596,6 +630,7 @@
     }
 
     // Connexion permanente : le serveur (Vercel) garde l'autorisation Google ; l'app demande un accès frais quand il faut.
+    let canWrite = true;
     let serverAuth = null;      // true = connexion permanente disponible, false = pas encore configurée
     let refreshTimer = null;
     async function getServerToken() {
@@ -606,6 +641,7 @@
         if (!r.ok) return false;
         const d = await r.json();
         accessToken = d.access_token;
+        canWrite = !d.scope || /calendar\.events|auth\/calendar( |$)/.test(d.scope);
         store('mb_connected', true);
         clearTimeout(refreshTimer);
         refreshTimer = setTimeout(getServerToken, Math.max(60, (d.expires_in || 3600) - 300) * 1000);
@@ -652,6 +688,10 @@
     async function fetchRange(start, end) {
       const list = await gcal('users/me/calendarList?minAccessRole=reader');
       const cals = (list.items || []).filter(c => !/#(holiday|contacts)@group\.v\.calendar\.google\.com$/.test(c.id));
+      writableCals = cals.filter(c => c.accessRole === 'owner' || c.accessRole === 'writer')
+        .map(c => ({ id: c.id, name: c.summaryOverride || c.summary, primary: !!c.primary }))
+        .sort((a, b) => b.primary - a.primary);
+      store('mb_wcals', writableCals);
       const all = [];
       await Promise.all(cals.map(async cal => {
         let pageToken = '';
@@ -822,7 +862,7 @@
         allday += `<div class="tg-adcell" style="width:${dayW}px">` + ad.map(e => `<div class="tg-adchip ${e.type}">${esc(e.title)}</div>`).join('') + `</div>`;
 
         const d0 = d.getTime(), d1 = addDays(d, 1).getTime();
-        body += `<div class="tg-day${cls}" style="left:${TIME_COL + i * dayW}px;width:${dayW}px">`;
+        body += `<div class="tg-day${cls}" style="left:${TIME_COL + i * dayW}px;width:${dayW}px" onclick="slotClick(event, ${d0})">`;
         layoutDay(evs).forEach(e => {
           const s = Math.max(+e.start, d0), en = Math.min(+e.end, d1);
           const top = (s - d0) / 3600000 * HOUR_PX;
@@ -830,7 +870,7 @@
           const w = 100 / e._ncol;
           const t = TYPES[e.type] || TYPES.matrix;
           body += `<div class="tg-ev ${e.type}" style="top:${top}px;height:${h}px;left:calc(${w * e._col}% + 1px);width:calc(${w}% - 3px)"` +
-            (e.link ? ` onclick="window.open('${esc(e.link)}','_blank')"` : '') + ` title="${esc(e.title)} · ${hhmm(e.start)}–${hhmm(e.end)}">` +
+            (e.link ? ` onclick="event.stopPropagation();window.open('${esc(e.link)}','_blank')"` : ' onclick="event.stopPropagation()"') + ` title="${esc(e.title)} · ${hhmm(e.start)}–${hhmm(e.end)}">` +
             `<div class="tg-ev-title">${esc(e.title)} ${t.icon}</div>` + (h >= 34 && dayW >= 70 ? `<div class="tg-ev-time">${hhmm(e.start)} – ${hhmm(e.end)}</div>` : '') + `</div>`;
         });
         if (sameDay(d, today)) body += `<div class="tg-now" style="top:${(now - d0) / 3600000 * HOUR_PX}px"></div>`;
@@ -925,6 +965,113 @@
       document.getElementById('contacts').innerHTML = html;
     }
 
+
+    // ================== AJOUTER UN RENDEZ-VOUS ==================
+    let writableCals = load('mb_wcals') || [];
+    const GCOLORS = { visite: '3', appel: '7', reunion: '9', docs: '4', marketing: '10', matrix: '6', urgent: '11' };
+    let formType = 'reunion', formDur = 60;
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function ymd(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+
+    function slotClick(ev, d0) {
+      const y = ev.offsetY;
+      const mins = Math.max(0, Math.min(23 * 60 + 30, Math.floor(y / HOUR_PX * 2) * 30));
+      openAddForm(new Date(d0 + mins * 60000));
+    }
+
+    function openAddForm(start) {
+      if (!accessToken) { connectGoogle(); return; }
+      if (!start) {
+        const now = new Date();
+        start = new Date(selectedDate);
+        if (sameDay(start, now)) start.setHours(now.getHours() + 1, 0, 0, 0); else start.setHours(9, 0, 0, 0);
+      }
+      const f = document.getElementById('add-form');
+      f.querySelector('[name=title]').value = '';
+      f.querySelector('[name=date]').value = ymd(start);
+      f.querySelector('[name=time]').value = `${pad(start.getHours())}:${pad(start.getMinutes())}`;
+      f.querySelector('[name=allday]').checked = false;
+      f.querySelector('[name=location]').value = '';
+      f.querySelector('[name=notes]').value = '';
+      const sel = f.querySelector('[name=cal]');
+      const cals = writableCals.length ? writableCals : [{ id: 'primary', name: 'jrockcourtier@gmail.com', primary: true }];
+      sel.innerHTML = cals.map(c => `<option value="${esc(c.id)}">${esc(c.primary ? c.name + ' (principal)' : c.name)}</option>`).join('');
+      const last = load('mb_lastcal'); if (last && cals.some(c => c.id === last)) sel.value = last;
+      setFormType('reunion'); setFormDur(60); toggleAllDay();
+      document.getElementById('add-msg').textContent = !canWrite ? 'Pour ajouter des rendez-vous, Google doit vous donner une permission de plus. Touchez « Autoriser ».' : '';
+      document.getElementById('add-auth').style.display = canWrite ? 'none' : 'block';
+      document.getElementById('add-modal').classList.add('open');
+      if (canWrite) setTimeout(() => f.querySelector('[name=title]').focus(), 50);
+    }
+    function closeAddForm() { document.getElementById('add-modal').classList.remove('open'); }
+    function setFormType(t) {
+      formType = t;
+      document.querySelectorAll('#add-types button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+    }
+    function setFormDur(m) {
+      formDur = m;
+      document.querySelectorAll('#add-durs button').forEach(b => b.classList.toggle('on', +b.dataset.m === m));
+    }
+    function toggleAllDay() {
+      const ad = document.querySelector('#add-form [name=allday]').checked;
+      document.getElementById('add-timerow').style.display = ad ? 'none' : '';
+    }
+
+    async function saveEvent(e) {
+      e.preventDefault();
+      const f = document.getElementById('add-form');
+      const msg = document.getElementById('add-msg');
+      const title = f.title.value.trim();
+      if (!title) { msg.textContent = 'Ajoutez un titre.'; return; }
+      const date = f.date.value, allDay = f.allday.checked;
+      const body = {
+        summary: title,
+        location: f.location.value.trim() || undefined,
+        description: f.notes.value.trim() || undefined,
+        colorId: GCOLORS[formType],
+        extendedProperties: { private: { mbType: formType } }
+      };
+      if (allDay) {
+        const d = new Date(date + 'T00:00:00');
+        body.start = { date }; body.end = { date: ymd(addDays(d, 1)) };
+      } else {
+        const s = new Date(`${date}T${f.time.value}:00`);
+        const en = new Date(s.getTime() + formDur * 60000);
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        body.start = { dateTime: s.toISOString(), timeZone: tz }; body.end = { dateTime: en.toISOString(), timeZone: tz };
+      }
+      const calId = f.cal.value;
+      store('mb_lastcal', calId);
+      const btn = document.getElementById('add-save');
+      btn.disabled = true; btn.textContent = 'Enregistrement…';
+      try {
+        const send = () => fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`, {
+          method: 'POST', headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        let r = await send();
+        if (r.status === 401 && serverAuth && await getServerToken()) r = await send();
+        if (r.status === 403) {
+          canWrite = false;
+          msg.textContent = 'Google demande une permission de plus pour ajouter des rendez-vous. Touchez « Autoriser ».';
+          document.getElementById('add-auth').style.display = 'block';
+          return;
+        }
+        if (!r.ok) throw new Error('Google ' + r.status);
+        const created = await r.json();
+        const cal = { summary: (writableCals.find(c => c.id === calId) || {}).name || '' };
+        events.push(normalize(created, cal));
+        closeAddForm();
+        selectDate(new Date(date + 'T00:00:00'));
+        setStatus('Rendez-vous ajouté ✓');
+        setTimeout(() => ensureLoaded(true), 1500);
+      } catch (err) {
+        msg.textContent = 'Erreur : ' + err.message + '. Réessayez.';
+      } finally {
+        btn.disabled = false; btn.textContent = 'Enregistrer';
+      }
+    }
+
     // ================== DÉMARRAGE ==================
     window.addEventListener('load', () => {
       // Dernières données connues (affichage instantané, même hors-ligne)
@@ -966,5 +1113,38 @@
       navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded) { reloaded = true; location.reload(); } });
     }
   </script>
+
+  <button class="fab" onclick="openAddForm()" aria-label="Ajouter un rendez-vous">+</button>
+  <div class="modal" id="add-modal" onclick="if(event.target===this)closeAddForm()">
+    <form class="sheet" id="add-form" onsubmit="saveEvent(event)">
+      <div class="sheet-head"><button type="button" class="sheet-x" onclick="closeAddForm()">✕</button><b>Nouveau rendez-vous</b><button type="submit" id="add-save" class="sheet-save">Enregistrer</button></div>
+      <input name="title" class="f-title" placeholder="Titre (ex. Visite 4521 rue Fabre)" autocomplete="off">
+      <div class="f-label">Type</div>
+      <div class="chips" id="add-types">
+        <button type="button" data-t="visite" class="visite" onclick="setFormType('visite')">🏡 Visite</button>
+        <button type="button" data-t="appel" class="appel" onclick="setFormType('appel')">📱 Appel</button>
+        <button type="button" data-t="reunion" class="reunion" onclick="setFormType('reunion')">💼 Rendez-vous</button>
+        <button type="button" data-t="docs" class="docs" onclick="setFormType('docs')">💻 GED/Compta</button>
+        <button type="button" data-t="marketing" class="marketing" onclick="setFormType('marketing')">👨🏻‍💻 Marketing</button>
+        <button type="button" data-t="matrix" class="matrix" onclick="setFormType('matrix')">✅ Tâche</button>
+        <button type="button" data-t="urgent" class="urgent" onclick="setFormType('urgent')">‼️ Urgent</button>
+      </div>
+      <div class="f-row"><label>Date<input type="date" name="date"></label><label class="f-check"><input type="checkbox" name="allday" onchange="toggleAllDay()"> Toute la journée</label></div>
+      <div id="add-timerow">
+        <div class="f-row"><label>Heure<input type="time" name="time" step="900"></label></div>
+        <div class="f-label">Durée</div>
+        <div class="chips" id="add-durs">
+          <button type="button" data-m="15" onclick="setFormDur(15)">15 min</button><button type="button" data-m="30" onclick="setFormDur(30)">30 min</button>
+          <button type="button" data-m="45" onclick="setFormDur(45)">45 min</button><button type="button" data-m="60" onclick="setFormDur(60)">1 h</button>
+          <button type="button" data-m="90" onclick="setFormDur(90)">1 h 30</button><button type="button" data-m="120" onclick="setFormDur(120)">2 h</button>
+        </div>
+      </div>
+      <label class="f-block">Adresse / lieu<input name="location" placeholder="Optionnel" autocomplete="off"></label>
+      <label class="f-block">Notes<textarea name="notes" rows="2" placeholder="Optionnel"></textarea></label>
+      <label class="f-block">Agenda<select name="cal"></select></label>
+      <div id="add-msg" class="f-msg"></div>
+      <button type="button" id="add-auth" class="cta-btn" style="display:none;width:100%" onclick="location.href='/api/auth/start'">Autoriser l'ajout de rendez-vous</button>
+    </form>
+  </div>
 </body>
 </html>

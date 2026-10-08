@@ -24,5 +24,5 @@ module.exports = async (req, res) => {
   }
   // Prolonge le cookie à chaque utilisation
   L.setCookie(res, L.RT_COOKIE, L.encrypt(rt), L.MAX_AGE);
-  L.json(res, 200, { access_token: data.access_token, expires_in: data.expires_in });
+  L.json(res, 200, { access_token: data.access_token, expires_in: data.expires_in, scope: data.scope || '' });
 };
