@@ -8,8 +8,7 @@
   <title>Motherboard - Julien Rock</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect fill='%230A0A0A' width='180' height='180'/><text x='50%' y='50%' font-size='80' font-weight='700' fill='%23D4AF37' text-anchor='middle' dominant-baseline='middle' font-family='system-ui'>JR</text></svg>">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.0.0"></script>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     * {
       margin: 0;
@@ -163,7 +162,7 @@
     }
 
     .tab-btn.active {
-      color: var(--text-primary);
+      color: var(--primary-gold);
       background: var(--primary-dark);
       border-bottom: 2px solid var(--primary-gold);
     }
@@ -382,6 +381,56 @@
     .status-draft { background: #FFF3CD; color: #856404; }
     .status-active { background: #D4EDDA; color: #155724; }
     .status-complete { background: #D1ECF1; color: #0C5460; }
+
+    /* ===== v4 : calendrier réel ===== */
+    .event-card.matrix, .week-chip.matrix, .month-bar.matrix { --c: var(--matrix); }
+    .event-card { cursor: pointer; border-left-width: 4px; }
+    .event-end { font-weight: 400; opacity: .7; }
+    .event-meta { font-size: 10px; color: var(--text-secondary); margin-top: 3px; }
+    .sync-status { float: right; font-weight: 500; text-transform: none; }
+    .empty-state { padding: 32px 20px; text-align: center; color: var(--text-secondary); font-size: 13px; }
+    .empty-day { text-align: center; padding: 20px; color: var(--text-secondary); font-size: 12px; }
+    .cta-btn { margin-top: 14px; padding: 12px 20px; border: 0; border-radius: 6px; background: var(--primary-dark); color: var(--primary-gold); font-weight: 700; font-size: 13px; cursor: pointer; }
+    .nav-btn { flex: 0 0 auto; min-width: 34px; border: 1px solid var(--border-light); background: var(--white); border-radius: 4px; font-size: 18px; cursor: pointer; color: var(--text-primary); }
+    .today-btn { font-size: 10px; font-weight: 700; padding: 0 8px; }
+    .mini-calendar { align-items: stretch; }
+    .mini-day { position: relative; }
+    .mini-day.is-now:not(.today) { border-color: var(--primary-gold); }
+    .mini-dot { position: absolute; top: 3px; right: 4px; font-size: 8px; font-weight: 700; color: var(--primary-gold); }
+    #semaine { overflow-y: auto; }
+    .week-cols { position: relative; display: flex; gap: 8px; padding: 10px; overflow-x: auto; scroll-snap-type: x mandatory; }
+    .week-col { flex: 0 0 calc((100% - 24px) / 4); min-width: 120px; scroll-snap-align: start; background: var(--white); border: 1px solid var(--border-light); border-radius: 6px; padding: 6px; min-height: 180px; }
+    @media (min-width: 900px) { .week-col { flex-basis: calc((100% - 48px) / 7); } }
+    .week-col.is-now { border-color: var(--primary-gold); background: rgba(212, 175, 55, .06); }
+    .week-col.selected .week-col-head { background: var(--primary-dark); color: var(--primary-gold); }
+    .week-col-head { font-size: 10px; font-weight: 600; text-align: center; padding: 6px; border-radius: 4px; margin-bottom: 6px; cursor: pointer; color: var(--text-secondary); }
+    .week-chip { font-size: 10px; font-weight: 600; padding: 5px 6px; margin-bottom: 4px; border-radius: 4px; border-left: 3px solid; overflow: hidden; text-overflow: ellipsis; }
+    .week-chip span { opacity: .7; font-weight: 700; }
+    .week-empty { text-align: center; color: var(--border-light); padding-top: 20px; }
+    .week-stats { padding: 4px 14px 14px; font-size: 11px; color: var(--text-secondary); }
+    .week-chip.visite { border-left-color: var(--visite); background: rgba(215, 189, 226, 0.35); }
+    .week-chip.appel { border-left-color: var(--appel); background: rgba(0, 121, 107, 0.15); }
+    .week-chip.reunion { border-left-color: var(--reunion); background: rgba(25, 118, 210, 0.15); }
+    .week-chip.matrix { border-left-color: var(--matrix); background: rgba(245, 124, 0, 0.15); }
+    .week-chip.docs { border-left-color: var(--docs); background: rgba(194, 24, 91, 0.15); }
+    .week-chip.marketing { border-left-color: var(--marketing); background: rgba(85, 139, 47, 0.15); }
+    .week-chip.urgent { border-left-color: var(--urgent); background: rgba(198, 40, 40, 0.15); }
+    .month-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; }
+    .month-head .nav-btn { height: 34px; }
+    .month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; padding: 8px 12px 16px; }
+    .month-label { text-align: center; font-size: 9px; font-weight: 600; color: var(--text-secondary); }
+    .month-cell { min-height: 58px; padding: 4px; border: 1px solid var(--border-light); border-radius: 4px; cursor: pointer; background: var(--white); }
+    .month-cell.other { opacity: .4; }
+    .month-cell.is-now { background: var(--primary-dark); }
+    .month-cell.is-now .month-num { color: var(--primary-gold); }
+    .month-cell.selected { outline: 2px solid var(--primary-gold); }
+    .month-num { font-size: 11px; font-weight: 700; margin-bottom: 3px; }
+    .month-bar { height: 4px; border-radius: 2px; margin-bottom: 2px; }
+    .month-bar.visite { background: var(--visite); } .month-bar.appel { background: var(--appel); }
+    .month-bar.reunion { background: var(--reunion); } .month-bar.matrix { background: var(--matrix); }
+    .month-bar.docs { background: var(--docs); } .month-bar.marketing { background: var(--marketing); }
+    .month-bar.urgent { background: var(--urgent); }
+    .month-more { font-size: 8px; color: var(--text-secondary); }
   </style>
 </head>
 <body>
@@ -391,11 +440,11 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v3 (Claude)</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v4</span></div>
       </div>
     </div>
     <div class="header-actions">
-      <button id="google-signin-btn" onclick="loginWithGoogle()">Google Login</button>
+      <button id="google-signin-btn" onclick="connectGoogle()">Connecter Google</button>
     </div>
   </div>
 
@@ -413,147 +462,294 @@
 
   <div class="tabs-content">
     <div class="tab-content active" id="jour"></div>
-    <div class="tab-content" id="semaine">
-      <div class="week-container">
-        <div class="week-times" id="week-times"></div>
-        <div class="week-grid" id="week-grid"></div>
-      </div>
-    </div>
-    <div class="tab-content" id="mois" style="padding: 20px; overflow-y: auto;"></div>
+    <div class="tab-content" id="semaine"></div>
+    <div class="tab-content" id="mois" style="overflow-y: auto;"></div>
     <div class="tab-content" id="transactions"></div>
     <div class="tab-content" id="contacts"></div>
   </div>
 
   <script>
-    const SUPABASE_URL = 'https://luynpgieqbszzsqucldal.supabase.co';
-    const SUPABASE_ANON_KEY = 'sb_publishable_Oxx4gkbcjWk84TVgXgHukQ_UWxgX0cj';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
+    const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+    const APP_VERSION = 'v4';
 
-    const dayEvents = {
-      24: { label: 'DIMANCHE 24 OCTOBRE', events: [{ time: '10:00', text: 'Appel prospect', type: 'appel' }] },
-      25: { label: 'LUNDI 25 OCTOBRE', events: [{ time: '09:30', text: 'Matrix', type: 'matrix' }, { time: '14:00', text: 'Visite - 789 Bd', type: 'visite' }] },
-      26: { label: 'MARDI 26 OCTOBRE', events: [{ time: '11:00', text: 'Réunion', type: 'reunion' }, { time: '15:30', text: 'Docs', type: 'docs' }] },
-      27: { label: 'MERCREDI 27 OCTOBRE', events: [{ time: '09:00', text: 'Matrix', type: 'matrix' }, { time: '10:30', text: 'Appel', type: 'appel' }, { time: '12:00', text: 'Réunion', type: 'reunion' }, { time: '14:00', text: 'Visite', type: 'visite' }, { time: '15:30', text: 'Docs', type: 'docs' }, { time: '16:00', text: 'URGENT', type: 'urgent' }, { time: '17:00', text: 'Marketing', type: 'marketing' }] },
-      28: { label: 'JEUDI 28 OCTOBRE', events: [{ time: '09:00', text: 'Appel', type: 'appel' }, { time: '11:00', text: 'Visite', type: 'visite' }, { time: '14:30', text: 'Réunion', type: 'reunion' }] },
-      29: { label: 'VENDREDI 29 OCTOBRE', events: [{ time: '10:00', text: 'Matrix', type: 'matrix' }, { time: '15:00', text: 'Docs', type: 'docs' }] },
-      30: { label: 'SAMEDI 30 OCTOBRE', events: [] }
+    const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
+    const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
+    const MOIS = ['JANVIER', 'FÉVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN', 'JUILLET', 'AOÛT', 'SEPTEMBRE', 'OCTOBRE', 'NOVEMBRE', 'DÉCEMBRE'];
+
+    // Catégories (palette approuvée) — détectées à partir du titre / description de l'événement
+    const TYPES = {
+      visite:    { label: 'Visites',   icon: '🏡' },
+      appel:     { label: 'Appels',    icon: '📱' },
+      reunion:   { label: 'Réunions',  icon: '💼' },
+      docs:      { label: 'GED/Compta', icon: '💻' },
+      marketing: { label: 'Marketing', icon: '👨🏻‍💻' },
+      matrix:    { label: 'Tâches',    icon: '' },
+      urgent:    { label: 'Urgent',    icon: '‼️' }
     };
-
-    const weekEvents = {
-      24: [{ time: '10:00', duration: 1, text: 'Appel', type: 'appel' }],
-      25: [{ time: '09:30', duration: 1.5, text: 'Matrix', type: 'matrix' }, { time: '14:00', duration: 1, text: 'Visite', type: 'visite' }],
-      26: [{ time: '11:00', duration: 1, text: 'Réunion', type: 'reunion' }, { time: '15:30', duration: 1, text: 'Docs', type: 'docs' }],
-      27: [{ time: '09:00', duration: 1, text: 'Matrix', type: 'matrix' }, { time: '10:30', duration: 1, text: 'Appel', type: 'appel' }, { time: '12:00', duration: 1, text: 'Réunion', type: 'reunion' }, { time: '14:00', duration: 1, text: 'Visite', type: 'visite' }, { time: '15:30', duration: 1, text: 'Docs', type: 'docs' }, { time: '16:00', duration: 1, text: 'URGENT', type: 'urgent' }, { time: '17:00', duration: 1, text: 'Marketing', type: 'marketing' }],
-      28: [{ time: '09:00', duration: 1, text: 'Appel', type: 'appel' }, { time: '11:00', duration: 1, text: 'Visite', type: 'visite' }, { time: '14:30', duration: 1, text: 'Réunion', type: 'reunion' }],
-      29: [{ time: '10:00', duration: 1, text: 'Matrix', type: 'matrix' }, { time: '15:00', duration: 1, text: 'Docs', type: 'docs' }],
-      30: []
-    };
-
-    let currentDay = 27;
-
-    window.onload = function() {
-      google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleCredentialResponse });
-      buildMiniCalendar();
-      updateStats();
-      pickDay(null, 27);
-      renderMoisView();
-      renderTransactionsView();
-      renderContactsView();
-    };
-
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW error:', err));
+    const TYPE_RULES = [
+      ['urgent',    /urgent|‼/i],
+      ['visite',    /visite|domodo|showing|centris|prise de rendez-vous/i],
+      ['appel',     /appel|call|t[ée]l[ée]phon|proprio|rappel/i],
+      ['docs',      /\bged\b|\bdocs?\b|document|compta|notaire|signature|easysign|easymax|facture/i],
+      ['marketing', /marketing|instagram|facebook|publicit|\bpub\b|\bpost\b|vid[ée]o|photo|contenu/i],
+      ['matrix',    /matrix|recherche|envoi propri/i],
+      ['reunion',   /r[ée]union|\brdv\b|rendez-vous|rencontre|meeting|zoom|teams|lunch|d[îi]ner|caf[ée]/i]
+    ];
+    function detectType(ev) {
+      const txt = `${ev.summary || ''} ${ev.description || ''} ${(ev.organizer && ev.organizer.email) || ''}`;
+      for (const [type, re] of TYPE_RULES) if (re.test(txt)) return type;
+      return 'matrix';
     }
+
+    // ================== ÉTAT ==================
+    let selectedDate = startOfDay(new Date());
+    let monthCursor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+    let events = [];            // événements normalisés
+    let loadedRange = null;     // {start, end}
+    let tokenClient = null;
+    let accessToken = null;
+
+    // ================== OUTILS DATES ==================
+    function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+    function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+    function sameDay(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
+    function startOfWeek(d) { return addDays(startOfDay(d), -d.getDay()); }
+    function hhmm(d) { return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+    function esc(s) { return String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+    function eventsOn(day) {
+      const s = startOfDay(day), e = addDays(s, 1);
+      return events.filter(ev => ev.start < e && ev.end > s)
+        .sort((a, b) => (b.allDay - a.allDay) || (a.start - b.start));
+    }
+
+    // ================== STOCKAGE LOCAL (sécuritaire) ==================
+    function store(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+    function load(key) { try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; } }
+
+    // ================== GOOGLE ==================
+    function initGoogle() {
+      if (!window.google || !google.accounts || !google.accounts.oauth2) { setTimeout(initGoogle, 300); return; }
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: GOOGLE_SCOPE,
+        login_hint: 'jrockcourtier@gmail.com',
+        callback: (resp) => {
+          if (resp.error) { setStatus('Connexion Google refusée : ' + resp.error, true); return; }
+          accessToken = resp.access_token;
+          store('mb_token', { t: accessToken, exp: Date.now() + (resp.expires_in - 60) * 1000 });
+          store('mb_connected', true);
+          updateLoginButton();
+          loadedRange = null;
+          ensureLoaded(true);
+        }
+      });
+    }
+
+    function connectGoogle() {
+      if (!tokenClient) { setStatus('Google se charge, réessayez dans 2 secondes…'); return; }
+      tokenClient.requestAccessToken({ prompt: load('mb_connected') ? '' : 'consent' });
+    }
+
+    function updateLoginButton() {
+      const btn = document.getElementById('google-signin-btn');
+      if (accessToken) { btn.classList.add('logged-in'); btn.textContent = '✓ Google'; }
+      else { btn.classList.remove('logged-in'); btn.textContent = load('mb_connected') ? '↻ Reconnecter Google' : 'Connecter Google'; }
+    }
+
+    async function gcal(path) {
+      const r = await fetch('https://www.googleapis.com/calendar/v3/' + path, { headers: { Authorization: 'Bearer ' + accessToken } });
+      if (r.status === 401) { accessToken = null; store('mb_token', null); updateLoginButton(); throw new Error('expired'); }
+      if (!r.ok) throw new Error('Google ' + r.status + ' ' + (await r.text()).slice(0, 200));
+      return r.json();
+    }
+
+    function normalize(ev, cal) {
+      const allDay = !!(ev.start && ev.start.date);
+      const start = allDay ? new Date(ev.start.date + 'T00:00:00') : new Date(ev.start.dateTime);
+      const end = allDay ? new Date(ev.end.date + 'T00:00:00') : new Date(ev.end.dateTime);
+      return {
+        id: ev.iCalUID || ev.id,
+        title: ev.summary || '(Sans titre)',
+        start, end, allDay,
+        location: ev.location || '',
+        link: ev.htmlLink || '',
+        cal: cal.summaryOverride || cal.summary,
+        type: detectType(ev)
+      };
+    }
+
+    async function fetchRange(start, end) {
+      const list = await gcal('users/me/calendarList?minAccessRole=reader');
+      const cals = (list.items || []).filter(c => c.selected !== false && !c.hidden);
+      const all = [];
+      await Promise.all(cals.map(async cal => {
+        let pageToken = '';
+        do {
+          const q = `calendars/${encodeURIComponent(cal.id)}/events?singleEvents=true&orderBy=startTime&maxResults=2500` +
+            `&timeMin=${encodeURIComponent(start.toISOString())}&timeMax=${encodeURIComponent(end.toISOString())}` +
+            (pageToken ? `&pageToken=${pageToken}` : '');
+          const data = await gcal(q);
+          (data.items || []).filter(e => e.status !== 'cancelled').forEach(e => all.push(normalize(e, cal)));
+          pageToken = data.nextPageToken || '';
+        } while (pageToken);
+      }));
+      // Une visite Domodo peut apparaître dans les DEUX calendriers : on garde une seule copie
+      const seen = new Set();
+      return all.filter(e => { const k = e.id + '|' + e.start.getTime(); if (seen.has(k)) return false; seen.add(k); return true; });
+    }
+
+    async function ensureLoaded(force) {
+      const need = { start: addDays(startOfWeek(new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1)), -7) };
+      need.end = addDays(need.start, 7 * 8);
+      const inRange = loadedRange && selectedDate >= loadedRange.start && selectedDate < loadedRange.end &&
+        monthCursor >= loadedRange.start && monthCursor < loadedRange.end;
+      if (!force && inRange) return;
+      if (!accessToken) { renderAll(); return; }
+      setStatus('Synchronisation Google Calendar…');
+      try {
+        events = await fetchRange(need.start, need.end);
+        loadedRange = need;
+        store('mb_cache', events.map(e => ({ ...e, start: e.start.getTime(), end: e.end.getTime() })));
+        setStatus(`À jour · ${hhmm(new Date())}`);
+      } catch (err) {
+        setStatus(err.message === 'expired' ? 'Session Google expirée — touchez « Reconnecter Google »' : 'Erreur : ' + err.message, true);
+      }
+      renderAll();
+    }
+
+    function setStatus(msg, isError) {
+      const el = document.getElementById('sync-status');
+      if (el) { el.textContent = msg; el.style.color = isError ? 'var(--urgent)' : 'var(--text-secondary)'; }
+    }
+
+    // ================== NAVIGATION ==================
+    function selectDate(d) {
+      selectedDate = startOfDay(d);
+      monthCursor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+      renderAll();
+      ensureLoaded();
+    }
+    function shiftWeek(n) { selectDate(addDays(selectedDate, 7 * n)); }
+    function shiftMonth(n) {
+      monthCursor = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + n, 1);
+      renderMoisView();
+      ensureLoaded();
+    }
+    function goToday() { selectDate(new Date()); }
 
     function showTab(event, name) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
       document.getElementById(name).classList.add('active');
       event.target.classList.add('active');
-      
-      if (name === 'semaine') {
-        setTimeout(buildWeekView, 100);
-      }
+      store('mb_tab', name);
+      if (name === 'semaine') scrollWeekToSelected();
+    }
+
+    // ================== RENDU ==================
+    function renderAll() {
+      buildMiniCalendar();
+      renderJour();
+      updateStats();
+      renderSemaine();
+      renderMoisView();
     }
 
     function buildMiniCalendar() {
-      let html = '';
-      const days = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
-      for (let d = 24; d <= 30; d++) {
-        const isToday = d === 27 ? ' today' : '';
-        html += `<div class="mini-day${isToday}" onclick="pickDay(this, ${d})"><div class="mini-day-label">${days[d-24]}</div><div class="mini-day-number">${d}</div></div>`;
+      const ws = startOfWeek(selectedDate), today = startOfDay(new Date());
+      let html = `<button class="nav-btn" onclick="shiftWeek(-1)" aria-label="Semaine précédente">‹</button>`;
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(ws, i);
+        const cls = (sameDay(d, selectedDate) ? ' today' : '') + (sameDay(d, today) ? ' is-now' : '');
+        const n = eventsOn(d).length;
+        html += `<div class="mini-day${cls}" onclick="selectDate(new Date(${d.getTime()}))"><div class="mini-day-label">${JOURS[i]}</div><div class="mini-day-number">${d.getDate()}</div>${n ? `<div class="mini-dot">${n}</div>` : ''}</div>`;
       }
+      html += `<button class="nav-btn" onclick="shiftWeek(1)" aria-label="Semaine suivante">›</button><button class="nav-btn today-btn" onclick="goToday()">Auj.</button>`;
       document.getElementById('mini-calendar').innerHTML = html;
     }
 
-    function pickDay(el, day) {
-      currentDay = day;
-      if (el) {
-        document.querySelectorAll('.mini-day').forEach(d => d.classList.remove('today'));
-        el.classList.add('today');
+    function eventCard(e) {
+      const t = TYPES[e.type] || TYPES.matrix;
+      const time = e.allDay ? 'Journée' : `${hhmm(e.start)}<br><span class="event-end">${hhmm(e.end)}</span>`;
+      return `<div class="event-card ${e.type}"${e.link ? ` onclick="window.open('${esc(e.link)}','_blank')"` : ''}>
+        <div class="event-time">${time}</div>
+        <div class="event-content"><div>
+          <div class="event-text">${esc(e.title)} ${t.icon}</div>
+          ${e.location ? `<div class="event-meta">📍 ${esc(e.location)}</div>` : ''}
+          <div class="event-meta">${esc(e.cal)}</div>
+        </div></div></div>`;
+    }
+
+    function renderJour() {
+      const d = selectedDate;
+      let html = `<div class="section-title">${JOURS_LONG[d.getDay()]} ${d.getDate()} ${MOIS[d.getMonth()]} <span id="sync-status" class="sync-status"></span></div>`;
+      if (!accessToken && !events.length) {
+        html += `<div class="empty-state"><p>Connectez votre Google Calendar pour voir vos vrais rendez-vous et vos visites Domodo.</p><button class="cta-btn" onclick="connectGoogle()">Connecter Google</button></div>`;
+      } else {
+        const evs = eventsOn(d);
+        html += evs.length ? evs.map(eventCard).join('') : '<p class="empty-day">Aucun événement</p>';
       }
-      const evt = dayEvents[day].events;
-      let html = `<div class="section-title">${dayEvents[day].label}</div>`;
-      if (evt.length === 0) html += '<p style="text-align:center;padding:20px;color:var(--text-secondary);font-size:12px;">Aucun événement</p>';
-      else evt.forEach(e => html += `<div class="event-card ${e.type}"><div class="event-time">${e.time}</div><div class="event-content"><div class="event-text">${e.text}</div></div></div>`);
       document.getElementById('jour').innerHTML = html;
-      updateStats();
     }
 
     function updateStats() {
-      const today = dayEvents[currentDay];
+      const evs = eventsOn(selectedDate);
       const counts = {};
-      today.events.forEach(e => { counts[e.type] = (counts[e.type] || 0) + 1; });
-      let html = `<div class="stat-card"><div class="stat-value">${today.events.length}</div><div class="stat-label">ÉVÉNEMENTS</div></div>`;
-      const labels = { matrix: 'Matrix', appel: 'Appels', reunion: 'Réunions', visite: 'Visites', docs: 'Docs', urgent: 'Urgent', marketing: 'Marketing' };
+      evs.forEach(e => { counts[e.type] = (counts[e.type] || 0) + 1; });
+      let html = `<div class="stat-card"><div class="stat-value">${evs.length}</div><div class="stat-label">ÉVÉNEMENTS</div></div>`;
       for (const [type, count] of Object.entries(counts)) {
-        html += `<div class="stat-card"><div class="stat-value">${count}</div><div class="stat-label">${labels[type] || type}</div></div>`;
+        html += `<div class="stat-card"><div class="stat-value">${count}</div><div class="stat-label">${TYPES[type].label}</div></div>`;
       }
       document.getElementById('stats-grid').innerHTML = html;
     }
 
-    function buildWeekView() {
-      let timesHtml = '';
-      for (let h = 0; h < 24; h++) {
-        timesHtml += `<div class="week-hour">${String(h).padStart(2, '0')}:00</div>`;
+    function renderSemaine() {
+      const ws = startOfWeek(selectedDate), today = startOfDay(new Date());
+      let html = `<div class="section-title">SEMAINE DU ${ws.getDate()} ${MOIS[ws.getMonth()]}</div><div class="week-cols">`;
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(ws, i);
+        const cls = (sameDay(d, today) ? ' is-now' : '') + (sameDay(d, selectedDate) ? ' selected' : '');
+        html += `<div class="week-col${cls}"><div class="week-col-head" onclick="selectDate(new Date(${d.getTime()}))">${JOURS[i]} <b>${d.getDate()}</b></div>`;
+        const evs = eventsOn(d);
+        html += evs.length ? evs.map(e => `<div class="week-chip ${e.type}">${e.allDay ? '' : `<span>${hhmm(e.start)}</span> `}${esc(e.title)}</div>`).join('') : '<div class="week-empty">—</div>';
+        html += `</div>`;
       }
-      document.getElementById('week-times').innerHTML = timesHtml;
-
-      let gridHtml = '';
-      const daysOfWeek = ['DIM 24', 'LUN 25', 'MAR 26', 'MER 27', 'JEU 28', 'VEN 29', 'SAM 30'];
-      const daysOfMonth = [24, 25, 26, 27, 28, 29, 30];
-
-      for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
-        let dayHtml = `<div class="week-day"><div class="week-day-header">${daysOfWeek[dayIdx]}</div>`;
-        const events = weekEvents[daysOfMonth[dayIdx]] || [];
-        events.forEach(evt => {
-          const [hour, minute] = evt.time.split(':').map(Number);
-          const topPos = (hour * 60 + minute) / 60 * 60;
-          const height = evt.duration * 60;
-          dayHtml += `<div class="week-event ${evt.type}" style="top: ${topPos}px; height: ${height}px;">${evt.time} ${evt.text}</div>`;
-        });
-        dayHtml += '</div>';
-        gridHtml += dayHtml;
-      }
-      document.getElementById('week-grid').innerHTML = gridHtml;
+      html += '</div>';
+      const ev = {};
+      events.filter(e => e.start >= ws && e.start < addDays(ws, 7)).forEach(e => ev[e.type] = (ev[e.type] || 0) + 1);
+      const total = Object.values(ev).reduce((a, b) => a + b, 0);
+      html += `<div class="week-stats"><b>${total}</b> événements cette semaine${Object.entries(ev).map(([t, n]) => ` · ${n} ${TYPES[t].label.toLowerCase()}`).join('')}</div>`;
+      document.getElementById('semaine').innerHTML = html;
+      scrollWeekToSelected();
+    }
+    function scrollWeekToSelected() {
+      const sel = document.querySelector('#semaine .week-col.selected');
+      if (sel && sel.offsetParent) sel.parentElement.scrollLeft = Math.max(0, sel.offsetLeft - 8);
     }
 
     function renderMoisView() {
-      let html = `<div class="section-title">OCTOBRE 2026</div>`;
-      html += `<div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; padding: 12px;">`;
-      const dayLabels = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
-      dayLabels.forEach(d => html += `<div style="text-align: center; font-size: 9px; font-weight: 600; color: var(--text-secondary);">${d}</div>`);
-      for (let d = 24; d <= 30; d++) {
-        const style = d === 27 ? 'background: var(--primary-dark); color: var(--primary-gold);' : '';
-        html += `<div onclick="pickDay(null, ${d})" style="padding: 8px; text-align: center; border: 1px solid var(--border-light); border-radius: 4px; cursor: pointer; ${style}">${d}</div>`;
+      const first = monthCursor, today = startOfDay(new Date());
+      const gridStart = startOfWeek(first);
+      let html = `<div class="month-head"><button class="nav-btn" onclick="shiftMonth(-1)">‹</button><div class="section-title" style="flex:1;text-align:center;background:none">${MOIS[first.getMonth()]} ${first.getFullYear()}</div><button class="nav-btn" onclick="shiftMonth(1)">›</button></div>`;
+      html += `<div class="month-grid">` + JOURS.map(j => `<div class="month-label">${j}</div>`).join('');
+      for (let i = 0; i < 42; i++) {
+        const d = addDays(gridStart, i);
+        if (i >= 35 && d.getMonth() !== first.getMonth()) break;
+        const cls = (d.getMonth() !== first.getMonth() ? ' other' : '') + (sameDay(d, today) ? ' is-now' : '') + (sameDay(d, selectedDate) ? ' selected' : '');
+        const evs = eventsOn(d);
+        html += `<div class="month-cell${cls}" onclick="selectDate(new Date(${d.getTime()}))"><div class="month-num">${d.getDate()}</div>` +
+          evs.slice(0, 4).map(e => `<div class="month-bar ${e.type}"></div>`).join('') +
+          (evs.length > 4 ? `<div class="month-more">+${evs.length - 4}</div>` : '') + `</div>`;
       }
-      html += `</div>`;
+      html += '</div>';
       document.getElementById('mois').innerHTML = html;
     }
 
+    // ---------- Transactions & Contacts (données démo, en attendant Supabase) ----------
     function renderTransactionsView() {
-      let html = `<div class="section-title">TRANSACTIONS ACTIVES</div>`;
+      let html = `<div class="section-title">TRANSACTIONS ACTIVES (démo)</div>`;
       const transactions = [
         { adresse: '123 Avenue Mont-Royal - VENDU', prix: '450 000 $', client: 'Marie Dupont', status: 'complete', label: 'Complétée' },
         { adresse: '456 Rue Saint-Laurent - EN COURS', prix: '525 000 $', client: 'Jean Smith', status: 'active', label: 'En inspection' },
@@ -567,7 +763,7 @@
     }
 
     function renderContactsView() {
-      let html = `<div class="section-title">CONTACTS IMPORTANTS</div>`;
+      let html = `<div class="section-title">CONTACTS IMPORTANTS (démo)</div>`;
       const contacts = [
         { nom: 'Marie Dupont', tel: '(514) 123-4567', role: 'Acheteur', note: 'Intéressée par: Outremont, 400k-500k' },
         { nom: 'Jean Smith', tel: '(514) 234-5678', role: 'Vendeur', note: 'Propriété: 456 Rue Saint-Laurent' },
@@ -581,25 +777,35 @@
       document.getElementById('contacts').innerHTML = html;
     }
 
-    function loginWithGoogle() {
-      const scope = 'https://www.googleapis.com/auth/calendar.readonly';
-      const redirectUri = window.location.origin + window.location.pathname;
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scope)}`;
-      window.location.href = authUrl;
-    }
+    // ================== DÉMARRAGE ==================
+    window.addEventListener('load', () => {
+      // Dernières données connues (affichage instantané, même hors-ligne)
+      const cached = load('mb_cache');
+      if (Array.isArray(cached)) events = cached.map(e => ({ ...e, start: new Date(e.start), end: new Date(e.end) }));
+      const tok = load('mb_token');
+      if (tok && tok.exp > Date.now()) accessToken = tok.t;
+      updateLoginButton();
+      renderAll();
+      renderTransactionsView();
+      renderContactsView();
+      const tab = load('mb_tab');
+      if (tab && document.getElementById(tab)) {
+        const btn = [...document.querySelectorAll('.tab-btn')].find(b => (b.getAttribute('onclick') || '').includes(`'${tab}'`));
+        if (btn) btn.click();
+      }
+      initGoogle();
+      if (accessToken) ensureLoaded(true);
+      else if (load('mb_connected')) setStatus('Touchez « Reconnecter Google » pour rafraîchir', true);
+    });
 
-    function handleCredentialResponse(response) {
-      document.getElementById('google-signin-btn').classList.add('logged-in');
-      document.getElementById('google-signin-btn').textContent = '✓ Connecté';
-    }
+    // Rafraîchir quand on revient dans l'app
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && accessToken) ensureLoaded(true); });
 
-    const hash = window.location.hash;
-    if (hash.includes('access_token')) {
-      const params = new URLSearchParams(hash.substring(1));
-      const accessToken = params.get('access_token');
-      document.getElementById('google-signin-btn').classList.add('logged-in');
-      document.getElementById('google-signin-btn').textContent = '✓ Connecté à Google';
-      window.history.replaceState({}, document.title, window.location.pathname);
+    // Mises à jour automatiques de l'app (pas besoin de réinstaller)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').then(reg => reg.update()).catch(err => console.log('SW error:', err));
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded) { reloaded = true; location.reload(); } });
     }
   </script>
 </body>
