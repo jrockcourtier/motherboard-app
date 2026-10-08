@@ -298,6 +298,7 @@
 
   window.VoiceCRM = {
     parse: parseContact,
+    reminder: (c, fu) => createReminder(c, fu),
     pm(v) {
       const p = state.p; const n = document.getElementById('vc-note'); if (n) p.note = n.value;
       Voice.setPm(p.followUp, v); renderSummary();

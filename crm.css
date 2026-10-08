@@ -101,3 +101,55 @@ body[data-tab="transactions"] .mini-calendar, body[data-tab="transactions"] .sta
 .ampm button { border: 1px solid var(--border-light); background: var(--white); border-radius: 18px; padding: 7px 14px; font-size: 14px; font-weight: 700; cursor: pointer; }
 .ampm button.on { background: var(--primary-dark); color: var(--primary-gold); border-color: var(--primary-dark); }
 .ampm span { font-size: 11px; color: var(--text-secondary); }
+
+/* ===== CRM style Follow Up Boss : stats, listes intelligentes, appels ===== */
+.crm-stats { display: grid; grid-template-columns: repeat(3, 1fr) 1.6fr; gap: 6px; margin: 2px 12px 8px; }
+.crm-stats > div { background: var(--light-bg); border-radius: 8px; padding: 7px 6px; text-align: center; }
+.crm-stats b { display: block; font-size: 18px; font-weight: 800; color: var(--primary-dark); }
+.crm-stats span { display: block; font-size: 9px; line-height: 1.2; color: var(--text-secondary); font-weight: 600; margin-top: 2px; }
+.crm-stats .wk { background: var(--primary-dark); }
+.crm-stats .wk b { color: var(--primary-gold); font-size: 14px; padding-top: 2px; }
+.crm-stats .wk span { color: #ddd; }
+.crm-stats.big { grid-template-columns: repeat(3, 1fr); margin: 12px 0; }
+.crm-stats.big b { font-size: 28px; }
+.crm-stats.big span { font-size: 11px; }
+.crm-smart { padding-bottom: 4px; }
+.crm-smart button { border-color: var(--primary-gold); }
+.crm-dial { display: block; width: calc(100% - 24px); margin: 4px 12px 8px; border: 0; border-radius: 10px; padding: 12px; background: #2E7D32; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; }
+.crm-outcomes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 8px 0 4px; }
+.crm-outcomes button { display: flex; flex-direction: column; align-items: center; gap: 3px; border: 1px solid var(--border-light); background: var(--white); border-radius: 10px; padding: 9px 2px; font-size: 20px; cursor: pointer; }
+.crm-outcomes button:active { background: var(--light-bg); }
+.crm-outcomes button span { font-size: 9.5px; line-height: 1.15; font-weight: 700; color: var(--text-secondary); text-align: center; }
+.crm-after:empty { display: none; }
+.crm-after { margin: 6px 0; padding: 10px; background: #FFF8E1; border-radius: 10px; }
+.crm-after-q { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.crm-cal { display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 600; margin-top: 8px; }
+.crm-flags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.crm-flags label { flex: 1 1 140px; display: flex; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--border-light); border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.crm-flags input { width: 18px; height: 18px; }
+.crm-flags label.dnc-on { background: #FDECEA; border-color: var(--urgent); color: var(--urgent); }
+.crm-dnc-banner { margin: 8px 0; padding: 10px; border-radius: 8px; background: #FDECEA; color: var(--urgent); font-weight: 700; font-size: 13px; text-align: center; }
+.crm-timeline { margin-top: 6px; border-left: 2px solid var(--border-light); margin-left: 14px; }
+.tl-item { display: flex; gap: 10px; position: relative; margin: 0 0 10px -15px; }
+.tl-ic { flex: 0 0 28px; width: 28px; height: 28px; border-radius: 50%; background: var(--white); border: 2px solid var(--border-light); display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.tl-body { flex: 1; min-width: 0; background: var(--light-bg); border-radius: 8px; padding: 7px 10px; font-size: 13px; line-height: 1.45; word-break: break-word; }
+.tl-date { display: flex; justify-content: space-between; gap: 6px; font-size: 10px; font-weight: 700; color: var(--text-secondary); margin-bottom: 2px; }
+.tl-date button { border: 0; background: none; color: var(--text-secondary); cursor: pointer; font-size: 11px; }
+.tl-item.future .tl-body { background: #F3EEFB; }
+.tl-item.future .tl-ic { border-color: var(--reunion); }
+.due-dial { float: right; border: 0; background: #2E7D32; color: #fff; border-radius: 14px; padding: 3px 10px; font-size: 11px; font-weight: 700; cursor: pointer; text-transform: none; }
+
+/* Mode appels */
+.dial-sheet { max-width: 520px; }
+.dial-progress { height: 4px; background: var(--light-bg); border-radius: 2px; overflow: hidden; margin: 2px 0 10px; }
+.dial-progress i { display: block; height: 100%; background: #2E7D32; }
+.dial-card { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 6px 0 8px; }
+.dial-name { font-size: 20px; font-weight: 800; margin-top: 4px; }
+.dial-meta { font-size: 13px; color: var(--text-secondary); }
+.dial-note { margin-top: 6px; font-size: 13px; text-align: left; background: var(--light-bg); border-left: 3px solid var(--primary-gold); padding: 7px 10px; border-radius: 0 8px 8px 0; width: 100%; }
+.dial-warn { margin-top: 6px; font-size: 12px; font-weight: 600; background: #FFF8E1; color: #8A6D00; padding: 7px 10px; border-radius: 8px; width: 100%; }
+.dial-warn a { color: #8A6D00; }
+.dial-warn button { border: 1px solid #8A6D00; background: var(--white); color: #8A6D00; border-radius: 12px; padding: 2px 8px; font-weight: 700; font-size: 11px; cursor: pointer; }
+.dial-call { display: block; text-align: center; text-decoration: none; background: #2E7D32; color: #fff; font-size: 17px; font-weight: 800; padding: 14px; border-radius: 12px; margin: 6px 0 8px; }
+#dial-note { width: 100%; font-size: 16px; padding: 10px; border: 1px solid var(--border-light); border-radius: 8px; font-family: inherit; resize: vertical; }
+.dial-open { display: block; width: 100%; margin-top: 8px; border: 0; background: none; color: var(--text-secondary); font-size: 13px; text-decoration: underline; cursor: pointer; padding: 8px; }

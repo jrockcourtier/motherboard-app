@@ -10,6 +10,38 @@
     proprio:  { label: 'Proprio',  color: '#00796B', stages: ['À appeler', 'Appelé – rappeler', 'Intéressé', 'Rendez-vous', 'Converti en vendeur', 'Pas intéressé'] },
     client:   { label: 'Client',   color: '#D4AF37', stages: ['Actif', 'Client passé'] }
   };
+  const OUT = {
+    pas_reponse:   { l: 'Pas de réponse', i: '📵', conv: false, days: 4 },
+    message:       { l: 'Message laissé', i: '📨', conv: false, days: 4 },
+    parle:         { l: 'Parlé',          i: '💬', conv: true },
+    rdv:           { l: 'RDV fixé',       i: '📅', conv: true },
+    pas_interesse: { l: 'Pas intéressé',  i: '🙅', conv: true, days: 90 }
+  };
+  const HOT = ['En visites', "Offre d'achat", 'Conditions', 'Notaire', 'Évaluation', 'CCV signé', 'En vigueur', 'Offre acceptée', 'Intéressé', 'Rendez-vous'];
+  const CLOSED = ['Client passé', 'Pas intéressé', 'Vendu / Notaire', 'Converti en vendeur'];
+  const SMART = [
+    ['tous', 'Tous', () => true],
+    ['appeler', '📞 À appeler', c => !c.dnc && isDue(c)],
+    ['retard', '⏰ En retard', c => !c.dnc && c.nextFollowUp && c.nextFollowUp < todayStr()],
+    ['nouveaux', '🆕 Nouveaux', c => !(c.calls || []).length && (!c.firstContact || daysSince(c.firstContact) <= 14)],
+    ['sanscontact', '💤 30 j sans contact', c => !c.dnc && !CLOSED.includes(c.stage) && (!c.lastContact || daysSince(c.lastContact) > 30)],
+    ['chauds', '🔥 Chauds', c => HOT.includes(c.stage)],
+    ['dnc', '⛔ Ne pas appeler', c => !!c.dnc]
+  ];
+  let smart = 'tous';
+  function daysSince(d) { return Math.round((new Date(todayStr() + 'T12:00:00') - new Date(String(d).slice(0, 10) + 'T12:00:00')) / 864e5); }
+  function lastCall(c) { const a = c.calls || []; return a.length ? a[a.length - 1] : null; }
+  function stats() {
+    const today = todayStr(), wk = new Date(); wk.setDate(wk.getDate() - ((wk.getDay() + 6) % 7)); const wkStr = ymdC(wk);
+    const s = { d: { calls: 0, conv: 0, rdv: 0 }, w: { calls: 0, conv: 0, rdv: 0 } };
+    list().forEach(c => (c.calls || []).forEach(k => {
+      const day = k.at.slice(0, 10); const o = OUT[k.outcome] || {};
+      const add = (x) => { x.calls++; if (o.conv) x.conv++; if (k.outcome === 'rdv') x.rdv++; };
+      if (ymdC(new Date(k.at)) === today) add(s.d);
+      if (ymdC(new Date(k.at)) >= wkStr) add(s.w);
+    }));
+    return s;
+  }
   const FILTERS = [['tous', 'Tous'], ['acheteur', 'Acheteurs'], ['vendeur', 'Vendeurs'], ['proprio', 'Proprios'], ['client', 'Clients']];
 
   let contacts = {};                 // id -> contact
@@ -112,7 +144,8 @@
     if (!root) return;
     const q = query.trim().toLowerCase();
     const all = list();
-    const rows = all.filter(c => (filter === 'tous' || c.type === filter) &&
+    const sm = (SMART.find(x => x[0] === smart) || SMART[0])[2];
+    const rows = all.filter(c => sm(c) && (filter === 'tous' || c.type === filter) &&
       (!q || [c.name, c.phone, c.email, c.address, c.neighborhoods, c.stage].join(' ').toLowerCase().includes(q)));
     const due = rows.filter(c => isDue(c)).sort((a, b) => a.nextFollowUp.localeCompare(b.nextFollowUp));
     const rest = rows.filter(c => !isDue(c)).sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
@@ -126,17 +159,23 @@
         <div class="crm-main">
           <div class="crm-name">${e(c.name)}</div>
           <div class="crm-sub"><span class="crm-badge" style="color:${t.color};border-color:${t.color}">${t.label}</span> ${e(c.stage || '')}</div>
-          <div class="crm-sub2">${c.phone ? '📞 ' + e(c.phone) : ''}${c.lastContact ? ` · dernier contact ${ago(c.lastContact)}` : ''}</div>
+          <div class="crm-sub2">${c.dnc ? '⛔ Ne pas appeler · ' : ''}${c.phone ? '📞 ' + e(c.phone) : ''}${lastCall(c) ? ` · ${OUT[lastCall(c).outcome].i} ${OUT[lastCall(c).outcome].l.toLowerCase()} ${ago(lastCall(c).at)}` : c.lastContact ? ` · dernier contact ${ago(c.lastContact)}` : ''}</div>
         </div>
-        <div class="crm-right">${fu}${c.phone ? `<a class="crm-call" href="${telHref(c.phone)}" onclick="event.stopPropagation()" aria-label="Appeler">📞</a>` : ''}</div>
+        <div class="crm-right">${fu}${c.phone && !c.dnc ? `<a class="crm-call" href="${telHref(c.phone)}" onclick="event.stopPropagation()" aria-label="Appeler">📞</a>` : ''}</div>
       </div>`;
     };
+    const st = stats();
+    const callable = rows.filter(c => c.phone && !c.dnc);
+    const smCount = (f) => all.filter(f).length;
 
     root.innerHTML = `
       <div class="crm-top">
         <input class="crm-search" type="search" placeholder="🔍 Rechercher…" value="${e(query)}" oninput="CRM.search(this.value)">
         <button class="crm-add crm-mic" onclick="VoiceCRM.open()" aria-label="Dicter une fiche">🎤</button><button class="crm-add" onclick="CRM.edit()">+ Contact</button>
       </div>
+      <div class="crm-stats"><div><b>${st.d.calls}</b><span>appels<br>aujourd'hui</span></div><div><b>${st.d.conv}</b><span>conversa-<br>tions</span></div><div><b>${st.d.rdv}</b><span>RDV<br>fixés</span></div><div class="wk"><b>${st.w.calls} · ${st.w.conv} · ${st.w.rdv}</b><span>cette semaine<br>appels · conv. · RDV</span></div></div>
+      <div class="crm-filters crm-smart">${SMART.map(([k, l, f]) => `<button class="${smart === k ? 'on' : ''}" onclick="CRM.smart('${k}')">${l} ${k === 'tous' ? '' : smCount(f)}</button>`).join('')}</div>
+      ${callable.length && smart !== 'dnc' ? `<button class="crm-dial" onclick="CRM.dial()">▶ Appeler cette liste (${callable.length})</button>` : ''}
       <div class="crm-filters">${FILTERS.map(([k, l]) => `<button class="${filter === k ? 'on' : ''}" onclick="CRM.filter('${k}')">${l}${k === 'tous' ? ` ${all.length}` : counts[k] ? ` ${counts[k]}` : ''}</button>`).join('')}</div>
       ${syncBanner()}
       ${!all.length ? `<div class="crm-empty"><b>Aucun contact pour l'instant.</b><br>Ajoutez votre premier client avec « + Contact ».<br><button class="cta-btn" onclick="CRM.edit()">+ Ajouter un contact</button></div>` : ''}
@@ -167,6 +206,21 @@
     return events.filter(ev => ev.contactId === c.id || (n.length > 2 && (ev.title || '').toLowerCase().includes(n)) ||
       (first && first.length > 3 && n.split(/\s+/).length > 1 && (ev.title || '').toLowerCase().includes(n.split(/\s+/).slice(-1)[0]) && (ev.title || '').toLowerCase().includes(first)))
       .sort((a, b) => a.start - b.start);
+  }
+  function callPanel(c) {
+    if (c.dnc) return `<div class="crm-dnc-banner">⛔ Ce contact ne doit pas être appelé.</div>`;
+    return `<div class="f-label">Résultat de l'appel</div>
+      <div class="crm-outcomes">${Object.entries(OUT).map(([k, o]) => `<button onclick="CRM.logCall('${k}')">${o.i}<span>${o.l}</span></button>`).join('')}</div>
+      <div id="crm-after" class="crm-after"></div>`;
+  }
+  function timeline(c, evs) {
+    const items = [];
+    (c.notes || []).forEach(n => items.push({ at: n.at, html: `${e(n.text).replace(/\n/g, '<br>')}`, icon: '📝', del: `CRM.delNote('${n.id}')` }));
+    (c.calls || []).forEach(k => items.push({ at: k.at, html: `<b>${OUT[k.outcome].l}</b>${k.note ? ' — ' + e(k.note) : ''}`, icon: OUT[k.outcome].i, del: `CRM.delCall('${k.id}')` }));
+    (evs || []).forEach(x => items.push({ at: x.start.toISOString(), html: `${e(x.title)}${x.allDay ? '' : ' · ' + hhmm(x.start)}`, icon: x.start > new Date() ? '🗓' : '📅', future: x.start > new Date() }));
+    if (!items.length) return '<div class="crm-muted">Rien pour l\'instant.</div>';
+    return items.sort((a, b) => b.at.localeCompare(a.at)).map(it => `
+      <div class="tl-item${it.future ? ' future' : ''}"><div class="tl-ic">${it.icon}</div><div class="tl-body"><div class="tl-date">${it.future ? 'À venir · ' : ''}${fmtDate(it.at)} · ${new Date(it.at).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}${it.del ? `<button onclick="${it.del}" aria-label="Supprimer">✕</button>` : ''}</div>${it.html}</div></div>`).join('');
   }
   function renderSheet() {
     const c = contacts[openId];
@@ -203,21 +257,24 @@
         <a class="${maps ? '' : 'off'}" href="${maps || '#'}" target="_blank" rel="noopener">🗺<span>Itinéraire</span></a>
         <a href="#" onclick="event.preventDefault();CRM.meeting()">📅<span>Rendez-vous</span></a>
       </div>
+      ${callPanel(c)}
       <div class="f-label">Étape du dossier</div>
       <div class="chips crm-stages">${t.stages.map(s => `<button class="${c.stage === s ? 'on' : ''}" onclick="CRM.stage(${JSON.stringify(s).replace(/"/g, '&quot;')})">${e(s)}</button>`).join('')}</div>
       <div class="f-label">Prochain suivi ${c.nextFollowUp ? `· <span class="${isDue(c) ? 'crm-due-txt' : ''}">${c.nextFollowUp === todayStr() ? "aujourd'hui" : fmtDate(c.nextFollowUp)}</span>` : '· aucun'}</div>
       <div class="chips">${fuBtn(0, "Aujourd'hui")}${fuBtn(1, '+1 j')}${fuBtn(3, '+3 j')}${fuBtn(7, '+1 sem')}${fuBtn(14, '+2 sem')}${fuBtn(30, '+1 mois')}${c.nextFollowUp ? fuBtn(null, '✓ Fait / aucun') : ''}
         <label class="crm-datepick">📅<input type="date" value="${c.nextFollowUp || ''}" onchange="CRM.followUp(this.value||null)"></label></div>
       ${info.length ? `<div class="crm-info">${info.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')}</div>` : ''}
-      <div class="f-label">Notes</div>
+      <div class="crm-flags">
+        <label><input type="checkbox" ${c.dncChecked ? 'checked' : ''} onchange="CRM.flag('dncChecked', this.checked)"> LNNTE vérifiée</label>
+        <label class="${c.dnc ? 'dnc-on' : ''}"><input type="checkbox" ${c.dnc ? 'checked' : ''} onchange="CRM.flag('dnc', this.checked)"> ⛔ Ne pas appeler</label>
+      </div>
+      <div class="f-label">Note</div>
       <div class="crm-note-add">
         <textarea id="crm-note" rows="3" placeholder="Résumé de l'appel, besoins, prochaines étapes… (🎤 touchez le micro du clavier pour dicter)"></textarea>
         <button class="sheet-save" onclick="CRM.addNote()">Ajouter la note</button>
       </div>
-      <div class="crm-notes">${(c.notes || []).slice().sort((a, b) => b.at.localeCompare(a.at)).map(n => `
-        <div class="crm-note"><div class="crm-note-date">${fmtDate(n.at)} · ${new Date(n.at).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}<button onclick="CRM.delNote('${n.id}')" aria-label="Supprimer la note">✕</button></div>${e(n.text).replace(/\n/g, '<br>')}</div>`).join('') || '<div class="crm-muted">Aucune note pour l\'instant.</div>'}</div>
-      <div class="f-label">Rendez-vous</div>
-      ${up.length || past.length ? `${up.length ? `<div class="crm-muted">À venir</div>${up.map(evRow).join('')}` : ''}${past.length ? `<div class="crm-muted" style="margin-top:6px">Passés</div>${past.map(evRow).join('')}` : ''}` : '<div class="crm-muted">Aucun rendez-vous trouvé dans votre agenda pour ce nom.</div>'}
+      <div class="f-label">Historique</div>
+      <div class="crm-timeline">${timeline(c, evs)}</div>
       <div class="crm-del" id="crm-del"><button onclick="CRM.askDelete()">Supprimer ce contact</button></div>`;
   }
 
@@ -266,7 +323,8 @@
     if (!due.length) return;
     const el = document.createElement('div');
     el.className = 'crm-due-box';
-    el.innerHTML = `<div class="section-title">🔔 Suivis à faire (${due.length})</div>` + due.map(c => {
+    const nCall = due.filter(c => c.phone && !c.dnc).length;
+    el.innerHTML = `<div class="section-title">🔔 Suivis à faire (${due.length})${nCall ? `<button class="due-dial" onclick="CRM.dial(CRM.dueIds())">▶ Appeler (${nCall})</button>` : ''}</div>` + due.map(c => {
       const t = TYPES_C[c.type] || TYPES_C.client;
       const late = c.nextFollowUp < todayStr();
       return `<div class="crm-card" onclick="CRM.open('${c.id}')"><div class="crm-av" style="background:${t.color}">${e(initials(c.name))}</div>
@@ -283,6 +341,50 @@
     newId: () => uuid(),
     types: TYPES_C,
     filter(k) { filter = k; renderList(); },
+    smart(k) { smart = k; renderList(); },
+    flag(k, v) { const c = contacts[openId]; if (!c) return; c[k] = v; if (k === 'dnc' && v) c.nextFollowUp = ''; save(c); },
+    logCall(outcome, opts = {}) {
+      const id = opts.id || openId; const c = contacts[id]; if (!c) return;
+      const ta = document.getElementById(opts.noteId || 'crm-note');
+      const note = ta && ta.value.trim() ? ta.value.trim() : '';
+      c.calls = c.calls || [];
+      c.calls.push({ id: uuid(), at: new Date().toISOString(), outcome, note, prevFu: c.nextFollowUp || '', prevStage: c.stage || '' });
+      c.lastContact = todayStr();
+      const o = OUT[outcome];
+      if (o.days) c.nextFollowUp = addDaysStr(o.days);
+      if (outcome === 'rdv') c.nextFollowUp = '';
+      if (outcome === 'pas_interesse' && c.type === 'proprio') c.stage = 'Pas intéressé';
+      if (outcome === 'rdv' && c.type === 'proprio') c.stage = 'Rendez-vous';
+      if (ta) ta.value = '';
+      save(c);
+      if (opts.silent) return o;
+      const after = document.getElementById('crm-after');
+      if (outcome === 'parle') {
+        if (after) after.innerHTML = `<div class="crm-after-q">Quand le rappeler ?</div><div class="chips">${[[1, 'Demain'], [7, '1 sem'], [14, '2 sem'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="CRM.planFollow(${d})">${l}</button>`).join('')}<button onclick="CRM.planFollow(0, true)">Aucun</button></div><label class="crm-cal"><input type="checkbox" id="crm-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
+      } else if (outcome === 'rdv') { CRM.meeting(); }
+      else if (typeof toast === 'function') toast(`${o.i} ${o.l} — prochain suivi ${o.days ? 'dans ' + (o.days >= 30 ? Math.round(o.days / 30) + ' mois' : o.days + ' jours') : ''} <button onclick="CRM.undoCall('${id}')">Annuler</button>`);
+      return o;
+    },
+    async planFollow(days, none) {
+      const c = contacts[openId]; if (!c) return;
+      const after = document.getElementById('crm-after');
+      const wantCal = !none && document.getElementById('crm-cal') && document.getElementById('crm-cal').checked;
+      c.nextFollowUp = none ? '' : addDaysStr(days); save(c);
+      if (wantCal && window.VoiceCRM && VoiceCRM.reminder) {
+        const d = new Date(); d.setDate(d.getDate() + days);
+        const r = await VoiceCRM.reminder(c, { date: d, start: null }).catch(() => 'error');
+        if (typeof toast === 'function') toast(r === 'ok' ? '📅 Rappel ajouté à votre agenda' : "Suivi enregistré (l'agenda n'a pas pu être mis à jour)");
+      }
+      if (after) after.innerHTML = '';
+    },
+    undoCall(id) {
+      const c = contacts[id]; if (!c || !(c.calls || []).length) return;
+      const k = c.calls.pop(); if (k && 'prevFu' in k) { c.nextFollowUp = k.prevFu; c.stage = k.prevStage || c.stage; } save(c); document.querySelectorAll('.mb-toast').forEach(x => x.remove());
+    },
+    delCall(callId) { const c = contacts[openId]; c.calls = (c.calls || []).filter(k => k.id !== callId); save(c); },
+    dial(ids) { Dialer.start(ids || (() => { const sm = (SMART.find(x => x[0] === smart) || SMART[0])[2]; return list().filter(c => sm(c) && (filter === 'tous' || c.type === filter) && c.phone && !c.dnc).sort((a, b) => (a.nextFollowUp || '9').localeCompare(b.nextFollowUp || '9')).map(c => c.id); })()); },
+    dueIds() { return list().filter(c => !c.dnc && isDue(c) && c.phone).map(c => c.id); },
+    _out: OUT,
     search(v) { query = v; renderList(); },
     open(id) { openId = id; editing = null; modal().classList.add('open'); renderSheet(); },
     close() { openId = null; editing = null; const m = document.getElementById('crm-modal'); if (m) m.classList.remove('open'); },
@@ -349,6 +451,83 @@
     dueToday() { return list().filter(c => isDue(c)).length; },
     _all: () => contacts
   };
+
+  // ---------- MODE APPELS (comme le dialer de Follow Up Boss) ----------
+  const Dialer = {
+    q: [], i: 0, done: {},
+    start(ids) {
+      if (!ids.length) { if (typeof toast === 'function') toast('Aucun contact à appeler dans cette liste.'); return; }
+      this.q = ids; this.i = 0; this.done = {};
+      let m = document.getElementById('dial-modal');
+      if (!m) { m = document.createElement('div'); m.id = 'dial-modal'; m.className = 'modal'; m.innerHTML = '<div class="sheet dial-sheet" id="dial-sheet"></div>'; document.body.appendChild(m); }
+      m.classList.add('open'); this.render();
+    },
+    render() {
+      const sh = document.getElementById('dial-sheet');
+      if (this.i >= this.q.length) return this.summary();
+      const c = contacts[this.q[this.i]]; if (!c) { this.i++; return this.render(); }
+      const t = TYPES_C[c.type] || TYPES_C.client;
+      const lc = lastCall(c);
+      const lastNote = (c.notes || []).slice(-1)[0];
+      sh.innerHTML = `
+        <div class="sheet-head"><button type="button" class="sheet-x" onclick="Dialer.stop()">✕</button><b>Mode appels · ${this.i + 1} / ${this.q.length}</b><button class="sheet-save" onclick="Dialer.next()">Passer ›</button></div>
+        <div class="dial-progress"><i style="width:${Math.round(this.i / this.q.length * 100)}%"></i></div>
+        <div class="dial-card">
+          <div class="crm-av big" style="background:${t.color}">${e(initials(c.name))}</div>
+          <div class="dial-name">${e(c.name)}</div>
+          <div class="crm-sub"><span class="crm-badge" style="color:${t.color};border-color:${t.color}">${t.label}</span> ${e(c.stage || '')}</div>
+          ${c.address ? `<div class="dial-meta">📍 ${e(c.address)}</div>` : ''}
+          ${c.budget || c.price ? `<div class="dial-meta">💰 ${e(c.budget || c.price)}</div>` : ''}
+          ${lc ? `<div class="dial-meta">Dernier appel : ${OUT[lc.outcome].i} ${OUT[lc.outcome].l} ${ago(lc.at)} · ${(c.calls || []).length} tentative(s)</div>` : '<div class="dial-meta">Jamais appelé</div>'}
+          ${lastNote ? `<div class="dial-note">📝 ${e(lastNote.text).slice(0, 220)}</div>` : ''}
+          ${!c.dncChecked ? `<div class="dial-warn">LNNTE non vérifiée · <a href="https://lnnte-dncl.gc.ca/" target="_blank" rel="noopener">vérifier</a> · <button onclick="Dialer.lnnte()">✓ Vérifiée</button></div>` : ''}
+        </div>
+        <a class="dial-call" href="${telHref(c.phone)}">📞 Appeler ${e(c.phone)}</a>
+        <textarea id="dial-note" rows="2" placeholder="Note de l'appel (🎤 dictée du clavier)"></textarea>
+        <div class="crm-outcomes">${Object.entries(OUT).map(([k, o]) => `<button onclick="Dialer.log('${k}')">${o.i}<span>${o.l}</span></button>`).join('')}</div>
+        <div id="dial-after" class="crm-after"></div>
+        <button class="dial-open" onclick="Dialer.open()">Ouvrir la fiche complète</button>`;
+    },
+    lnnte() { const c = contacts[this.q[this.i]]; c.dncChecked = true; save(c); this.render(); },
+    log(outcome) {
+      const id = this.q[this.i];
+      const o = CRM.logCall(outcome, { id, noteId: 'dial-note', silent: true });
+      this.done[outcome] = (this.done[outcome] || 0) + 1;
+      if (outcome === 'parle') {
+        document.getElementById('dial-after').innerHTML = `<div class="crm-after-q">Quand le rappeler ?</div><div class="chips">${[[1, 'Demain'], [7, '1 sem'], [14, '2 sem'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Dialer.follow(${d})">${l}</button>`).join('')}<button onclick="Dialer.follow(0, true)">Aucun</button></div><label class="crm-cal"><input type="checkbox" id="dial-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
+        return;
+      }
+      if (outcome === 'rdv') { const c = contacts[id]; Dialer.pauseFor(c); return; }
+      this.next();
+    },
+    async follow(days, none) {
+      const c = contacts[this.q[this.i]];
+      const wantCal = !none && document.getElementById('dial-cal') && document.getElementById('dial-cal').checked;
+      c.nextFollowUp = none ? '' : addDaysStr(days); save(c);
+      if (wantCal && window.VoiceCRM && VoiceCRM.reminder) { const d = new Date(); d.setDate(d.getDate() + days); VoiceCRM.reminder(c, { date: d, start: null }).catch(() => {}); }
+      this.next();
+    },
+    pauseFor(c) {
+      // RDV : on ouvre le formulaire de rendez-vous, puis on revient à la liste
+      document.getElementById('dial-modal').classList.remove('open');
+      openId = c.id; CRM.meeting();
+      const back = () => { const m = document.getElementById('add-modal'); if (m && m.classList.contains('open')) return setTimeout(back, 500); Dialer.i++; document.getElementById('dial-modal').classList.add('open'); Dialer.render(); };
+      setTimeout(back, 800);
+    },
+    next() { this.i++; this.render(); },
+    open() { const id = this.q[this.i]; document.getElementById('dial-modal').classList.remove('open'); CRM.open(id); },
+    stop() { document.getElementById('dial-modal').classList.remove('open'); renderList(); },
+    summary() {
+      const d = this.done, tot = Object.values(d).reduce((a, b) => a + b, 0);
+      const conv = Object.entries(d).filter(([k]) => OUT[k].conv).reduce((a, [, v]) => a + v, 0);
+      document.getElementById('dial-sheet').innerHTML = `
+        <div class="sheet-head"><button type="button" class="sheet-x" onclick="Dialer.stop()">✕</button><b>Session terminée 🎉</b><span style="width:60px"></span></div>
+        <div class="crm-stats big"><div><b>${tot}</b><span>appels</span></div><div><b>${conv}</b><span>conversations</span></div><div><b>${d.rdv || 0}</b><span>RDV</span></div></div>
+        <div class="crm-info">${Object.entries(OUT).map(([k, o]) => `<div><span>${o.i} ${o.l}</span><b>${d[k] || 0}</b></div>`).join('')}</div>
+        <button class="sheet-save voice-go" onclick="Dialer.stop()">Terminer</button>`;
+    }
+  };
+  window.Dialer = Dialer;
 
   // ---------- branchements avec l'app ----------
   restore();
