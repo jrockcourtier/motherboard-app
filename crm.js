@@ -135,7 +135,7 @@
     root.innerHTML = `
       <div class="crm-top">
         <input class="crm-search" type="search" placeholder="🔍 Rechercher…" value="${e(query)}" oninput="CRM.search(this.value)">
-        <button class="crm-add" onclick="CRM.edit()">+ Contact</button>
+        <button class="crm-add crm-mic" onclick="VoiceCRM.open()" aria-label="Dicter une fiche">🎤</button><button class="crm-add" onclick="CRM.edit()">+ Contact</button>
       </div>
       <div class="crm-filters">${FILTERS.map(([k, l]) => `<button class="${filter === k ? 'on' : ''}" onclick="CRM.filter('${k}')">${l}${k === 'tous' ? ` ${all.length}` : counts[k] ? ` ${counts[k]}` : ''}</button>`).join('')}</div>
       ${syncBanner()}
@@ -177,6 +177,7 @@
       ['Courriel', c.email ? `<a href="mailto:${e(c.email)}">${e(c.email)}</a>` : ''],
       ['Adresse', c.address ? e(c.address) : ''],
       ['Budget', c.budget ? e(c.budget) : ''],
+      ['Recherche', c.propertyType ? e(c.propertyType) : ''],
       ['Quartiers', c.neighborhoods ? e(c.neighborhoods) : ''],
       ['Prix espéré', c.price ? e(c.price) : ''],
       ['Commission', c.commission ? e(c.commission) + (String(c.commission).includes('%') ? '' : ' %') : ''],
@@ -278,6 +279,9 @@
 
   // ---------- API publique (onclick) ----------
   window.CRM = {
+    upsert(c) { save(c); return c; },
+    newId: () => uuid(),
+    types: TYPES_C,
     filter(k) { filter = k; renderList(); },
     search(v) { query = v; renderList(); },
     open(id) { openId = id; editing = null; modal().classList.add('open'); renderSheet(); },

@@ -181,6 +181,7 @@
       <textarea id="voice-text" rows="4" autocomplete="off" autocorrect="on" spellcheck="false" placeholder="Ex. : Ajoute-moi un rendez-vous demain de midi à midi et demi avec Marc Tremblay, titre rencontre client"></textarea>
       <div id="voice-preview" class="voice-preview"></div>
       <button type="button" class="sheet-save voice-go" onclick="Voice.go()">Préparer le rendez-vous</button>
+      <button type="button" class="vc-switch" onclick="VoiceCRM.open(document.getElementById('voice-text').value)">👤 Plutôt une fiche contact / une note d'appel →</button>
       <div class="voice-ex">Exemples :<br>• « Visite vendredi à 14 h au 4521 rue Fabre avec Marc Tremblay »<br>• « Appel avec Sophie Roy le 15 octobre à 10 h pendant 15 minutes »<br>• « Rendez-vous lundi de 9 h à 10 h 30, titre signature notaire »</div>
     </div>`;
     document.body.appendChild(m);
@@ -228,6 +229,7 @@
 
   window.Voice = {
     parse: parseCommand,
+    findContact,
     open() {
       const m = sheet(); m.classList.add('open');
       document.getElementById('voice-text').value = ''; preview();

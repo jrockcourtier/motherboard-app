@@ -521,7 +521,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v9.2</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v10</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -553,7 +553,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v9.2';
+    const APP_VERSION = 'v10';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -1110,7 +1110,7 @@
     }
   </script>
 
-  <button class="fab fab-mic" onclick="Voice.open()" aria-label="Commande vocale">🎤</button>
+  <button class="fab fab-mic" onclick="document.body.dataset.tab==='contacts' && window.VoiceCRM ? VoiceCRM.open() : Voice.open()" aria-label="Commande vocale">🎤</button>
   <button class="fab" onclick="document.body.dataset.tab==='contacts' && window.CRM ? CRM.edit() : openAddForm()" aria-label="Ajouter">+</button>
   <div class="modal" id="add-modal" onclick="if(event.target===this)closeAddForm()">
     <form class="sheet" id="add-form" onsubmit="saveEvent(event)">
@@ -1146,5 +1146,6 @@
   <link rel="stylesheet" href="crm.css">
   <script src="crm.js"></script>
   <script src="voice.js"></script>
+  <script src="voicecrm.js"></script>
 </body>
 </html>
