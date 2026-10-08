@@ -445,6 +445,10 @@
     @media (min-width: 900px) { .month-cell { min-height: 130px; padding: 6px; } .month-chip { font-size: 11px; padding: 3px 5px; } .month-num { font-size: 13px; } }
 
     /* ===== v6 : grille horaire semaine ===== */
+    .tg-toggle { display: flex; justify-content: flex-end; gap: 4px; padding: 6px 10px; background: var(--light-bg); }
+    .tg-toggle button { border: 1px solid var(--border-light); background: var(--white); border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 700; cursor: pointer; }
+    .tg-toggle button.on { background: var(--primary-dark); color: var(--primary-gold); border-color: var(--primary-dark); }
+    @media (max-width: 899px) { .tg-ev-title { font-size: 9px; } .tg-ev { padding: 2px 2px 2px 3px; } }
     #semaine { overflow: hidden !important; }
     .tg-wrap { position: relative; overflow: auto; -webkit-overflow-scrolling: touch; border-top: 1px solid var(--border-light); background: var(--white); }
     .tg-sticky { position: sticky; top: 0; z-index: 5; background: var(--white); }
@@ -797,7 +801,7 @@
     function renderSemaine() {
       const ws = startOfWeek(selectedDate), now = new Date(), today = startOfDay(now);
       const wrapW = Math.max(320, (document.querySelector('.tabs-content') || document.body).clientWidth);
-      const nDays = wrapW >= 900 ? 7 : 4;
+      const nDays = wrapW >= 900 ? 7 : (load('mb_wdays') || 7);
       const dayW = Math.floor((wrapW - TIME_COL) / nDays);
       const gridW = TIME_COL + dayW * 7;
       const days = [...Array(7)].map((_, i) => addDays(ws, i));
@@ -827,7 +831,7 @@
           const t = TYPES[e.type] || TYPES.matrix;
           body += `<div class="tg-ev ${e.type}" style="top:${top}px;height:${h}px;left:calc(${w * e._col}% + 1px);width:calc(${w}% - 3px)"` +
             (e.link ? ` onclick="window.open('${esc(e.link)}','_blank')"` : '') + ` title="${esc(e.title)} · ${hhmm(e.start)}–${hhmm(e.end)}">` +
-            `<div class="tg-ev-title">${esc(e.title)} ${t.icon}</div>` + (h >= 34 ? `<div class="tg-ev-time">${hhmm(e.start)} – ${hhmm(e.end)}</div>` : '') + `</div>`;
+            `<div class="tg-ev-title">${esc(e.title)} ${t.icon}</div>` + (h >= 34 && dayW >= 70 ? `<div class="tg-ev-time">${hhmm(e.start)} – ${hhmm(e.end)}</div>` : '') + `</div>`;
         });
         if (sameDay(d, today)) body += `<div class="tg-now" style="top:${(now - d0) / 3600000 * HOUR_PX}px"></div>`;
         body += `</div>`;
@@ -840,11 +844,13 @@
       const stats = `<div class="week-stats"><b>${total}</b> événements cette semaine${Object.entries(ev).map(([t, n]) => ` · ${n} ${TYPES[t].label.toLowerCase()}`).join('')}</div>`;
 
       document.getElementById('semaine').innerHTML =
+        (wrapW < 900 ? `<div class="tg-toggle"><button class="${nDays === 7 ? 'on' : ''}" onclick="setWeekDays(7)">7 j</button><button class="${nDays === 4 ? 'on' : ''}" onclick="setWeekDays(4)">4 j</button></div>` : '') +
         `<div class="tg-wrap"><div class="tg-sticky">${head}${hasAllDay ? allday : ''}</div>${body}</div>${stats}`;
       sizeWeek();
       scrollWeekToSelected(true);
     }
 
+    function setWeekDays(n) { store('mb_wdays', n); renderSemaine(); }
     function sizeWeek() {
       const wrap = document.querySelector('#semaine .tg-wrap');
       if (!wrap || !wrap.offsetParent) return;
