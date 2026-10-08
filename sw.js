@@ -1,4 +1,4 @@
-const CACHE_NAME = 'motherboard-v2';
+const CACHE_NAME = 'motherboard-v3';
 const urlsToCache = [
   '/',
   '/index.html',
