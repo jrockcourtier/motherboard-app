@@ -12,12 +12,13 @@
 
   // ---------- heures ----------
   // renvoie des minutes depuis minuit, ou null
+  let timeCtx = {};
   function parseTime(t) {
     t = t.trim();
     let m, h = null, min = 0;
     if (/^midi/.test(t)) { h = 12; t = t.slice(4); }
     else if (/^minuit/.test(t)) { h = 0; t = t.slice(6); }
-    else if ((m = t.match(/^(\d{1,2})\s*(?:h|:|heures?)\s*(\d{2})?/))) { h = +m[1]; min = m[2] ? +m[2] : 0; t = t.slice(m[0].length); }
+    else if ((m = t.match(/^(\d{1,2})\s*(?:heures?|h|:)\s*(\d{2})?/))) { h = +m[1]; min = m[2] ? +m[2] : 0; t = t.slice(m[0].length); }
     else if ((m = t.match(/^(une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze)\s+heures?/))) { h = NOMBRES[m[1]]; t = t.slice(m[0].length); }
     else return null;
     t = t.trim();
@@ -25,12 +26,18 @@
     else if (/^et quart/.test(t)) min = 15;
     else if (/^moins (le )?quart/.test(t)) { h -= 1; min = 45; }
     else if ((m = t.match(/^(\d{2})\b/)) && !min) min = +m[1];
-    if (/du soir|de l'apres-midi|pm/.test(t.slice(0, 20)) && h < 12) h += 12;
-    else if (!/du matin|am/.test(t.slice(0, 15)) && h >= 1 && h <= 6) h += 12; // « à 2 h » = 14 h
+    const after = t.slice(0, 20);
+    if (/du soir|de l'apres-midi|pm\b/.test(after) && h < 12) h += 12;
+    else if (/du matin|am\b/.test(after)) { if (h === 12) h = 0; }
+    else if (h >= 13) { /* 22 h, 14 h : déjà clair */ }
+    else if (timeCtx.soir && h >= 1 && h < 12) h += 12;          // « ce soir 10 h » = 22 h
+    else if (timeCtx.aprem && h >= 1 && h <= 7) h += 12;         // « cet après-midi 3 h » = 15 h
+    else if (timeCtx.matin) { /* « demain matin 6 h » = 6 h */ }
+    else if (h >= 1 && h <= 6) h += 12;                          // « à 2 h » = 14 h
     if (h > 23 || min > 59) return null;
     return h * 60 + min;
   }
-  const TIME_RX = '(midi(?: et (?:demie?|quart))?|minuit|\\d{1,2}\\s*(?:h|:|heures?)(?:\\s*\\d{2})?(?: et (?:demie?|quart)| moins (?:le )?quart)?(?: du (?:matin|soir)| de l\'apres-midi)?|(?:une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze) heures?(?: et (?:demie?|quart)| moins (?:le )?quart)?(?: du (?:matin|soir)| de l\'apres-midi)?)';
+  const TIME_RX = '((?<!apres[- ])(?<!avant[- ])midi(?: et (?:demie?|quart))?|minuit|\\d{1,2}\\s*(?:heures?|h|:)(?:\\s*\\d{2})?(?: et (?:demie?|quart)| moins (?:le )?quart)?(?: du (?:matin|soir)| de l\'apres-midi)?|(?:une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze) heures?(?: et (?:demie?|quart)| moins (?:le )?quart)?(?: du (?:matin|soir)| de l\'apres-midi)?)';
 
   function parseDuration(t) {
     let m = t.match(/(?:pendant|pour|duree(?: de)?|dure)\s+(\d+|une|deux|trois|quinze|trente|quarante-cinq|vingt)\s*(minutes?|min|heures?|h)\b(?:\s*(?:et\s*)?(demie?|30|15|quart))?/);
@@ -49,7 +56,7 @@
     let m;
     if (/apres-demain|apres demain/.test(t)) return addD(d0, 2);
     if (/\bdemain\b/.test(t)) return addD(d0, 1);
-    if (/aujourd'hui|aujourdhui|ce (?:matin|midi|soir|apres-midi)|\btantot\b/.test(t)) return d0;
+    if (/aujourd'hui|aujourdhui|\bce (?:matin|midi|soir)|\bcet apres-midi|\bcette (?:nuit|apres-midi)|\btantot\b/.test(t)) return d0;
     if ((m = t.match(/\b(\d{1,2}|1er|premier)\s+(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)(?:\s+(\d{4}))?/))) {
       const day = /1er|premier/.test(m[1]) ? 1 : +m[1];
       const mo = MOIS_N.indexOf(m[2]);
@@ -127,6 +134,11 @@
     const out = { raw: original, date: null, start: null, end: null, duration: null, title: '', contact: null, type: null, color: null, location: '', allDay: false };
 
     out.date = parseDate(t, now);
+    timeCtx = {
+      soir: /\b(?:ce soir|le soir|du soir|de soir|en soiree|soiree|cette nuit|la nuit|ce soir-la)\b/.test(t),
+      aprem: /\b(?:apres-midi|apres midi|en pm|cet pm)\b/.test(t),
+      matin: /\b(?:matin|du matin|am|avant-midi|avant midi)\b/.test(t)
+    };
     let m;
     const range = new RegExp(`(?:de|entre)\\s+${TIME_RX}\\s+(?:a|jusqu'a|et)\\s+${TIME_RX}`);
     const single1 = new RegExp(`(?:a|vers|pour|des)\\s+${TIME_RX}`), single2 = new RegExp(`\\b${TIME_RX}`);
@@ -134,6 +146,14 @@
     else if ((m = t.match(single1))) { out.start = parseTime(m[1]); hide(m.index, m[0].length); }
     else if ((m = t.match(single2))) { out.start = parseTime(m[1]); hide(m.index, m[0].length); }
     if (out.start != null && out.end != null && out.end <= out.start && out.end + 720 > out.start) out.end += 720;
+    // heure déjà passée aujourd'hui sans précision (« à 9 h » dit à 16 h) → le soir
+    const isToday = !out.date || (out.date.getFullYear() === now.getFullYear() && out.date.getMonth() === now.getMonth() && out.date.getDate() === now.getDate());
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    if (isToday && !timeCtx.matin && !timeCtx.soir && !timeCtx.aprem && out.start != null && out.start >= 60 && out.start < 720 && out.start < nowMin && out.start + 720 > nowMin
+        && !/\b(?:am|du matin)\b/.test(t)) {
+      out.start += 720; if (out.end != null && out.end < 720) out.end += 720;
+    }
+    timeCtx = {};
     out.duration = out.end != null && out.start != null ? out.end - out.start : parseDuration(t);
     if (/toute la journee|journee complete/.test(t)) out.allDay = true;
 
