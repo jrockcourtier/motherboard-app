@@ -280,9 +280,9 @@
     const body = {
       summary: `📱 Rappeler ${c.name}`,
       description: [c.phone ? 'Tél. : ' + c.phone : '', c.stage ? 'Étape : ' + c.stage : '', 'Dernière note : ' + ((c.notes || []).slice(-1)[0] || {}).text].filter(Boolean).join('\n'),
-      colorId: '7',
+      colorId: '6',
       start: { dateTime: start.toISOString(), timeZone: tz }, end: { dateTime: end.toISOString(), timeZone: tz },
-      extendedProperties: { private: { mbType: 'appel', mbContact: c.id } },
+      extendedProperties: { private: { mbType: 'suivi', mbContact: c.id } },
       reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] }
     };
     const send = () => fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`, { method: 'POST', headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -291,7 +291,7 @@
     if (r.status === 403) return 'no-permission';
     if (!r.ok) return 'error';
     const created = await r.json();
-    if (typeof events !== 'undefined' && typeof normalize === 'function') { events.push(normalize(created, { summary: (cals.find(x => x.id === calId) || {}).name || '' })); if (typeof renderAll === 'function') renderAll(); }
+    if (typeof events !== 'undefined' && typeof normalize === 'function') { events.push(normalize(created, { id: calId, summary: (cals.find(x => x.id === calId) || {}).name || '' })); if (typeof renderAll === 'function') renderAll(); }
     return 'ok';
   }
 

@@ -323,7 +323,7 @@
       const verb = c.type === 'acheteur' ? 'Visite' : c.type === 'proprio' ? 'Appel' : 'Rendez-vous';
       f.querySelector('[name=title]').value = `${verb} – ${c.name}`;
       if (c.address && c.type !== 'acheteur') f.querySelector('[name=location]').value = c.address;
-      if (typeof setFormType === 'function') setFormType(c.type === 'acheteur' ? 'visite' : c.type === 'proprio' ? 'appel' : 'reunion');
+      if (typeof setFormType === 'function') setFormType(c.type === 'acheteur' ? 'visite' : c.type === 'proprio' ? 'suivi' : 'reunion');
       window.pendingContactId = c.id;
     },
     logMeeting(id, title, when) {

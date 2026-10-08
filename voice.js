@@ -113,48 +113,92 @@
   }
 
   // ---------- analyse complète ----------
+  const COLOR_WORDS = [['lavande', /mauve pale|violet pale|lavande|lilas/], ['mauve', /mauve(?: fonce)?|violet(?:te)?(?: fonce)?|pourpre/], ['rouge', /rouge/],
+    ['vert', /verte?/], ['orange', /orange/], ['bleu', /bleue?|turquoise/], ['jaune', /jaune/], ['rose', /rose/], ['gris', /grise?/]];
+  const COLOR_RX = /(?:(?:mets?|met|mettre|place|colore)[- ]?(?:le|la|les|moi)?[- ]?(?:le|la)?\s+)?(?:en|de couleur|couleur|colore en)\s+(mauve pale|violet pale|mauve fonce|violet fonce|mauve|violette?|pourpre|lavande|lilas|rouge|verte?|orange|bleue?|turquoise|jaune|rose|grise?)\b/;
+
   function parseCommand(raw, now = new Date()) {
-    const original = String(raw || '').trim();
+    const original = String(raw || '').normalize('NFC').trim();
     const t = strip(original);
-    const out = { raw: original, date: null, start: null, end: null, duration: null, title: '', contact: null, type: null, location: '', allDay: false };
+    const same = t.length === original.length;
+    const mask = new Array(t.length).fill(false);
+    const hide = (i, len) => { for (let k = i; k < i + len && k < mask.length; k++) mask[k] = true; };
+    const hideAll = (rx) => { const g = new RegExp(rx.source, rx.flags.includes('g') ? rx.flags : rx.flags + 'g'); let mm; while ((mm = g.exec(t))) { hide(mm.index, mm[0].length); if (!mm[0].length) g.lastIndex++; } };
+    const out = { raw: original, date: null, start: null, end: null, duration: null, title: '', contact: null, type: null, color: null, location: '', allDay: false };
 
     out.date = parseDate(t, now);
     let m;
     const range = new RegExp(`(?:de|entre)\\s+${TIME_RX}\\s+(?:a|jusqu'a|et)\\s+${TIME_RX}`);
-    if ((m = t.match(range))) { out.start = parseTime(m[1]); out.end = parseTime(m[2]); }
-    else if ((m = t.match(new RegExp(`(?:a|vers|pour)\\s+${TIME_RX}`)))) out.start = parseTime(m[1]);
-    else if ((m = t.match(new RegExp(`\\b${TIME_RX}`)))) out.start = parseTime(m[1]);
+    const single1 = new RegExp(`(?:a|vers|pour|des)\\s+${TIME_RX}`), single2 = new RegExp(`\\b${TIME_RX}`);
+    if ((m = t.match(range))) { out.start = parseTime(m[1]); out.end = parseTime(m[2]); hide(m.index, m[0].length); }
+    else if ((m = t.match(single1))) { out.start = parseTime(m[1]); hide(m.index, m[0].length); }
+    else if ((m = t.match(single2))) { out.start = parseTime(m[1]); hide(m.index, m[0].length); }
     if (out.start != null && out.end != null && out.end <= out.start && out.end + 720 > out.start) out.end += 720;
     out.duration = out.end != null && out.start != null ? out.end - out.start : parseDuration(t);
     if (/toute la journee|journee complete/.test(t)) out.allDay = true;
 
-    // titre : « titre … », « intitulé … », « appelé … », « qui s'appelle … »
-    const tm = original.match(/(?:avec (?:le|comme) titre|titre|intitul[ée]e?|appelée?(?=\s)|qui s'appelle|nomm[ée]e?(?=\s))\s*[:«"]?\s*(.+?)(?:[»"]|[.,;]|\s+(?:avec|pour le client|pour la cliente|le\s+\d|demain|aujourd|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|de\s+\d|de midi|à\s+\d|a\s+\d)\b|$)/i);
+    // couleur demandée : « en rouge », « mets-le en vert »…
+    if ((m = t.match(COLOR_RX))) { for (const [k, rx] of COLOR_WORDS) if (rx.test(m[1])) { out.color = k; break; } hide(m.index, m[0].length); }
+
+    // ce qu'on retire du titre : dates, durée, journée, urgence, politesse
+    [/\b(?:pour |le |ce |cette )?(?:aujourd'hui|apres-demain|apres demain|demain)(?: matin| midi| soir| apres-midi)?\b/,
+     /\b(?:ce |cet )?(?:matin|apres-midi|soir)\b/,
+     /\b(?:le |ce |pour |du )?(?:dimanche|lundi|mardi|mercredi|jeudi|vendredi|samedi)(?: prochain| matin| soir| apres-midi)*\b/,
+     /\b(?:le |du |au |pour le )?(?:\d{1,2}|1er|premier)\s+(?:janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)(?:\s+\d{4})?\b/,
+     /\b(?:le |du )?\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/, /\ble\s+(?:\d{1,2}|1er|premier)\b(?!\s*(?:h|:|heures?|minutes?))/,
+     /\b(?:pendant|pour|duree(?: de)?|dure)\s+(?:\d+|une|deux|trois|quinze|trente|quarante-cinq|vingt)\s*(?:minutes?|min|heures?|h)\b(?:\s*(?:et\s*)?(?:demie?|30|15|quart))?/,
+     /\btoute la journee\b|\bjournee complete\b/, /\b(?:c'est |en )?(?:urgent|urgence)\b/, /\b(?:s'il te plait|s'il vous plait|stp|svp|merci)\b/,
+     /\b(?:dans |a )?(?:mon |l')?(?:agenda|calendrier)\b/].forEach(hideAll);
+    // début de commande : « ajoute-moi un rendez-vous pour … »
+    if ((m = t.match(/^(?:(?:ok|bon|alors|euh|peux-tu|pourrais-tu|est-ce que tu peux|j'aimerais que tu|je veux)\s+)*(?:(?:ajoute|rajoute|mets?|met|place|cree|creer|planifie|bloque|inscris|prevois|note|booke?|reserve|ajouter|mettre|planifier|bloquer)(?:[- ]?(?:moi|nous|lui))?\s+)?(?:(?:un|une|le|la|mon|ma)\s+)?(?:(?:nouveau|nouvel|nouvelle|petit|petite)\s+)?(?:(?:rendez-vous|rendez vous|rdv|evenement|evenement|bloc|plage|activite)\s*)?(?:(?:pour|de|qui s'appelle|appele)\s+|d'|:\s*)?/))) hide(m.index, m[0].length);
+
+    // titre explicite : « titre … », « intitulé … »
+    const tm = original.match(/(?:avec (?:le|comme) titre|titre|intitul[ée]e?|appelée?(?=\s)|qui s'appelle|nomm[ée]e?(?=\s))\s*[:«"]?\s*(.+?)(?:[»"]|[.,;]|\s+(?:avec|pour le client|pour la cliente|le\s+\d|demain|aujourd|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|de\s+\d|de midi|à\s+\d|a\s+\d|en (?:rouge|vert|orange|mauve|bleu|jaune|rose|gris))\b|$)/i);
     if (tm) out.title = tm[1].trim();
 
     // lieu : « au 4521 rue Fabre », « à l'adresse … »
-    const lm = original.match(/(?:à l'adresse|a l'adresse|au|adresse)\s+(\d+[^,.;]*?(?:rue|avenue|av\.?|boulevard|boul\.?|chemin|ch\.?|place|rang|montée|croissant)(?:\s+[^,.;]+?)??)(?=[,.;]|\s+(?:avec|pour|le\s+\d|titre|de\s+\d|à\s+\d)\b|$)/i);
-    if (lm) out.location = lm[1].trim();
+    const lm = original.match(/(?:à l'adresse|a l'adresse|au|adresse)\s+(\d+[^,.;]*?(?:rue|avenue|av\.?|boulevard|boul\.?|chemin|ch\.?|place|rang|montée|croissant)(?:\s+[^,.;]+?)??)(?=[,.;]|\s+(?:avec|pour|le\s+\d|titre|de\s+\d|à\s+\d|en\s+\w+)\b|$)/i);
+    if (lm) { out.location = lm[1].trim(); hide(lm.index, lm[0].length); }
 
     out.contact = findContact(original);
+    if (out.contact) {
+      const n = strip(out.contact.name), parts = n.split(/\s+/).filter(p => p.length > 1);
+      const words = [n, ...parts].map(x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      for (const w of words) { const rx = new RegExp(`(?:\\b(?:avec|pour|chez|de|a|au|le client|la cliente|monsieur|madame)\\s+)?(?:(?:le client|la cliente|monsieur|madame|m\\.|mme)\\s+)?\\b${w}\\b`); if ((m = t.match(rx))) hide(m.index, m[0].length); }
+      // nom approximatif (dictée) : retirer le mot le plus proche
+      t.replace(/[a-z'-]{4,}/g, (wd, i) => { if (parts.some(p => p.length >= 5 && Math.abs(wd.length - p.length) <= 1 && lev(wd, p) <= 1)) hide(i, wd.length); return wd; });
+    }
 
-    // type
-    const rules = [['visite', /visite|showing/], ['appel', /appel|appeler|telephon|rappel/], ['docs', /notaire|signature|document|compta|\bged\b|inspection|financement/],
-      ['marketing', /marketing|photo|video|instagram|facebook|publicit/], ['urgent', /urgent/], ['matrix', /matrix|tache|recherche/],
-      ['reunion', /rencontre|rendez-vous|rdv|reunion|meeting|cafe|diner|lunch/]];
-    const typeText = strip(out.title) || t;
-    for (const [k, rx] of rules) if (rx.test(typeText)) { out.type = k; break; }
-    if (!out.type) for (const [k, rx] of rules) if (rx.test(t)) { out.type = k; break; }
-    out.type = out.type || 'reunion';
+    // titre = ce qui reste de la phrase
+    if (!out.title && same) {
+      let rest = original.split('').map((ch, i) => mask[i] ? ' ' : ch).join('');
+      rest = rest.replace(/\s+/g, ' ').replace(/\s+([,.;:!?])/g, '$1').replace(/^[\s,.;:!?'-]+|[\s,.;:!?-]+$/g, '');
+      // petits mots orphelins au début / à la fin
+      for (let k = 0; k < 4; k++) rest = rest.replace(/^(?:et|pour|avec|de|du|des|à|a|au|le|la|les|un|une|mon|ma|puis|ensuite|qui|est|c'est|,)\s+/i, '').replace(/\s+(?:et|pour|avec|de|du|des|à|a|au|le|la|les|un|une|qui|à partir|,)$/i, '').replace(/[\s,.;:-]+$/, '');
+      if (rest && !/^(rendez-vous|rendez vous|rdv|un rendez-vous)$/i.test(rest) && rest.length > 1) out.title = rest;
+    }
+
+    // catégorie (même règles que l'agenda)
+    const rules = [['urgent', /urgent|urgence/], ['suivi', /\bsuivi|rappeler|\brappel\b|relancer|relance|follow/], ['visite', /visite|showing|domodo|centris/],
+      ['personnel', /\bperso\b|personnel|yoga|sport|\bgym\b|entrainement|velo|jogging|course a pied|marathon|psycho|medecin|docteur|dentiste|massage|coiffeur|famille|enfant|ecole|garderie|souper|anniversaire|routine|meditation|lecture|menage|epicerie|vacances|conge|mariage|fete|\bamis?\b|blonde|chum/],
+      ['reunion', /rencontre|rendez-vous|\brdv\b|reunion|meeting|cafe|lunch|diner|notaire|signature|inspection/]];
+    if (/\burgent|urgence/.test(t)) out.type = 'urgent';
+    const typeText = strip(out.title);
+    const biz = /client|acheteu|vendeu|proprio|courtier|notaire|banque|hypothe/;
+    if (!out.type) for (const [k, rx] of rules) if (rx.test(typeText) && !(k === 'personnel' && biz.test(typeText))) { out.type = k; break; }
+    if (!out.type && !out.title) for (const [k, rx] of rules) if (rx.test(t.replace(/^.{0,40}?(?:rendez-vous|rdv)\s*/, ''))) { out.type = k; break; }
+    if (!out.type && out.contact && !out.title) out.type = 'reunion';
+    out.type = out.type || 'travail';
 
     if (!out.title) {
-      const lbl = { visite: 'Visite', appel: 'Appel', docs: 'Signature / documents', marketing: 'Marketing', urgent: 'Urgent', matrix: 'Tâche', reunion: 'Rencontre client' }[out.type];
+      const lbl = { visite: 'Visite', reunion: 'Rencontre client', travail: 'Travail', suivi: 'Suivi', personnel: 'Personnel', urgent: 'Urgent' }[out.type];
       out.title = out.contact ? `${lbl} – ${out.contact.name}` : lbl;
-    } else if (out.contact && !strip(out.title).includes(strip(out.contact.name.split(' ')[0]))) {
+    } else if (out.contact && !strip(out.title).includes(strip(out.contact.name.split(' ')[0])) && !strip(out.title).includes(strip(out.contact.name.split(' ').slice(-1)[0]))) {
       out.title = `${out.title.charAt(0).toUpperCase()}${out.title.slice(1)} – ${out.contact.name}`;
     } else out.title = out.title.charAt(0).toUpperCase() + out.title.slice(1);
     return out;
   }
+
 
   // ---------- interface ----------
   const fmtMin = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
@@ -203,7 +247,8 @@
     const time = p.allDay ? 'toute la journée' : p.start != null ? `${fmtMin(p.start)}${p.duration ? ' – ' + fmtMin(p.start + p.duration) : ''}` : '<i>heure ?</i>';
     box.innerHTML = `<div><span>Titre</span><b>${esc(p.title)}</b></div><div><span>Quand</span><b>${date} · ${time}</b></div>` +
       `<div><span>Client</span><b>${p.contact ? '👤 ' + esc(p.contact.name) : '<i>aucun contact reconnu</i>'}</b></div>` +
-      (p.location ? `<div><span>Lieu</span><b>📍 ${esc(p.location)}</b></div>` : '');
+      (p.location ? `<div><span>Lieu</span><b>📍 ${esc(p.location)}</b></div>` : '') +
+      `<div><span>Catégorie</span><b>${({ visite: '🏡 Visite', reunion: '💼 Rendez-vous', travail: '💻 Travail', suivi: '📱 Suivi', personnel: '🌿 Personnel', urgent: '‼️ Urgent' })[p.type] || p.type}${p.color ? ' · couleur ' + p.color.replace('lavande', 'mauve pâle') : ''}</b></div>`;
   }
 
   function fillForm(p) {
@@ -217,9 +262,10 @@
     const f = document.getElementById('add-form'); if (!f) return;
     f.querySelector('[name=title]').value = p.title;
     if (p.location) f.querySelector('[name=location]').value = p.location;
-    else if (p.contact && p.contact.address && p.type !== 'appel') f.querySelector('[name=location]').value = p.contact.address;
+    else if (p.contact && p.contact.address && p.type !== 'suivi' && p.type !== 'travail') f.querySelector('[name=location]').value = p.contact.address;
     if (p.allDay) { f.querySelector('[name=allday]').checked = true; toggleAllDay(); }
     if (typeof setFormType === 'function') setFormType(p.type);
+    if (typeof setFormColor === 'function') setFormColor(p.color || null);
     if (typeof setFormDur === 'function') setFormDur(p.duration && p.duration > 0 ? p.duration : 60);
     window.pendingContactId = p.contact ? p.contact.id : null;
     const msg = document.getElementById('add-msg');
