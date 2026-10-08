@@ -66,12 +66,12 @@
     if (!km) return null;
     const after = original.slice(km.index);
     const before = original.slice(Math.max(0, km.index - 60), km.index);
-    let date = relDate(strip(after), now) || relDate(strip(before), now), start = null;
+    let date = relDate(strip(after), now) || relDate(strip(before), now), start = null, ambiguous = false;
     const p1 = window.Voice ? Voice.parse(after, now) : null;
-    if (!date && p1 && p1.date) { date = p1.date; start = p1.start; }
-    else if (p1 && p1.start != null && /\d|midi/.test(strip(after))) start = p1.start;
-    if (!date && window.Voice) { const p2 = Voice.parse(before, now); if (p2.date) { date = p2.date; if (p2.start != null) start = p2.start; } }
-    return { wanted: true, date, start };
+    if (!date && p1 && p1.date) { date = p1.date; start = p1.start; ambiguous = p1.ambiguous; }
+    else if (p1 && p1.start != null && /\d|midi/.test(strip(after))) { start = p1.start; ambiguous = p1.ambiguous; }
+    if (!date && window.Voice) { const p2 = Voice.parse(before, now); if (p2.date) { date = p2.date; if (p2.start != null) { start = p2.start; ambiguous = p2.ambiguous; } } }
+    return { wanted: true, date, start, ambiguous: ambiguous && start != null };
   }
 
   function parseContact(raw, now = new Date()) {
@@ -247,7 +247,7 @@
         const pp = window.Voice ? Voice.parse(v) : null;
         if (!d && pp && pp.date) d = pp.date;
         if (pp && pp.start != null) start = pp.start;
-        if (d) p.followUp = { wanted: true, date: d, start };
+        if (d) p.followUp = { wanted: true, date: d, start, ambiguous: !!(pp && pp.ambiguous && start != null) };
       }
     }
   }
@@ -260,7 +260,8 @@
     sheetEl().innerHTML = head(p.existing ? 'Mettre la fiche à jour' : 'Nouvelle fiche contact') + `
       <div class="voice-preview">${rows(p)}</div>
       <div class="f-label" style="text-align:left">Note ajoutée à la fiche</div>
-      <textarea id="vc-note" rows="4">${e(p.raw)}</textarea>
+      <textarea id="vc-note" rows="4">${e(p.note != null ? p.note : p.raw)}</textarea>
+      ${hasRem && p.followUp.ambiguous ? `<div class="ampm-row" style="margin-top:8px">${Voice.ampmChips(p.followUp.start, 'VoiceCRM.pm')}</div>` : ''}
       ${hasRem ? `<label class="vc-rem"><input type="checkbox" id="vc-cal" ${canCal ? 'checked' : ''}> Créer « 📱 Rappeler ${e(p.name)} » dans mon agenda Google</label>` : '<div class="voice-hint" style="margin-top:10px">Aucun rappel prévu.</div>'}
       <div id="vc-msg" class="f-msg"></div>
       <div class="vc-nav"><button type="button" class="vc-skip" onclick="VoiceCRM.edit()">Corriger</button><button type="button" class="sheet-save" id="vc-save" onclick="VoiceCRM.save()">${p.existing ? 'Mettre à jour' : 'Créer la fiche'}</button></div>`;
@@ -297,6 +298,10 @@
 
   window.VoiceCRM = {
     parse: parseContact,
+    pm(v) {
+      const p = state.p; const n = document.getElementById('vc-note'); if (n) p.note = n.value;
+      Voice.setPm(p.followUp, v); renderSummary();
+    },
     open(prefill) {
       if (window.Voice && Voice.close) Voice.close();
       modal().classList.add('open');

@@ -94,3 +94,10 @@ body[data-tab="transactions"] .mini-calendar, body[data-tab="transactions"] .sta
 .vc-mini { margin-top: 16px; opacity: .85; }
 .vc-rem { display: flex; gap: 8px; align-items: center; text-align: left; font-size: 14px; font-weight: 600; margin-top: 12px; padding: 10px; background: #E6F2F0; border-radius: 8px; }
 .vc-toast { position: fixed; left: 12px; right: 12px; bottom: calc(160px + env(safe-area-inset-bottom)); background: #333; color: #fff; padding: 12px 14px; border-radius: 8px; font-size: 13px; z-index: 200; }
+
+/* matin / soir */
+.ampm-row { background: var(--white) !important; display: block !important; padding: 8px 10px !important; }
+.ampm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ampm button { border: 1px solid var(--border-light); background: var(--white); border-radius: 18px; padding: 7px 14px; font-size: 14px; font-weight: 700; cursor: pointer; }
+.ampm button.on { background: var(--primary-dark); color: var(--primary-gold); border-color: var(--primary-dark); }
+.ampm span { font-size: 11px; color: var(--text-secondary); }

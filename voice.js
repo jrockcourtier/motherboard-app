@@ -33,7 +33,10 @@
     else if (timeCtx.soir && h >= 1 && h < 12) h += 12;          // « ce soir 10 h » = 22 h
     else if (timeCtx.aprem && h >= 1 && h <= 7) h += 12;         // « cet après-midi 3 h » = 15 h
     else if (timeCtx.matin) { /* « demain matin 6 h » = 6 h */ }
-    else if (h >= 1 && h <= 6) h += 12;                          // « à 2 h » = 14 h
+    else if (h >= 1 && h <= 11) {                                // ambigu : 7-11 h = matin, 1-6 h = après-midi
+      timeCtx.amb = true;
+      if (h <= 6) h += 12;
+    }
     if (h > 23 || min > 59) return null;
     return h * 60 + min;
   }
@@ -135,7 +138,7 @@
 
     out.date = parseDate(t, now);
     timeCtx = {
-      soir: /\b(?:ce soir|le soir|du soir|de soir|en soiree|soiree|cette nuit|la nuit|ce soir-la)\b/.test(t),
+      soir: /\b(?:ce soir|le soir|du soir|de soir|en soiree|soiree|cette nuit|la nuit|ce soir-la|souper|soupe|5 a 7|cinq a sept)\b/.test(t),
       aprem: /\b(?:apres-midi|apres midi|en pm|cet pm)\b/.test(t),
       matin: /\b(?:matin|du matin|am|avant-midi|avant midi)\b/.test(t)
     };
@@ -153,6 +156,7 @@
         && !/\b(?:am|du matin)\b/.test(t)) {
       out.start += 720; if (out.end != null && out.end < 720) out.end += 720;
     }
+    out.ambiguous = !!timeCtx.amb && out.start != null && !out.allDay;
     timeCtx = {};
     out.duration = out.end != null && out.start != null ? out.end - out.start : parseDuration(t);
     if (/toute la journee|journee complete/.test(t)) out.allDay = true;
@@ -250,6 +254,21 @@
     if (btn) btn.click();
   }
 
+  // ---------- matin / soir quand l'heure est ambiguë ----------
+  function setPm(p, pm) {
+    if (p.start == null) return p;
+    if (pm && p.start < 720) { p.start += 720; if (p.end != null && p.end < 720) p.end += 720; }
+    if (!pm && p.start >= 720 && p.start < 1440) { p.start -= 720; if (p.end != null && p.end >= 720) p.end -= 720; }
+    return p;
+  }
+  const hm = (m) => `${Math.floor(m / 60)} h${m % 60 ? ' ' + String(m % 60).padStart(2, '0') : ''}`;
+  function ampmChips(start, onclick) {
+    const am = start % 720, isPm = start >= 720;
+    return `<div class="ampm"><button type="button" class="${!isPm ? 'on' : ''}" onclick="${onclick}(false)">☀️ ${hm(am)}</button><button type="button" class="${isPm ? 'on' : ''}" onclick="${onclick}(true)">🌙 ${hm(am + 720)}</button><span>Matin ou soir ?</span></div>`;
+  }
+
+  let pmChoice = { text: null, pm: null };
+
   // ---------- interface ----------
   const fmtMin = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
   let rec = null, listening = false, gotResult = false, watchdog = null;
@@ -312,9 +331,11 @@
       if (go) go.textContent = 'Continuer la fiche';
     } else {
       const p = r.p;
+      if (pmChoice.text !== txt) pmChoice = { text: txt, pm: null };
+      if (p.ambiguous && pmChoice.pm !== null) setPm(p, pmChoice.pm);
       const date = p.date ? p.date.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' }) : '<i>date ? (aujourd\'hui par défaut)</i>';
       const time = p.allDay ? 'toute la journée' : p.start != null ? `${fmtMin(p.start)}${p.duration ? ' – ' + fmtMin(p.start + p.duration) : ''}` : '<i>heure ?</i>';
-      box.innerHTML = line('Action', '📅 Nouveau rendez-vous') + line('Titre', esc(p.title)) + line('Quand', `${date} · ${time}`) +
+      box.innerHTML = line('Action', '📅 Nouveau rendez-vous') + line('Titre', esc(p.title)) + line('Quand', `${date} · ${time}`) + (p.ambiguous ? `<div class="ampm-row">${ampmChips(p.start, 'Voice.pm')}</div>` : '') +
         (p.contact ? line('Client', '👤 ' + esc(p.contact.name)) : '') + (p.location ? line('Lieu', '📍 ' + esc(p.location)) : '') +
         line('Catégorie', `${({ visite: '🏡 Visite', reunion: '💼 Rendez-vous', travail: '💻 Travail', suivi: '📱 Suivi', personnel: '🌿 Personnel', urgent: '‼️ Urgent' })[p.type] || p.type}${p.color ? ' · couleur ' + p.color.replace('lavande', 'mauve pâle') : ''}`);
       if (go) go.textContent = 'Préparer le rendez-vous';
@@ -347,6 +368,8 @@
   window.Voice = {
     parse: parseCommand,
     findContact,
+    setPm, ampmChips,
+    pm(v) { pmChoice = { text: document.getElementById('voice-text').value, pm: v }; preview(); },
     route,
     open() {
       document.querySelectorAll('.mb-toast').forEach(x => x.remove());
@@ -408,6 +431,7 @@
       }
       if (r.intent === 'contact') { Voice.close(); VoiceCRM.open(txt); VoiceCRM.analyze(); return; }
       const p = r.p;
+      if (p.ambiguous && pmChoice.text === txt && pmChoice.pm !== null) setPm(p, pmChoice.pm);
       if (typeof accessToken !== 'undefined' && !accessToken && typeof getServerToken === 'function') {
         hint.textContent = 'Connexion à Google…';
         getServerToken().then(ok => {
