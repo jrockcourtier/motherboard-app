@@ -149,7 +149,15 @@
 
   // ---------- interface ----------
   const fmtMin = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-  let rec = null, listening = false;
+  let rec = null, listening = false, gotResult = false, watchdog = null;
+  const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const useSR = () => !IOS && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  function keyboardMode(msg) {
+    const ta = document.getElementById('voice-text'), hint = document.getElementById('voice-hint'), btn = document.getElementById('voice-mic');
+    if (btn) btn.classList.remove('on');
+    if (hint) hint.innerHTML = msg || '👇 Touchez le <b>🎤 du clavier</b> (en bas à droite du clavier) et parlez. Touchez <b>OK</b> quand c\'est fini.';
+    if (ta) ta.focus();
+  }
 
   function sheet() {
     let m = document.getElementById('voice-modal');
@@ -167,7 +175,10 @@
       <div class="voice-ex">Exemples :<br>• « Visite vendredi à 14 h au 4521 rue Fabre avec Marc Tremblay »<br>• « Appel avec Sophie Roy le 15 octobre à 10 h pendant 15 minutes »<br>• « Rendez-vous lundi de 9 h à 10 h 30, titre signature notaire »</div>
     </div>`;
     document.body.appendChild(m);
-    m.querySelector('#voice-text').addEventListener('input', preview);
+    const ta = m.querySelector('#voice-text');
+    ta.addEventListener('input', preview);
+    ta.addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); Voice.go(); } });
+    ta.setAttribute('enterkeyhint', 'go');
     return m;
   }
 
@@ -210,9 +221,8 @@
       if (typeof accessToken !== 'undefined' && !accessToken) { if (typeof connectGoogle === 'function') connectGoogle(); return; }
       const m = sheet(); m.classList.add('open');
       document.getElementById('voice-text').value = ''; preview();
-      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      document.getElementById('voice-hint').textContent = SR ? 'Touchez le micro et parlez.' : 'Touchez la zone de texte, puis le 🎤 du clavier pour dicter.';
-      if (SR) Voice.toggle(); else setTimeout(() => document.getElementById('voice-text').focus(), 100);
+      if (useSR()) { document.getElementById('voice-hint').textContent = 'Touchez le micro et parlez.'; Voice.toggle(); }
+      else keyboardMode(); // iPhone : la dictée du clavier est la plus fiable (et le clavier s'ouvre tout de suite)
     },
     close() {
       if (rec && listening) try { rec.stop(); } catch (e) {}
@@ -221,20 +231,25 @@
     toggle() {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       const hint = document.getElementById('voice-hint'), btn = document.getElementById('voice-mic'), ta = document.getElementById('voice-text');
-      if (!SR) { hint.textContent = 'Touchez la zone de texte, puis le 🎤 du clavier pour dicter.'; ta.focus(); return; }
+      if (!useSR()) { keyboardMode(); return; }
       if (listening) { try { rec.stop(); } catch (e) {} return; }
       rec = new SR(); rec.lang = 'fr-CA'; rec.interimResults = true; rec.continuous = false;
       const base = ta.value ? ta.value + ' ' : '';
-      rec.onresult = (ev) => { let s = ''; for (let i = 0; i < ev.results.length; i++) s += ev.results[i][0].transcript; ta.value = base + s; preview(); };
+      rec.onresult = (ev) => { gotResult = true; let s = ''; for (let i = 0; i < ev.results.length; i++) s += ev.results[i][0].transcript; ta.value = base + s; preview(); };
       rec.onerror = (ev) => {
         hint.textContent = ev.error === 'not-allowed' || ev.error === 'service-not-allowed'
           ? 'Micro refusé : autorisez-le dans les réglages, ou utilisez le 🎤 du clavier.'
           : 'Je n\'ai pas bien entendu. Réessayez, ou tapez/dictez avec le clavier.';
       };
       rec.onend = () => {
+        clearTimeout(watchdog);
         listening = false; btn.classList.remove('on');
+        if (!gotResult && !ta.value.trim()) { keyboardMode('Le micro de l\'app n\'a rien capté. Touchez le <b>🎤 du clavier</b> et parlez.'); return; }
         if (ta.value.trim() && hint.textContent.startsWith('J\'écoute')) { hint.textContent = 'Vérifiez ci-dessous, puis « Préparer le rendez-vous ».'; }
       };
+      gotResult = false;
+      clearTimeout(watchdog);
+      watchdog = setTimeout(() => { if (listening && !gotResult) { try { rec.abort(); } catch (e) {} } }, 7000);
       try { rec.start(); listening = true; btn.classList.add('on'); hint.textContent = 'J\'écoute… parlez maintenant.'; }
       catch (e) { hint.textContent = 'Touchez la zone de texte, puis le 🎤 du clavier pour dicter.'; ta.focus(); }
     },
