@@ -82,6 +82,13 @@
   function addD(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 
   // ---------- contacts ----------
+  function lev(a, b) {
+    const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+    for (let j = 1; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    return d[a.length][b.length];
+  }
   function findContact(text) {
     if (!window.CRM || !CRM._all) return null;
     const t = ' ' + strip(text).replace(/[^a-z0-9' -]/g, ' ') + ' ';
@@ -93,7 +100,9 @@
       let score = 0;
       if (t.includes(' ' + n + ' ')) score = 10;
       else {
-        const hits = parts.filter(p => t.includes(' ' + p + ' '));
+        const words = t.trim().split(/\s+/);
+        const near = (p) => t.includes(' ' + p + ' ') || (p.length >= 5 && words.some(w => Math.abs(w.length - p.length) <= 1 && lev(w, p) <= 1));
+        const hits = parts.filter(near);
         if (hits.length === parts.length && parts.length > 1) score = 8;
         else if (hits.length) score = hits.some(p => p === parts[parts.length - 1]) ? 4 : 3;
       }
@@ -124,13 +133,13 @@
     if (tm) out.title = tm[1].trim();
 
     // lieu : « au 4521 rue Fabre », « à l'adresse … »
-    const lm = original.match(/(?:à l'adresse|a l'adresse|au|adresse)\s+(\d+[^,.;]*?(?:rue|avenue|av\.?|boulevard|boul\.?|chemin|ch\.?|place|rang|montée|croissant)\s+[^,.;]+?)(?=[,.;]|\s+(?:avec|pour|le\s+\d|titre|de\s+\d|à\s+\d)\b|$)/i);
+    const lm = original.match(/(?:à l'adresse|a l'adresse|au|adresse)\s+(\d+[^,.;]*?(?:rue|avenue|av\.?|boulevard|boul\.?|chemin|ch\.?|place|rang|montée|croissant)(?:\s+[^,.;]+?)??)(?=[,.;]|\s+(?:avec|pour|le\s+\d|titre|de\s+\d|à\s+\d)\b|$)/i);
     if (lm) out.location = lm[1].trim();
 
     out.contact = findContact(original);
 
     // type
-    const rules = [['visite', /visite|showing/], ['appel', /appel|appeler|telephon|rappel/], ['docs', /notaire|signature|document|compta|\bged\b/],
+    const rules = [['visite', /visite|showing/], ['appel', /appel|appeler|telephon|rappel/], ['docs', /notaire|signature|document|compta|\bged\b|inspection|financement/],
       ['marketing', /marketing|photo|video|instagram|facebook|publicit/], ['urgent', /urgent/], ['matrix', /matrix|tache|recherche/],
       ['reunion', /rencontre|rendez-vous|rdv|reunion|meeting|cafe|diner|lunch/]];
     const typeText = strip(out.title) || t;
@@ -169,14 +178,16 @@
       <div class="sheet-head"><button type="button" class="sheet-x" onclick="Voice.close()">✕</button><b>Dites-le à votre Motherboard</b><span style="width:60px"></span></div>
       <button type="button" id="voice-mic" class="voice-mic" onclick="Voice.toggle()">🎤</button>
       <div id="voice-hint" class="voice-hint">Touchez le micro et parlez.</div>
-      <textarea id="voice-text" rows="3" placeholder="Ex. : Ajoute-moi un rendez-vous demain de midi à midi et demi avec Marc Tremblay, titre rencontre client"></textarea>
+      <textarea id="voice-text" rows="4" autocomplete="off" autocorrect="on" spellcheck="false" placeholder="Ex. : Ajoute-moi un rendez-vous demain de midi à midi et demi avec Marc Tremblay, titre rencontre client"></textarea>
       <div id="voice-preview" class="voice-preview"></div>
       <button type="button" class="sheet-save voice-go" onclick="Voice.go()">Préparer le rendez-vous</button>
       <div class="voice-ex">Exemples :<br>• « Visite vendredi à 14 h au 4521 rue Fabre avec Marc Tremblay »<br>• « Appel avec Sophie Roy le 15 octobre à 10 h pendant 15 minutes »<br>• « Rendez-vous lundi de 9 h à 10 h 30, titre signature notaire »</div>
     </div>`;
     document.body.appendChild(m);
     const ta = m.querySelector('#voice-text');
-    ta.addEventListener('input', preview);
+    ['input', 'change', 'keyup', 'paste', 'compositionend'].forEach(e => ta.addEventListener(e, () => setTimeout(preview, 0)));
+    let last = '';
+    setInterval(() => { const mm = document.getElementById('voice-modal'); if (mm && mm.classList.contains('open') && ta.value !== last) { last = ta.value; preview(); } }, 500);
     ta.addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); Voice.go(); } });
     ta.setAttribute('enterkeyhint', 'go');
     return m;
@@ -218,7 +229,6 @@
   window.Voice = {
     parse: parseCommand,
     open() {
-      if (typeof accessToken !== 'undefined' && !accessToken) { if (typeof connectGoogle === 'function') connectGoogle(); return; }
       const m = sheet(); m.classList.add('open');
       document.getElementById('voice-text').value = ''; preview();
       if (useSR()) { document.getElementById('voice-hint').textContent = 'Touchez le micro et parlez.'; Voice.toggle(); }
@@ -231,7 +241,7 @@
     toggle() {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       const hint = document.getElementById('voice-hint'), btn = document.getElementById('voice-mic'), ta = document.getElementById('voice-text');
-      if (!useSR()) { keyboardMode(); return; }
+      if (!useSR()) { ta.focus(); keyboardMode(); return; }
       if (listening) { try { rec.stop(); } catch (e) {} return; }
       rec = new SR(); rec.lang = 'fr-CA'; rec.interimResults = true; rec.continuous = false;
       const base = ta.value ? ta.value + ' ' : '';
@@ -257,6 +267,14 @@
       const txt = document.getElementById('voice-text').value;
       if (!txt.trim()) { document.getElementById('voice-hint').textContent = 'Dites ou tapez votre demande d\'abord.'; return; }
       const p = parseCommand(txt);
+      if (typeof accessToken !== 'undefined' && !accessToken && typeof getServerToken === 'function') {
+        document.getElementById('voice-hint').textContent = 'Connexion à Google…';
+        getServerToken().then(ok => {
+          if (!ok) { document.getElementById('voice-hint').innerHTML = 'Google n\'est pas connecté sur cet appareil. <a href="/api/auth/start">Touchez ici pour connecter Google</a>, puis réessayez.'; return; }
+          Voice.close(); fillForm(p);
+        });
+        return;
+      }
       Voice.close();
       fillForm(p);
     }
