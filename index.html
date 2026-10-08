@@ -443,6 +443,38 @@
     .month-more { font-size: 8px; color: var(--text-secondary); font-weight: 600; }
     @media (max-width: 899px) { .month-chip { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word; font-size: 8px; } .month-chip b { display: none; } }
     @media (min-width: 900px) { .month-cell { min-height: 130px; padding: 6px; } .month-chip { font-size: 11px; padding: 3px 5px; } .month-num { font-size: 13px; } }
+
+    /* ===== v6 : grille horaire semaine ===== */
+    #semaine { overflow: hidden !important; }
+    .tg-wrap { position: relative; overflow: auto; -webkit-overflow-scrolling: touch; border-top: 1px solid var(--border-light); background: var(--white); }
+    .tg-sticky { position: sticky; top: 0; z-index: 5; background: var(--white); }
+    .tg-head, .tg-allday { display: flex; border-bottom: 1px solid var(--border-light); background: var(--white); }
+    .tg-corner { flex: 0 0 46px; width: 46px; position: sticky; left: 0; z-index: 6; background: var(--white); }
+    .tg-ad-label { font-size: 8px; color: var(--text-secondary); text-align: right; padding: 4px 6px 0 0; }
+    .tg-dayhead { flex: 0 0 auto; text-align: center; padding: 6px 0 5px; cursor: pointer; border-left: 1px solid var(--border-light); }
+    .tg-dayhead span { display: block; font-size: 9px; font-weight: 600; color: var(--text-secondary); }
+    .tg-dayhead b { display: inline-block; min-width: 28px; line-height: 28px; border-radius: 50%; font-size: 15px; margin-top: 2px; }
+    .tg-dayhead.is-now b { background: var(--primary-dark); color: var(--primary-gold); }
+    .tg-dayhead.selected:not(.is-now) b { outline: 2px solid var(--primary-gold); }
+    .tg-adcell { flex: 0 0 auto; padding: 2px; border-left: 1px solid var(--border-light); min-height: 22px; }
+    .tg-adchip { font-size: 9px; font-weight: 600; padding: 2px 4px; margin-bottom: 2px; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid; }
+    .tg-body { position: relative; background-image: repeating-linear-gradient(to bottom, var(--border-light) 0, var(--border-light) 1px, transparent 1px, transparent 48px); background-position: 46px 0; background-repeat: repeat-y; }
+    .tg-hours { position: sticky; left: 0; width: 46px; height: 100%; background: var(--white); z-index: 3; border-right: 1px solid var(--border-light); }
+    .tg-hour { position: absolute; right: 6px; transform: translateY(-50%); font-size: 9px; color: var(--text-secondary); background: var(--white); padding: 0 1px; }
+    .tg-day { position: absolute; top: 0; height: 100%; border-left: 1px solid var(--border-light); }
+    .tg-day.is-now { background: rgba(212, 175, 55, .05); }
+    .tg-ev { position: absolute; border-radius: 4px; border-left: 3px solid; padding: 2px 4px; overflow: hidden; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.08); z-index: 1; }
+    .tg-ev-title { font-size: 10px; font-weight: 700; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; word-break: break-word; }
+    .tg-ev-time { font-size: 9px; opacity: .75; margin-top: 1px; white-space: nowrap; }
+    .tg-now { position: absolute; left: 0; right: 0; height: 2px; background: #E53935; z-index: 2; }
+    .tg-now::before { content: ''; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: #E53935; }
+    .tg-ev.visite, .tg-adchip.visite { border-left-color: #9C27B0; background: #EBDDF0; }
+    .tg-ev.appel, .tg-adchip.appel { border-left-color: var(--appel); background: #CCE7E3; }
+    .tg-ev.reunion, .tg-adchip.reunion { border-left-color: var(--reunion); background: #D2E4F6; }
+    .tg-ev.matrix, .tg-adchip.matrix { border-left-color: var(--matrix); background: #FDE5CC; }
+    .tg-ev.docs, .tg-adchip.docs { border-left-color: var(--docs); background: #F3D1DE; }
+    .tg-ev.marketing, .tg-adchip.marketing { border-left-color: var(--marketing); background: #DDE8D5; }
+    .tg-ev.urgent, .tg-adchip.urgent { border-left-color: var(--urgent); background: #F4D4D4; }
   </style>
 </head>
 <body>
@@ -452,7 +484,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v5</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v6</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -484,7 +516,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
-    const APP_VERSION = 'v5';
+    const APP_VERSION = 'v6';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -678,7 +710,7 @@
       document.getElementById(name).classList.add('active');
       event.target.classList.add('active');
       store('mb_tab', name);
-      if (name === 'semaine') scrollWeekToSelected();
+      if (name === 'semaine') renderSemaine();
     }
 
     // ================== RENDU ==================
@@ -738,29 +770,105 @@
       document.getElementById('stats-grid').innerHTML = html;
     }
 
+    // ===== Vue SEMAINE : grille horaire (style Google Agenda) =====
+    const HOUR_PX = 48, TIME_COL = 46;
+    function layoutDay(evs) {
+      // place les événements qui se chevauchent côte à côte
+      const timed = evs.filter(e => !e.allDay).sort((a, b) => a.start - b.start || b.end - a.end);
+      const out = []; let group = [], groupEnd = 0;
+      const flush = () => {
+        const cols = [];
+        group.forEach(ev => {
+          let c = cols.findIndex(end => end <= ev.start);
+          if (c < 0) { c = cols.length; cols.push(0); }
+          cols[c] = ev.end; ev._col = c;
+        });
+        group.forEach(ev => { ev._ncol = cols.length; out.push(ev); });
+        group = [];
+      };
+      timed.forEach(ev => {
+        if (group.length && ev.start >= groupEnd) flush();
+        group.push(ev); groupEnd = Math.max(groupEnd, +ev.end);
+      });
+      if (group.length) flush();
+      return out;
+    }
+
     function renderSemaine() {
-      const ws = startOfWeek(selectedDate), today = startOfDay(new Date());
-      let html = `<div class="section-title">SEMAINE DU ${ws.getDate()} ${MOIS[ws.getMonth()]}</div><div class="week-cols">`;
-      for (let i = 0; i < 7; i++) {
-        const d = addDays(ws, i);
+      const ws = startOfWeek(selectedDate), now = new Date(), today = startOfDay(now);
+      const wrapW = Math.max(320, (document.querySelector('.tabs-content') || document.body).clientWidth);
+      const nDays = wrapW >= 900 ? 7 : 4;
+      const dayW = Math.floor((wrapW - TIME_COL) / nDays);
+      const gridW = TIME_COL + dayW * 7;
+      const days = [...Array(7)].map((_, i) => addDays(ws, i));
+
+      let head = `<div class="tg-head" style="width:${gridW}px"><div class="tg-corner"></div>`;
+      let allday = `<div class="tg-allday" style="width:${gridW}px"><div class="tg-corner tg-ad-label">Jour.</div>`;
+      let body = `<div class="tg-body" style="width:${gridW}px;height:${24 * HOUR_PX}px"><div class="tg-hours">`;
+      for (let hr = 1; hr < 24; hr++) body += `<div class="tg-hour" style="top:${hr * HOUR_PX}px">${String(hr).padStart(2, '0')}:00</div>`;
+      body += `</div>`;
+      let hasAllDay = false;
+
+      days.forEach((d, i) => {
         const cls = (sameDay(d, today) ? ' is-now' : '') + (sameDay(d, selectedDate) ? ' selected' : '');
-        html += `<div class="week-col${cls}"><div class="week-col-head" onclick="selectDate(new Date(${d.getTime()}))">${JOURS[i]} <b>${d.getDate()}</b></div>`;
+        head += `<div class="tg-dayhead${cls}" style="width:${dayW}px" onclick="selectDate(new Date(${d.getTime()}))"><span>${JOURS[i]}</span><b>${d.getDate()}</b></div>`;
         const evs = eventsOn(d);
-        html += evs.length ? evs.map(e => `<div class="week-chip ${e.type}">${e.allDay ? '' : `<span>${hhmm(e.start)}</span> `}${esc(e.title)}</div>`).join('') : '<div class="week-empty">—</div>';
-        html += `</div>`;
-      }
-      html += '</div>';
+        const ad = evs.filter(e => e.allDay);
+        if (ad.length) hasAllDay = true;
+        allday += `<div class="tg-adcell" style="width:${dayW}px">` + ad.map(e => `<div class="tg-adchip ${e.type}">${esc(e.title)}</div>`).join('') + `</div>`;
+
+        const d0 = d.getTime(), d1 = addDays(d, 1).getTime();
+        body += `<div class="tg-day${cls}" style="left:${TIME_COL + i * dayW}px;width:${dayW}px">`;
+        layoutDay(evs).forEach(e => {
+          const s = Math.max(+e.start, d0), en = Math.min(+e.end, d1);
+          const top = (s - d0) / 3600000 * HOUR_PX;
+          const h = Math.max(18, (en - s) / 3600000 * HOUR_PX - 2);
+          const w = 100 / e._ncol;
+          const t = TYPES[e.type] || TYPES.matrix;
+          body += `<div class="tg-ev ${e.type}" style="top:${top}px;height:${h}px;left:calc(${w * e._col}% + 1px);width:calc(${w}% - 3px)"` +
+            (e.link ? ` onclick="window.open('${esc(e.link)}','_blank')"` : '') + ` title="${esc(e.title)} · ${hhmm(e.start)}–${hhmm(e.end)}">` +
+            `<div class="tg-ev-title">${esc(e.title)} ${t.icon}</div>` + (h >= 34 ? `<div class="tg-ev-time">${hhmm(e.start)} – ${hhmm(e.end)}</div>` : '') + `</div>`;
+        });
+        if (sameDay(d, today)) body += `<div class="tg-now" style="top:${(now - d0) / 3600000 * HOUR_PX}px"></div>`;
+        body += `</div>`;
+      });
+      head += `</div>`; allday += `</div>`; body += `</div>`;
+
       const ev = {};
       events.filter(e => e.start >= ws && e.start < addDays(ws, 7)).forEach(e => ev[e.type] = (ev[e.type] || 0) + 1);
       const total = Object.values(ev).reduce((a, b) => a + b, 0);
-      html += `<div class="week-stats"><b>${total}</b> événements cette semaine${Object.entries(ev).map(([t, n]) => ` · ${n} ${TYPES[t].label.toLowerCase()}`).join('')}</div>`;
-      document.getElementById('semaine').innerHTML = html;
-      scrollWeekToSelected();
+      const stats = `<div class="week-stats"><b>${total}</b> événements cette semaine${Object.entries(ev).map(([t, n]) => ` · ${n} ${TYPES[t].label.toLowerCase()}`).join('')}</div>`;
+
+      document.getElementById('semaine').innerHTML =
+        `<div class="tg-wrap"><div class="tg-sticky">${head}${hasAllDay ? allday : ''}</div>${body}</div>${stats}`;
+      sizeWeek();
+      scrollWeekToSelected(true);
     }
-    function scrollWeekToSelected() {
-      const sel = document.querySelector('#semaine .week-col.selected');
-      if (sel && sel.offsetParent) sel.parentElement.scrollLeft = Math.max(0, sel.offsetLeft - 8);
+
+    function sizeWeek() {
+      const wrap = document.querySelector('#semaine .tg-wrap');
+      if (!wrap || !wrap.offsetParent) return;
+      const top = wrap.getBoundingClientRect().top;
+      wrap.style.height = Math.max(300, window.innerHeight - top - 34) + 'px';
     }
+
+    let weekScrolledFor = null;
+    function scrollWeekToSelected(force) {
+      const wrap = document.querySelector('#semaine .tg-wrap');
+      if (!wrap || !wrap.offsetParent) return;
+      sizeWeek();
+      const sel = wrap.querySelector('.tg-day.selected');
+      if (sel) wrap.scrollLeft = Math.max(0, sel.offsetLeft - TIME_COL);
+      const key = startOfWeek(selectedDate).getTime();
+      if (force || weekScrolledFor !== key) {
+        const now = new Date();
+        const hr = sameDay(startOfWeek(now), startOfWeek(selectedDate)) ? Math.max(0, now.getHours() - 1) : 7;
+        wrap.scrollTop = Math.min(hr, 7) * HOUR_PX;
+        weekScrolledFor = key;
+      }
+    }
+    window.addEventListener('resize', () => { if (document.getElementById('semaine').classList.contains('active')) renderSemaine(); });
+    setInterval(() => { const n = document.querySelector('.tg-now'); if (n) { const d = new Date(); n.style.top = ((d - startOfDay(d)) / 3600000 * HOUR_PX) + 'px'; } }, 60000);
 
     function renderMoisView() {
       const MONTH_MAX = window.innerWidth >= 900 ? 5 : 3;
