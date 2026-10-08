@@ -106,7 +106,7 @@ async function requireOwner(req, res) {
 }
 
 // ---------- Supabase (base de données) ----------
-const SUPABASE_URL = (process.env.SUPABASE_URL || 'https://luynpgieqbszzsqucldal.supabase.co').replace(/\/$/, '');
+const SUPABASE_URL = (process.env.SUPABASE_URL || 'https://luynpgieqbszsqucldal.supabase.co').replace(/\/$/, '');
 function supabaseKey() { return process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''; }
 async function sb(path, opts = {}) {
   const key = supabaseKey();
