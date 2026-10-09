@@ -768,7 +768,7 @@
         cal: cal.summaryOverride || cal.summary,
         contactId: (ev.extendedProperties && ev.extendedProperties.private && ev.extendedProperties.private.mbContact) || null,
         type: detectType(ev),
-        done: !!(ev.extendedProperties && ev.extendedProperties.private && ev.extendedProperties.private.mbDone === '1') || /^✅/.test(ev.summary || ''),
+        done: !!(ev.extendedProperties && ev.extendedProperties.private && ev.extendedProperties.private.mbDone === '1'),
         color: (ev.extendedProperties && ev.extendedProperties.private && COLORS[ev.extendedProperties.private.mbColor]) ? ev.extendedProperties.private.mbColor : null
       };
     }
