@@ -592,7 +592,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v13</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v13.1</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -625,7 +625,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v13';
+    const APP_VERSION = 'v13.1';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -675,6 +675,7 @@
     let loadedRange = null;     // {start, end}
     let tokenClient = null;
     let accessToken = null;
+    let calErrors = [], loadedCals = [];
 
     // ================== OUTILS DATES ==================
     function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
@@ -780,17 +781,25 @@
         .sort((a, b) => b.primary - a.primary);
       store('mb_wcals', writableCals);
       const all = [];
+      calErrors = [];
+      // Un calendrier en erreur (partage retiré, accès changé…) ne doit plus bloquer les autres
       await Promise.all(cals.map(async cal => {
         let pageToken = '';
-        do {
-          const q = `calendars/${encodeURIComponent(cal.id)}/events?singleEvents=true&orderBy=startTime&maxResults=2500` +
-            `&timeMin=${encodeURIComponent(start.toISOString())}&timeMax=${encodeURIComponent(end.toISOString())}` +
-            (pageToken ? `&pageToken=${pageToken}` : '');
-          const data = await gcal(q);
-          (data.items || []).filter(e => e.status !== 'cancelled').forEach(e => all.push(normalize(e, cal)));
-          pageToken = data.nextPageToken || '';
-        } while (pageToken);
+        try {
+          do {
+            const q = `calendars/${encodeURIComponent(cal.id)}/events?singleEvents=true&orderBy=startTime&maxResults=2500` +
+              `&timeMin=${encodeURIComponent(start.toISOString())}&timeMax=${encodeURIComponent(end.toISOString())}` +
+              (pageToken ? `&pageToken=${pageToken}` : '');
+            const data = await gcal(q);
+            (data.items || []).filter(e => e.status !== 'cancelled').forEach(e => all.push(normalize(e, cal)));
+            pageToken = data.nextPageToken || '';
+          } while (pageToken);
+        } catch (err) {
+          if (err.message === 'expired') throw err;
+          calErrors.push(cal.summaryOverride || cal.summary || cal.id);
+        }
       }));
+      loadedCals = cals.map(c => c.summaryOverride || c.summary);
       // Une visite Domodo peut apparaître dans les DEUX calendriers : on garde une seule copie
       const seen = new Set();
       return all.filter(e => { const k = e.id + '|' + e.start.getTime(); if (seen.has(k)) return false; seen.add(k); return true; });
@@ -808,14 +817,16 @@
         events = await fetchRange(need.start, need.end);
         loadedRange = need;
         store('mb_cache', events.map(e => ({ ...e, start: e.start.getTime(), end: e.end.getTime() })));
-        setStatus(`À jour · ${hhmm(new Date())}`);
+        setStatus(calErrors.length ? `⚠️ Calendrier non lu : ${calErrors.join(', ')} — vérifiez le partage` : `À jour · ${hhmm(new Date())} · ${loadedCals.length} calendrier(s)`, calErrors.length > 0); if (calErrors.length) console.warn('Calendriers en erreur', calErrors);
       } catch (err) {
         setStatus(err.message === 'expired' ? 'Session Google expirée — touchez « Reconnecter Google »' : 'Erreur : ' + err.message, true);
       }
       renderAll();
     }
 
+    let lastStatus = ['', false];
     function setStatus(msg, isError) {
+      lastStatus = [msg, !!isError];
       const el = document.getElementById('sync-status');
       if (el) { el.textContent = msg; el.style.color = isError ? 'var(--urgent)' : 'var(--text-secondary)'; }
     }
@@ -887,7 +898,7 @@
 
     function renderJour() {
       const d = selectedDate;
-      let html = `<div class="section-title">${JOURS_LONG[d.getDay()]} ${d.getDate()} ${MOIS[d.getMonth()]} <span id="sync-status" class="sync-status"></span></div>`;
+      let html = `<div class="section-title">${JOURS_LONG[d.getDay()]} ${d.getDate()} ${MOIS[d.getMonth()]} <span id="sync-status" class="sync-status" style="color:${lastStatus[1] ? 'var(--urgent)' : 'var(--text-secondary)'}">${esc(lastStatus[0])}</span></div>`;
       if (!accessToken && !events.length) {
         html += `<div class="empty-state"><p>Connectez votre Google Calendar pour voir vos vrais rendez-vous et vos visites Domodo.</p><button class="cta-btn" onclick="connectGoogle()">Connecter Google</button></div>`;
       } else {
