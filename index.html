@@ -479,9 +479,10 @@
     .tg-jour { height: 62vh; min-height: 320px; margin-top: 6px; border-radius: 8px; border: 1px solid var(--border-light); }
     .tg-jour .tg-ev-title { font-size: 12px; }
     .tg-ev { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: pan-x pan-y; }
-    .tg-ev.drag-src { opacity: .35; }
+    .tg-ev.drag-src, .tg-adchip.drag-src, .event-card.drag-src { opacity: .35; }
+    .tg-adchip, .event-card.ad-drag { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; cursor: pointer; }
     .tg-done { float: right; width: 24px; height: 24px; margin: 0 0 2px 4px; border-radius: 50%; border: 2px solid currentColor; background: rgba(255,255,255,.25); color: inherit; font-weight: 800; font-size: 12px; line-height: 1; cursor: pointer; padding: 0; }
-    .tg-ev.tg-ghost { position: absolute; z-index: 20; border-radius: 4px; border-left: 3px solid; padding: 2px 4px; box-shadow: 0 8px 20px rgba(0,0,0,.3); pointer-events: none; transform: scale(1.03); overflow: hidden; }
+    .tg-ev.tg-ghost { position: fixed; z-index: 400; border-radius: 4px; border-left: 3px solid; padding: 2px 4px; box-shadow: 0 8px 20px rgba(0,0,0,.3); pointer-events: none; transform: scale(1.03); overflow: hidden; }
     .tg-ghost .tg-ghost-time { position: absolute; left: 4px; top: -20px; background: #222; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
     .tg-ev.tg-ghost { overflow: visible; }
     .tg-day.drop-on { background: rgba(212,175,55,.08); }
@@ -659,7 +660,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v13.6</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v13.7</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -692,7 +693,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v13.6';
+    const APP_VERSION = 'v13.7';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -966,7 +967,7 @@
     function eventCard(e) {
       const t = TYPES[typeOf(e)];
       const time = e.allDay ? 'Journée' : `${hhmm(e.start)}<br><span class="event-end">${hhmm(e.end)}</span>`;
-      return `<div class="event-card ${clsOf(e)}" onclick="openEvent('${esc(e.key || '')}')">
+      return `<div class="event-card ${clsOf(e)}${e.allDay ? ' ad-drag' : ''}" data-key="${esc(e.key || '')}" data-d0="${startOfDay(selectedDate).getTime()}" onclick="if(!Drag.justDropped())openEvent('${esc(e.key || '')}')">
         <div class="event-time">${time}</div>
         <div class="event-content"><div>
           <div class="event-text">${esc(e.title)} ${t.icon && !e.title.includes(t.icon) ? t.icon : ''}</div>
@@ -1087,7 +1088,7 @@
         const evs = eventsOn(d);
         const ad = evs.filter(e => e.allDay);
         if (ad.length) hasAllDay = true;
-        allday += `<div class="tg-adcell" style="width:${dayW}px">` + ad.map(e => `<div class="tg-adchip ${clsOf(e)}">${esc(e.title)}</div>`).join('') + `</div>`;
+        allday += `<div class="tg-adcell" data-d0="${d.getTime()}" style="width:${dayW}px">` + ad.map(e => `<div class="tg-adchip ${clsOf(e)}" data-key="${esc(e.key || '')}" data-d0="${d.getTime()}" onclick="if(!Drag.justDropped())openEvent('${esc(e.key || '')}')">${esc(e.title)}</div>`).join('') + `</div>`;
 
         body += tgColumn(d, TIME_COL + i * dayW, dayW, evs, cls, now, today);
       });
@@ -1194,12 +1195,16 @@
     // Doigt : appui long (~0,4 s) puis glisser, relâcher pour déposer. Souris : cliquer-glisser.
     const Drag = (() => {
       let st = null, dropAt = 0;
-      const LONG = 400, SNAP = 15;
-      const canMove = (e) => !e.allDay && (!writableCals.length || writableCals.some(c => c.id === e.calId));
+      const LONG = 400, SNAP = 15, SEL = '.tg-ev, .tg-adchip, #jour .event-card.ad-drag';
+      const canMove = (e) => !writableCals.length || writableCals.some(c => c.id === e.calId);
+      const grab = (t) => t && t.closest && !t.closest('.tg-done, .done-btn') ? t.closest(SEL) : null;
       function start(el, x, y, touch) {
         const e = events.find(k => k.key === el.dataset.key); if (!e) return;
         const r = el.getBoundingClientRect();
-        st = { el, e, body: el.closest('.tg-body'), wrap: el.closest('.tg-wrap'), x0: x, y0: y, x, y, touch, active: false, grabY: y - r.top, h: r.height };
+        const view = el.closest('#semaine') ? '#semaine' : '#jour';
+        st = { el, e, view, timedSrc: el.classList.contains('tg-ev'), srcD0: +(el.dataset.d0 || startOfDay(e.start).getTime()),
+          body: document.querySelector(view + ' .tg-body'), wrap: document.querySelector(view + ' .tg-wrap'), adRow: document.querySelector(view + ' .tg-allday'),
+          x0: x, y0: y, x, y, touch, active: false, grabY: el.classList.contains('tg-ev') ? y - r.top : 8, h: r.height };
         if (touch) st.timer = setTimeout(begin, LONG);
       }
       function begin() {
@@ -1211,33 +1216,57 @@
         const g = document.createElement('div');
         g.className = 'tg-ev tg-ghost ' + clsOf(st.e);
         g.innerHTML = `<div class="tg-ghost-time"></div><div class="tg-ev-title">${esc(st.e.title)}</div>`;
-        g.style.height = st.h + 'px';
-        st.body.appendChild(g); st.g = g;
+        document.body.appendChild(g); st.g = g;
         update();
         st.scroll = setInterval(autoScroll, 30);
       }
+      const inside = (r, x, y) => x >= r.left && x < r.right && y >= r.top && y < r.bottom;
+      function colAt(sel, root) {
+        const cols = [...root.querySelectorAll(sel)];
+        if (!cols.length) return null;
+        let c = cols.find(k => { const r = k.getBoundingClientRect(); return st.x >= r.left && st.x < r.right; });
+        if (!c) c = st.x < cols[0].getBoundingClientRect().left ? cols[0] : cols[cols.length - 1];
+        return c;
+      }
       function target() {
-        const cols = [...st.body.querySelectorAll('.tg-day')];
-        let col = cols.find(c => { const r = c.getBoundingClientRect(); return st.x >= r.left && st.x < r.right; });
-        if (!col) col = st.x < cols[0].getBoundingClientRect().left ? cols[0] : cols[cols.length - 1];
-        const br = st.body.getBoundingClientRect();
+        const e = st.e;
+        // 1) rangée « Journée » (vue Semaine) : un événement de toute la journée change de jour
+        if (!st.timedSrc && st.adRow) {
+          const ar = st.adRow.getBoundingClientRect();
+          if (st.y < ar.bottom + 6) {
+            const cell = colAt('.tg-adcell', st.adRow), cr = cell.getBoundingClientRect();
+            const delta = +cell.dataset.d0 - st.srcD0;
+            const ns = new Date(+e.start + delta), ne = new Date(+e.end + delta);
+            // corrige un éventuel changement d'heure (heure avancée)
+            ns.setHours(0, 0, 0, 0); const days = Math.round((e.end - e.start) / 864e5); ne.setTime(ns.getTime()); ne.setDate(ne.getDate() + days);
+            return { allDay: true, start: ns, end: ne, rect: { left: cr.left + 2, top: cr.top + 2, width: cr.width - 4, height: 18 }, label: ns.toLocaleDateString('fr-CA', { weekday: 'short', day: 'numeric' }) + ' · journée' };
+          }
+        }
+        // 2) grille horaire
+        if (!st.body) return null;
+        const col = colAt('.tg-day', st.body); if (!col) return null;
+        const br = st.body.getBoundingClientRect(), cr = col.getBoundingClientRect();
         let mins = Math.round((st.y - st.grabY - br.top) / HOUR_PX * 60 / SNAP) * SNAP;
         mins = Math.max(0, Math.min(24 * 60 - SNAP, mins));
-        const s = new Date(+col.dataset.d0); s.setHours(Math.floor(mins / 60), mins % 60, 0, 0);
-        return { col, start: s, end: new Date(s.getTime() + (st.e.end - st.e.start)), top: mins / 60 * HOUR_PX };
+        const dur = e.allDay ? 60 * 60000 : (e.end - e.start);
+        const ns = new Date(+col.dataset.d0); ns.setHours(Math.floor(mins / 60), mins % 60, 0, 0);
+        const ne = new Date(ns.getTime() + dur);
+        return { allDay: false, start: ns, end: ne, col, rect: { left: cr.left + 1, top: br.top + mins / 60 * HOUR_PX, width: Math.max(cr.width - 3, 60), height: dur / 3600000 * HOUR_PX - 2 },
+          label: `${ns.toLocaleDateString('fr-CA', { weekday: 'short', day: 'numeric' })} · ${hhmm(ns)} – ${hhmm(ne)}` };
       }
       function update() {
-        const t = target(), br = st.body.getBoundingClientRect(), cr = t.col.getBoundingClientRect();
-        st.g.style.left = (cr.left - br.left + 1) + 'px'; st.g.style.top = t.top + 'px'; st.g.style.width = Math.max(cr.width - 3, 60) + 'px';
-        st.g.firstChild.textContent = `${t.start.toLocaleDateString('fr-CA', { weekday: 'short', day: 'numeric' })} · ${hhmm(t.start)} – ${hhmm(t.end)}`;
-        st.body.querySelectorAll('.tg-day.drop-on').forEach(c => { if (c !== t.col) c.classList.remove('drop-on'); });
-        t.col.classList.add('drop-on');
-        st.t = t;
+        const t = target(); st.t = t;
+        document.querySelectorAll('.drop-on').forEach(c => { if (!t || c !== t.col) c.classList.remove('drop-on'); });
+        if (!t) { st.g.style.display = 'none'; return; }
+        st.g.style.display = '';
+        Object.assign(st.g.style, { left: t.rect.left + 'px', top: t.rect.top + 'px', width: t.rect.width + 'px', height: Math.max(18, t.rect.height) + 'px' });
+        st.g.firstChild.textContent = t.label;
+        if (t.col) t.col.classList.add('drop-on');
       }
       function autoScroll() {
         if (!st || !st.active || !st.wrap) return;
         const r = st.wrap.getBoundingClientRect(), m = 44; let dy = 0, dx = 0;
-        if (st.y < r.top + m) dy = -10; else if (st.y > r.bottom - m) dy = 10;
+        if (st.y > r.top - 10 && st.y < r.top + m && st.wrap.scrollTop > 0) dy = -10; else if (st.y > r.bottom - m && st.y < r.bottom + 60) dy = 10;
         if (st.x < r.left + TIME_COL + 20 && st.wrap.scrollLeft > 0) dx = -10; else if (st.x > r.right - 30) dx = 10;
         if (dx || dy) { st.wrap.scrollTop += dy; st.wrap.scrollLeft += dx; update(); }
       }
@@ -1260,17 +1289,19 @@
         if (!s0.active) return;
         clearInterval(s0.scroll); dropAt = Date.now();
         s0.g.remove(); s0.el.classList.remove('drag-src');
-        s0.body.querySelectorAll('.drop-on').forEach(c => c.classList.remove('drop-on'));
+        document.querySelectorAll('.drop-on').forEach(c => c.classList.remove('drop-on'));
         const t = s0.t;
-        if (drop && t && +t.start !== +s0.e.start) moveEvent(s0.e, t.start, t.end, { keepView: true });
+        if (!drop || !t) return;
+        if (t.allDay === !!s0.e.allDay && +t.start === +s0.e.start) return;
+        moveEvent(s0.e, t.start, t.end, { keepView: true, allDay: t.allDay });
       }
       // doigt
-      document.addEventListener('touchstart', ev => { const el = ev.target.closest && !ev.target.closest('.tg-done') && ev.target.closest('.tg-ev'); if (el && ev.touches.length === 1) start(el, ev.touches[0].clientX, ev.touches[0].clientY, true); }, { passive: true });
+      document.addEventListener('touchstart', ev => { const el = grab(ev.target); if (el && ev.touches.length === 1) start(el, ev.touches[0].clientX, ev.touches[0].clientY, true); }, { passive: true });
       document.addEventListener('touchmove', ev => { if (st) moveTo(ev.touches[0].clientX, ev.touches[0].clientY, ev); }, { passive: false });
       document.addEventListener('touchend', () => end(true));
       document.addEventListener('touchcancel', () => end(false));
       // souris
-      document.addEventListener('mousedown', ev => { if (ev.button !== 0) return; const el = ev.target.closest && !ev.target.closest('.tg-done') && ev.target.closest('.tg-ev'); if (el) start(el, ev.clientX, ev.clientY, false); });
+      document.addEventListener('mousedown', ev => { if (ev.button !== 0) return; const el = grab(ev.target); if (el) start(el, ev.clientX, ev.clientY, false); });
       document.addEventListener('mousemove', ev => { if (st && !st.touch) moveTo(ev.clientX, ev.clientY, ev); });
       document.addEventListener('mouseup', () => { if (st && !st.touch) end(true); });
       document.addEventListener('contextmenu', ev => { if (st || Date.now() - dropAt < 600) ev.preventDefault(); });
@@ -1280,15 +1311,16 @@
 
     // déplacer un rendez-vous (commande vocale) — met à jour Google Agenda puis l'affichage
     async function moveEvent(e, ns, ne, opts = {}) {
-      const os = e.start, oe = e.end;
+      const os = e.start, oe = e.end, oad = e.allDay;
+      if (opts.allDay !== undefined) e.allDay = opts.allDay;
       const body = e.allDay
         ? { start: { date: ymd(ns) }, end: { date: ymd(ne) } }
         : { start: { dateTime: ns.toISOString(), timeZone: 'America/Toronto' }, end: { dateTime: ne.toISOString(), timeZone: 'America/Toronto' } };
       e.start = ns; e.end = ne; renderAll(); saveCache();
       const ok = await patchEvent(e, body).catch(() => false);
-      if (!ok) { e.start = os; e.end = oe; renderAll(); saveCache(); toast(`Impossible de déplacer « ${esc(e.title)} » (Google a refusé).`); return false; }
+      if (!ok) { e.start = os; e.end = oe; e.allDay = oad; renderAll(); saveCache(); toast(`Impossible de déplacer « ${esc(e.title)} » (Google a refusé).`); return false; }
       if (!opts.silent) {
-        window._lastMove = { key: e.key, os, oe };
+        window._lastMove = { key: e.key, os, oe, oad };
         const when = ns.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' }) + (e.allDay ? '' : ' à ' + hhmm(ns));
         toast(`🔁 « ${esc(e.title)} » déplacé au ${esc(when)} <button onclick="undoMove()">Annuler</button>`, 8000);
         if (!e.allDay && !opts.keepView) selectDate(ns);
@@ -1299,7 +1331,7 @@
       const m = window._lastMove; if (!m) return; window._lastMove = null;
       const e = events.find(x => x.key === m.key); if (!e) return;
       document.querySelectorAll('.mb-toast').forEach(x => x.remove());
-      moveEvent(e, m.os, m.oe, { silent: true });
+      moveEvent(e, m.os, m.oe, { silent: true, allDay: m.oad });
     }
     function saveCache() { store('mb_cache', events.map(x => ({ ...x, start: x.start.getTime(), end: x.end.getTime() }))); }
     async function markEventDone(key, opts = {}) {
