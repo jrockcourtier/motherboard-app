@@ -487,6 +487,9 @@
     .tg-ev.tg-ghost { overflow: visible; }
     .flip-hint { position: fixed; width: 34px; z-index: 390; pointer-events: none; display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl; font-size: 12px; font-weight: 800; color: #fff; background: linear-gradient(to left, rgba(10,10,10,.75), rgba(10,10,10,.15)); transition: opacity .1s; }
     .flip-hint.l { background: linear-gradient(to right, rgba(10,10,10,.75), rgba(10,10,10,.15)); }
+    .slide-l { animation: mbSlideL .22s ease-out; } .slide-r { animation: mbSlideR .22s ease-out; }
+    @keyframes mbSlideL { from { transform: translateX(36px); opacity: .35; } to { transform: none; opacity: 1; } }
+    @keyframes mbSlideR { from { transform: translateX(-36px); opacity: .35; } to { transform: none; opacity: 1; } }
     .tg-day.drop-on { background: rgba(212,175,55,.08); }
     .tg-ev.lifting { box-shadow: 0 0 0 3px var(--primary-gold); }
     .auth-link { display: block; text-align: center; text-decoration: none; width: 100%; padding: 14px; margin-top: 12px; position: relative; z-index: 2; }
@@ -662,7 +665,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v13.8</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v13.9</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -695,7 +698,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v13.8';
+    const APP_VERSION = 'v13.9';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -1345,6 +1348,44 @@
       document.addEventListener('contextmenu', ev => { if (st || Date.now() - dropAt < 600) ev.preventDefault(); });
       document.addEventListener('keydown', ev => { if (ev.key === 'Escape') end(false); });
       return { justDropped: () => Date.now() - dropAt < 500 };
+    })();
+
+    // ===== Balayer (swipe) : semaine / jour / mois suivant ou précédent =====
+    const Swipe = (() => {
+      let s = null;
+      document.addEventListener('touchstart', ev => {
+        if (ev.touches.length !== 1 || !ev.target.closest) return;
+        const pane = ev.target.closest('#jour, #semaine, #mois');
+        if (!pane || ev.target.closest('.modal, input, textarea, select')) { s = null; return; }
+        const wrap = ev.target.closest('.tg-wrap');
+        s = { id: pane.id, wrap, x: ev.touches[0].clientX, y: ev.touches[0].clientY, t: Date.now(), sl: wrap ? wrap.scrollLeft : 0 };
+      }, { passive: true });
+      document.addEventListener('touchend', ev => {
+        if (!s) return;
+        const s0 = s; s = null;
+        if (Drag.justDropped()) return;
+        const t = ev.changedTouches[0], dx = t.clientX - s0.x, dy = t.clientY - s0.y;
+        if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5 || Date.now() - s0.t > 800) return;
+        const dir = dx < 0 ? 1 : -1;
+        const w = s0.wrap;
+        if (w && w.scrollWidth > w.clientWidth + 2) {
+          // grille plus large que l'écran (mode 4 jours) : on change de semaine seulement si on était déjà au bout
+          const atEnd = dir > 0 ? s0.sl + w.clientWidth >= w.scrollWidth - 2 : s0.sl <= 0;
+          if (!atEnd) return;
+        }
+        go(s0.id, dir);
+      });
+      function go(id, dir) {
+        if (id === 'semaine') shiftWeek(dir);
+        else if (id === 'jour') selectDate(addDays(selectedDate, dir));
+        else if (id === 'mois') shiftMonth(dir);
+        else return;
+        const el = document.getElementById(id);
+        el.classList.remove('slide-l', 'slide-r'); void el.offsetWidth; el.classList.add(dir > 0 ? 'slide-l' : 'slide-r');
+        const w = el.querySelector('.tg-wrap');
+        if (id === 'semaine' && w && w.scrollWidth > w.clientWidth + 2) w.scrollLeft = dir > 0 ? 0 : w.scrollWidth;
+      }
+      return { go };
     })();
 
     // déplacer un rendez-vous (commande vocale) — met à jour Google Agenda puis l'affichage
