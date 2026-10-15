@@ -127,6 +127,14 @@
     ['vert', /verte?/], ['orange', /orange/], ['bleu', /bleue?|turquoise/], ['jaune', /jaune/], ['rose', /rose/], ['gris', /grise?/]];
   const COLOR_RX = /(?:(?:mets?|met|mettre|place|colore)[- ]?(?:le|la|les|moi)?[- ]?(?:le|la)?\s+)?(?:en|de couleur|couleur|colore en)\s+(mauve pale|violet pale|mauve fonce|violet fonce|mauve|violette?|pourpre|lavande|lilas|rouge|verte?|orange|bleue?|turquoise|jaune|rose|grise?)\b/;
 
+  // « ajoute un rendez-vous … » / « ajoute une tâche … » : tout ce qui suit devient le titre (sans la date ni l'heure)
+  const HEAD_RX = /^(?:(?:ok|bon|alors|euh|oui|peux-tu|pourrais-tu|est-ce que tu peux|tu peux|j'aimerais que tu|j'aimerais|je veux que tu|je veux|je voudrais|il faut|faut|svp|stp)[\s,]+)*(?:(?:m'|me\s+|nous\s+)?(?:ajout\w*|rajout\w*|mets?|mettre|cre[ea]\w*|planifi\w*|inscri\w*|prevoi\w*|prevo\w*|bloqu\w*|book\w*|reserv\w*|program\w*|note)(?:[- ](?:moi|nous|lui))?[\s,]+(?:(?:dans mon agenda|a mon agenda)[\s,]+)?(?:(?:un|une|le|la|mon|ma|des)\s+)?(?:(?:nouveau|nouvel|nouvelle|petit|petite|autre)\s+)?|(?:(?:un|une|nouveau|nouvelle)\s+)?)(rendez-vous|rendez vous|rdv|taches?|to-?do|evenement|rappel)\b[\s,]*(?:(?:(?:pour|de|qui s'appelle|appelee?|intitulee?|titre)\b|d'|:|-)[\s,]*)*/;
+  function parseHead(t) {
+    const m = t.match(HEAD_RX);
+    if (!m) return null;
+    return { len: m[0].length, kind: /tache|to-?do/.test(m[1]) ? 'task' : 'event', rappel: m[1] === 'rappel' };
+  }
+
   function parseCommand(raw, now = new Date()) {
     const original = String(raw || '').normalize('NFC').trim();
     const t = strip(original);
@@ -134,7 +142,9 @@
     const mask = new Array(t.length).fill(false);
     const hide = (i, len) => { for (let k = i; k < i + len && k < mask.length; k++) mask[k] = true; };
     const hideAll = (rx) => { const g = new RegExp(rx.source, rx.flags.includes('g') ? rx.flags : rx.flags + 'g'); let mm; while ((mm = g.exec(t))) { hide(mm.index, mm[0].length); if (!mm[0].length) g.lastIndex++; } };
-    const out = { raw: original, date: null, start: null, end: null, duration: null, title: '', contact: null, type: null, color: null, location: '', allDay: false };
+    const out = { raw: original, date: null, start: null, end: null, duration: null, title: '', contact: null, type: null, color: null, location: '', allDay: false, kind: 'event', explicit: false };
+    const head = parseHead(t);
+    if (head) { out.kind = head.kind; out.explicit = true; hide(0, head.len); }
 
     out.date = parseDate(t, now);
     timeCtx = {
@@ -174,7 +184,7 @@
      /\btoute la journee\b|\bjournee complete\b/, /\b(?:c'est |en )?(?:urgent|urgence)\b/, /\b(?:s'il te plait|s'il vous plait|stp|svp|merci)\b/,
      /\b(?:dans |a )?(?:mon |l')?(?:agenda|calendrier)\b/].forEach(hideAll);
     // début de commande : « ajoute-moi un rendez-vous pour … »
-    if ((m = t.match(/^(?:(?:ok|bon|alors|euh|peux-tu|pourrais-tu|est-ce que tu peux|j'aimerais que tu|je veux)\s+)*(?:(?:ajoute|rajoute|mets?|met|place|cree|creer|planifie|bloque|inscris|prevois|note|booke?|reserve|ajouter|mettre|planifier|bloquer)(?:[- ]?(?:moi|nous|lui))?\s+)?(?:(?:un|une|le|la|mon|ma)\s+)?(?:(?:nouveau|nouvel|nouvelle|petit|petite)\s+)?(?:(?:rendez-vous|rendez vous|rdv|evenement|evenement|bloc|plage|activite)\s*)?(?:(?:pour|de|qui s'appelle|appele)\s+|d'|:\s*)?/))) hide(m.index, m[0].length);
+    if (!head && (m = t.match(/^(?:(?:ok|bon|alors|euh|peux-tu|pourrais-tu|est-ce que tu peux|j'aimerais que tu|je veux)\s+)*(?:(?:ajoute|rajoute|mets?|met|place|cree|creer|planifie|bloque|inscris|prevois|note|booke?|reserve|ajouter|mettre|planifier|bloquer)(?:[- ]?(?:moi|nous|lui))?\s+)?(?:(?:un|une|le|la|mon|ma)\s+)?(?:(?:nouveau|nouvel|nouvelle|petit|petite)\s+)?(?:(?:rendez-vous|rendez vous|rdv|evenement|evenement|bloc|plage|activite)\s*)?(?:(?:pour|de|qui s'appelle|appele)\s+|d'|:\s*)?/))) hide(m.index, m[0].length);
 
     // titre explicite : « titre … », « intitulé … »
     const tm = original.match(/(?:avec (?:le|comme) titre|titre|intitul[ée]e?|appelée?(?=\s)|qui s'appelle|nomm[ée]e?(?=\s))\s*[:«"]?\s*(.+?)(?:[»"]|[.,;]|\s+(?:avec|pour le client|pour la cliente|le\s+\d|demain|aujourd|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|de\s+\d|de midi|à\s+\d|a\s+\d|en (?:rouge|vert|orange|mauve|bleu|jaune|rose|gris))\b|$)/i);
@@ -185,7 +195,7 @@
     if (lm) { out.location = lm[1].trim(); hide(lm.index, lm[0].length); }
 
     out.contact = findContact(original);
-    if (out.contact) {
+    if (out.contact && !out.explicit) {
       const n = strip(out.contact.name), parts = n.split(/\s+/).filter(p => p.length > 1);
       const words = [n, ...parts].map(x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
       for (const w of words) { const rx = new RegExp(`(?:\\b(?:avec|pour|chez|de|a|au|le client|la cliente|monsieur|madame)\\s+)?(?:(?:le client|la cliente|monsieur|madame|m\\.|mme)\\s+)?\\b${w}\\b`); if ((m = t.match(rx))) hide(m.index, m[0].length); }
@@ -202,6 +212,12 @@
       if (rest && !/^(rendez-vous|rendez vous|rdv|un rendez-vous)$/i.test(rest) && rest.length > 1) out.title = rest;
     }
 
+    if (out.explicit && out.title) {
+      // « appelez Danny » (dictée) → « Appeler Danny »
+      out.title = out.title.replace(/^(r?)appel(?:ez|le|les)\b/i, (x, r) => (r ? 'Rappeler' : 'Appeler'));
+    }
+    if (head && head.rappel) out.type = 'suivi';
+
     // catégorie (même règles que l'agenda)
     const rules = [['urgent', /urgent|urgence/], ['suivi', /\bsuivi|rappeler|\brappel\b|relancer|relance|follow/], ['visite', /visite|showing|domodo|centris/],
       ['personnel', /\bperso\b|personnel|yoga|sport|\bgym\b|entrainement|velo|jogging|course a pied|marathon|psycho|medecin|docteur|dentiste|massage|coiffeur|famille|enfant|ecole|garderie|souper|anniversaire|routine|meditation|lecture|menage|epicerie|vacances|conge|mariage|fete|\bamis?\b|blonde|chum/],
@@ -212,12 +228,14 @@
     if (!out.type) for (const [k, rx] of rules) if (rx.test(typeText) && !(k === 'personnel' && biz.test(typeText))) { out.type = k; break; }
     if (!out.type && !out.title) for (const [k, rx] of rules) if (rx.test(t.replace(/^.{0,40}?(?:rendez-vous|rdv)\s*/, ''))) { out.type = k; break; }
     if (!out.type && out.contact && !out.title) out.type = 'reunion';
+    if (out.kind === 'task' && out.type !== 'urgent') out.type = 'tache';
+    if (out.kind === 'task' && out.start == null) out.allDay = true;
     out.type = out.type || 'travail';
 
     if (!out.title) {
-      const lbl = { visite: 'Visite', reunion: 'Rencontre client', travail: 'Travail', suivi: 'Suivi', personnel: 'Personnel', urgent: 'Urgent' }[out.type];
+      const lbl = { tache: 'Tâche', visite: 'Visite', reunion: 'Rencontre client', travail: 'Travail', suivi: 'Suivi', personnel: 'Personnel', urgent: 'Urgent' }[out.type];
       out.title = out.contact ? `${lbl} – ${out.contact.name}` : lbl;
-    } else if (out.contact && !strip(out.title).includes(strip(out.contact.name.split(' ')[0])) && !strip(out.title).includes(strip(out.contact.name.split(' ').slice(-1)[0]))) {
+    } else if (out.contact && !out.explicit && !strip(out.title).includes(strip(out.contact.name.split(' ')[0])) && !strip(out.title).includes(strip(out.contact.name.split(' ').slice(-1)[0]))) {
       out.title = `${out.title.charAt(0).toUpperCase()}${out.title.slice(1)} – ${out.contact.name}`;
     } else out.title = out.title.charAt(0).toUpperCase() + out.title.slice(1);
     return out;
@@ -323,6 +341,8 @@
     // ✅ suivi fait
     if (/(suivi|rappel|appel)\s+(?:est\s+|a ete\s+)?(?:fait|faite|termine|complete|reglee?)|(?:j'ai|c'est)\s+(?:fait|termine|complete|reglee?)\s+(?:mon|le|ma|la)?\s*(?:suivi|rappel|appel)|coche(?:r)?\s+(?:le|mon)?\s*suivi|suivi\s+(?:avec\s+\S+.*?\s+)?(?:fait|termine)/.test(t))
       return { intent: 'done', contact };
+    // ➕ « ajoute un rendez-vous / une tâche … » : toujours une création, le reste = le titre
+    if (HEAD_RX.test(t)) return { intent: 'event', p: parseCommand(raw, now) };
     // 🔁 déplacer un rendez-vous
     if (isMove(t)) { const mv = parseMove(raw, now); if (mv.cands.length || mv.hasTarget) return mv; }
     // 📂 ouvrir une fiche
@@ -386,7 +406,7 @@
       <div id="voice-preview" class="voice-preview"></div>
       <button type="button" class="sheet-save voice-go" onclick="Voice.go()">Préparer le rendez-vous</button>
       <button type="button" class="vc-switch" onclick="VoiceCRM.open(document.getElementById('voice-text').value)">👤 Plutôt une fiche contact / une note d'appel →</button>
-      <div class="voice-ex">Vous pouvez dire :<br>• 📅 « Rendez-vous vendredi à 14 h, business plan »<br>• 👤 « Discussion avec Danny Bouchard, acheteur, il cherche à Rosemont… »<br>• 🔁 « Déplace mon rendez-vous avec Danny Bouchard à 10 h »<br>• 📂 « Ouvre la fiche de Marc Tremblay »<br>• ✅ « Suivi fait avec Lara »<br>• 🗓 « Montre-moi demain » · « Ma semaine »</div>
+      <div class="voice-ex">Vous pouvez dire :<br>• 📅 « Ajoute un rendez-vous appeler Danny Bouchard demain 10 h »<br>• ☐ « Ajoute une tâche m'inscrire à la visite libre 51e Avenue »<br>• 👤 « Discussion avec Danny Bouchard, acheteur, il cherche à Rosemont… »<br>• 🔁 « Déplace mon rendez-vous avec Danny Bouchard à 10 h »<br>• 📂 « Ouvre la fiche de Marc Tremblay »<br>• ✅ « Suivi fait avec Lara »<br>• 🗓 « Montre-moi demain » · « Ma semaine »</div>
     </div>`;
     document.body.appendChild(m);
     const ta = m.querySelector('#voice-text');
@@ -439,10 +459,10 @@
       if (p.ambiguous && pmChoice.pm !== null) setPm(p, pmChoice.pm);
       const date = p.date ? p.date.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' }) : '<i>date ? (aujourd\'hui par défaut)</i>';
       const time = p.allDay ? 'toute la journée' : p.start != null ? `${fmtMin(p.start)}${p.duration ? ' – ' + fmtMin(p.start + p.duration) : ''}` : '<i>heure ?</i>';
-      box.innerHTML = line('Action', '📅 Nouveau rendez-vous') + line('Titre', esc(p.title)) + line('Quand', `${date} · ${time}`) + (p.ambiguous ? `<div class="ampm-row">${ampmChips(p.start, 'Voice.pm')}</div>` : '') +
+      box.innerHTML = line('Action', p.kind === 'task' ? '☐ Nouvelle tâche' : '📅 Nouveau rendez-vous') + line('Titre', esc(p.title)) + line('Quand', `${date} · ${time}`) + (p.ambiguous ? `<div class="ampm-row">${ampmChips(p.start, 'Voice.pm')}</div>` : '') +
         (p.contact ? line('Client', '👤 ' + esc(p.contact.name)) : '') + (p.location ? line('Lieu', '📍 ' + esc(p.location)) : '') +
-        line('Catégorie', `${({ visite: '🏡 Visite', reunion: '💼 Rendez-vous', travail: '💻 Travail', suivi: '📱 Suivi', personnel: '🌿 Personnel', urgent: '‼️ Urgent' })[p.type] || p.type}${p.color ? ' · couleur ' + p.color.replace('lavande', 'mauve pâle') : ''}`);
-      if (go) go.textContent = 'Préparer le rendez-vous';
+        (p.kind === 'task' ? '' : line('Catégorie', `${({ visite: '🏡 Visite', reunion: '💼 Rendez-vous', travail: '💻 Travail', suivi: '📱 Suivi', personnel: '🌿 Personnel', urgent: '‼️ Urgent' })[p.type] || p.type}${p.color ? ' · couleur ' + p.color.replace('lavande', 'mauve pâle') : ''}`));
+      if (go) go.textContent = p.kind === 'task' ? 'Préparer la tâche' : 'Préparer le rendez-vous';
     }
   }
 
@@ -462,10 +482,10 @@
     if (p.allDay) { f.querySelector('[name=allday]').checked = true; toggleAllDay(); }
     if (typeof setFormType === 'function') setFormType(p.type);
     if (typeof setFormColor === 'function') setFormColor(p.color || null);
-    if (typeof setFormDur === 'function') setFormDur(p.duration && p.duration > 0 ? p.duration : 60);
+    if (typeof setFormDur === 'function') setFormDur(p.duration && p.duration > 0 ? p.duration : p.kind === 'task' ? 30 : 60);
     window.pendingContactId = p.contact ? p.contact.id : null;
     const msg = document.getElementById('add-msg');
-    if (msg && !msg.textContent) { msg.style.color = '#2E7D32'; msg.textContent = `🎤 Compris ! Vérifiez puis touchez « Enregistrer ».${p.start == null ? ' (Heure non reconnue : 9 h par défaut.)' : ''}`; }
+    if (msg && !msg.textContent) { msg.style.color = '#2E7D32'; msg.textContent = `🎤 Compris ! Vérifiez puis touchez « Enregistrer ».${p.start == null && !p.allDay ? ' (Heure non reconnue : 9 h par défaut.)' : ''}`; }
     setTimeout(() => { if (msg) msg.style.color = ''; }, 8000);
   }
 
