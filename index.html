@@ -476,6 +476,16 @@
     .f-check { flex-direction: row !important; align-items: center; gap: 6px !important; text-transform: none !important; font-size: 14px !important; padding-bottom: 10px; color: var(--text-primary) !important; font-weight: 500 !important; }
     .f-msg { margin-top: 12px; font-size: 13px; color: var(--urgent); }
     .tg-day { cursor: copy; }
+    .tg-jour { height: 62vh; min-height: 320px; margin-top: 6px; border-radius: 8px; border: 1px solid var(--border-light); }
+    .tg-jour .tg-ev-title { font-size: 12px; }
+    .tg-ev { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: pan-x pan-y; }
+    .tg-ev.drag-src { opacity: .35; }
+    .tg-done { float: right; width: 24px; height: 24px; margin: 0 0 2px 4px; border-radius: 50%; border: 2px solid currentColor; background: rgba(255,255,255,.25); color: inherit; font-weight: 800; font-size: 12px; line-height: 1; cursor: pointer; padding: 0; }
+    .tg-ev.tg-ghost { position: absolute; z-index: 20; border-radius: 4px; border-left: 3px solid; padding: 2px 4px; box-shadow: 0 8px 20px rgba(0,0,0,.3); pointer-events: none; transform: scale(1.03); overflow: hidden; }
+    .tg-ghost .tg-ghost-time { position: absolute; left: 4px; top: -20px; background: #222; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
+    .tg-ev.tg-ghost { overflow: visible; }
+    .tg-day.drop-on { background: rgba(212,175,55,.08); }
+    .tg-ev.lifting { box-shadow: 0 0 0 3px var(--primary-gold); }
     .auth-link { display: block; text-align: center; text-decoration: none; width: 100%; padding: 14px; margin-top: 12px; position: relative; z-index: 2; }
     /* ===== v6 : grille horaire semaine ===== */
     .tg-toggle { display: flex; justify-content: flex-end; gap: 4px; padding: 6px 10px; background: var(--light-bg); }
@@ -649,7 +659,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v13.5</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v13.6</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -682,7 +692,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v13.5';
+    const APP_VERSION = 'v13.6';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -965,6 +975,7 @@
         </div></div>${typeOf(e) === 'suivi' || typeOf(e) === 'tache' ? `<button class="done-btn" title="Fait" onclick="event.stopPropagation();markEventDone('${esc(e.key || '')}')">✓</button>` : ''}</div>`;
     }
 
+    let jourScrolledFor = null;
     function renderJour() {
       const d = selectedDate;
       let html = `<div class="section-title">${JOURS_LONG[d.getDay()]} ${d.getDate()} ${MOIS[d.getMonth()]} <span id="sync-status" class="sync-status" style="color:${lastStatus[1] ? 'var(--urgent)' : 'var(--text-secondary)'}">${esc(lastStatus[0])}</span></div>`;
@@ -977,9 +988,29 @@
           const late = events.filter(x => !x.done && typeOf(x) === 'tache' && x.end <= today0).sort((a, b) => a.start - b.start);
           if (late.length) html += `<div class="overdue-tasks"><div class="section-title">☐ Tâches en retard (${late.length})</div>${late.map(eventCard).join('')}</div><div class="section-title">Aujourd'hui</div>`;
         }
-        html += evs.length ? evs.map(eventCard).join('') : '<p class="empty-day">Aucun événement</p>';
+        const ad = evs.filter(e => e.allDay), timed = evs.filter(e => !e.allDay);
+        html += ad.map(eventCard).join('');
+        if (!evs.length) html += '<p class="empty-day">Aucun événement — touchez une heure pour en ajouter un</p>';
+        const wrapW = Math.max(300, (document.querySelector('.tabs-content') || document.body).clientWidth);
+        const dayW = wrapW - TIME_COL;
+        let body = `<div class="tg-body" style="width:${wrapW}px;height:${24 * HOUR_PX}px"><div class="tg-hours">`;
+        for (let hr = 1; hr < 24; hr++) body += `<div class="tg-hour" style="top:${hr * HOUR_PX}px">${String(hr).padStart(2, '0')}:00</div>`;
+        body += `</div>` + tgColumn(d, TIME_COL, dayW, timed, ' selected', new Date(), startOfDay(new Date())) + `</div>`;
+        html += `<div class="tg-wrap tg-jour">${body}</div>`;
       }
-      document.getElementById('jour').innerHTML = html;
+      const jr = document.getElementById('jour');
+      const prevScroll = jr.querySelector('.tg-jour') ? jr.querySelector('.tg-jour').scrollTop : null;
+      jr.innerHTML = html;
+      const w = jr.querySelector('.tg-jour');
+      if (w) {
+        const sameKey = jourScrolledFor === startOfDay(d).getTime();
+        if (sameKey && prevScroll !== null) w.scrollTop = prevScroll;
+        else {
+          const now = new Date(), first = eventsOn(d).find(e => !e.allDay);
+          const hr = sameDay(d, now) ? Math.max(0, now.getHours() - 1) : first ? Math.max(0, first.start.getHours() - 1) : 7;
+          w.scrollTop = hr * HOUR_PX; jourScrolledFor = startOfDay(d).getTime();
+        }
+      }
     }
 
     function updateStats() {
@@ -1017,6 +1048,24 @@
       return out;
     }
 
+    // une colonne de la grille horaire (vue Semaine et vue Jour)
+    function tgColumn(d, left, dayW, evs, cls, now, today) {
+      const d0 = d.getTime(), d1 = addDays(d, 1).getTime();
+      let body = `<div class="tg-day${cls}" data-d0="${d0}" style="left:${left}px;width:${dayW}px" onclick="slotClick(event, ${d0})">`;
+      layoutDay(evs).forEach(e => {
+        const s = Math.max(+e.start, d0), en = Math.min(+e.end, d1);
+        const top = (s - d0) / 3600000 * HOUR_PX;
+        const h = Math.max(18, (en - s) / 3600000 * HOUR_PX - 2);
+        const w = 100 / e._ncol;
+        const t = TYPES[typeOf(e)];
+        body += `<div class="tg-ev ${clsOf(e)}" data-key="${esc(e.key || '')}" style="top:${top}px;height:${h}px;left:calc(${w * e._col}% + 1px);width:calc(${w}% - 3px)"` +
+          ` onclick="event.stopPropagation();if(!Drag.justDropped())openEvent('${esc(e.key || '')}')"` + ` title="${esc(e.title)} · ${hhmm(e.start)}–${hhmm(e.end)}">` +
+          (['suivi', 'tache'].includes(typeOf(e)) && dayW >= 60 ? `<button class="tg-done" title="Fait" onclick="event.stopPropagation();markEventDone('${esc(e.key || '')}')">✓</button>` : '') + `<div class="tg-ev-title">${esc(e.title)} ${t.icon}</div>` + (h >= 34 && dayW >= 70 ? `<div class="tg-ev-time">${hhmm(e.start)} – ${hhmm(e.end)}</div>` : '') + `</div>`;
+      });
+      if (sameDay(d, today)) body += `<div class="tg-now" style="top:${(now - d0) / 3600000 * HOUR_PX}px"></div>`;
+      return body + `</div>`;
+    }
+
     function renderSemaine() {
       const ws = startOfWeek(selectedDate), now = new Date(), today = startOfDay(now);
       const wrapW = Math.max(320, (document.querySelector('.tabs-content') || document.body).clientWidth);
@@ -1040,20 +1089,7 @@
         if (ad.length) hasAllDay = true;
         allday += `<div class="tg-adcell" style="width:${dayW}px">` + ad.map(e => `<div class="tg-adchip ${clsOf(e)}">${esc(e.title)}</div>`).join('') + `</div>`;
 
-        const d0 = d.getTime(), d1 = addDays(d, 1).getTime();
-        body += `<div class="tg-day${cls}" style="left:${TIME_COL + i * dayW}px;width:${dayW}px" onclick="slotClick(event, ${d0})">`;
-        layoutDay(evs).forEach(e => {
-          const s = Math.max(+e.start, d0), en = Math.min(+e.end, d1);
-          const top = (s - d0) / 3600000 * HOUR_PX;
-          const h = Math.max(18, (en - s) / 3600000 * HOUR_PX - 2);
-          const w = 100 / e._ncol;
-          const t = TYPES[typeOf(e)];
-          body += `<div class="tg-ev ${clsOf(e)}" style="top:${top}px;height:${h}px;left:calc(${w * e._col}% + 1px);width:calc(${w}% - 3px)"` +
-            ` onclick="event.stopPropagation();openEvent('${esc(e.key || '')}')"` + ` title="${esc(e.title)} · ${hhmm(e.start)}–${hhmm(e.end)}">` +
-            `<div class="tg-ev-title">${esc(e.title)} ${t.icon}</div>` + (h >= 34 && dayW >= 70 ? `<div class="tg-ev-time">${hhmm(e.start)} – ${hhmm(e.end)}</div>` : '') + `</div>`;
-        });
-        if (sameDay(d, today)) body += `<div class="tg-now" style="top:${(now - d0) / 3600000 * HOUR_PX}px"></div>`;
-        body += `</div>`;
+        body += tgColumn(d, TIME_COL + i * dayW, dayW, evs, cls, now, today);
       });
       head += `</div>`; allday += `</div>`; body += `</div>`;
 
@@ -1062,11 +1098,15 @@
       const total = Object.values(ev).reduce((a, b) => a + b, 0);
       const stats = `<div class="week-stats"><b>${total}</b> événements cette semaine${Object.entries(ev).map(([t, n]) => ` · ${n} ${TYPES[t].label.toLowerCase()}`).join('')}</div>`;
 
+      const oldWrap = document.querySelector('#semaine .tg-wrap');
+      const keep = oldWrap && typeof Drag !== 'undefined' && Drag.justDropped() ? { t: oldWrap.scrollTop, l: oldWrap.scrollLeft } : null;
       document.getElementById('semaine').innerHTML =
         (wrapW < 900 ? `<div class="tg-toggle"><button class="${nDays === 7 ? 'on' : ''}" onclick="setWeekDays(7)">7 j</button><button class="${nDays === 4 ? 'on' : ''}" onclick="setWeekDays(4)">4 j</button></div>` : '') +
         `<div class="tg-wrap"><div class="tg-sticky">${head}${hasAllDay ? allday : ''}</div>${body}</div>${stats}`;
       sizeWeek();
-      scrollWeekToSelected(true);
+      const nw = document.querySelector('#semaine .tg-wrap');
+      if (keep && nw && nw.offsetParent) { nw.scrollTop = keep.t; nw.scrollLeft = keep.l; }
+      else scrollWeekToSelected(true);
     }
 
     function setWeekDays(n) { store('mb_wdays', n); renderSemaine(); }
@@ -1149,6 +1189,95 @@
       if (r.status === 401 && serverAuth && await getServerToken()) r = await send();
       return r.ok;
     }
+
+    // ===== Glisser-déposer un rendez-vous (vue Jour et vue Semaine), comme Google Agenda =====
+    // Doigt : appui long (~0,4 s) puis glisser, relâcher pour déposer. Souris : cliquer-glisser.
+    const Drag = (() => {
+      let st = null, dropAt = 0;
+      const LONG = 400, SNAP = 15;
+      const canMove = (e) => !e.allDay && (!writableCals.length || writableCals.some(c => c.id === e.calId));
+      function start(el, x, y, touch) {
+        const e = events.find(k => k.key === el.dataset.key); if (!e) return;
+        const r = el.getBoundingClientRect();
+        st = { el, e, body: el.closest('.tg-body'), wrap: el.closest('.tg-wrap'), x0: x, y0: y, x, y, touch, active: false, grabY: y - r.top, h: r.height };
+        if (touch) st.timer = setTimeout(begin, LONG);
+      }
+      function begin() {
+        if (!st || st.active) return;
+        if (!canMove(st.e)) { toast(`« ${esc(st.e.title)} » est dans un calendrier en lecture seule (${esc(st.e.cal || '')}) : déplacez-le à sa source.`); st = null; dropAt = Date.now(); return; }
+        st.active = true;
+        if (navigator.vibrate) try { navigator.vibrate(15); } catch (er) {}
+        st.el.classList.add('drag-src');
+        const g = document.createElement('div');
+        g.className = 'tg-ev tg-ghost ' + clsOf(st.e);
+        g.innerHTML = `<div class="tg-ghost-time"></div><div class="tg-ev-title">${esc(st.e.title)}</div>`;
+        g.style.height = st.h + 'px';
+        st.body.appendChild(g); st.g = g;
+        update();
+        st.scroll = setInterval(autoScroll, 30);
+      }
+      function target() {
+        const cols = [...st.body.querySelectorAll('.tg-day')];
+        let col = cols.find(c => { const r = c.getBoundingClientRect(); return st.x >= r.left && st.x < r.right; });
+        if (!col) col = st.x < cols[0].getBoundingClientRect().left ? cols[0] : cols[cols.length - 1];
+        const br = st.body.getBoundingClientRect();
+        let mins = Math.round((st.y - st.grabY - br.top) / HOUR_PX * 60 / SNAP) * SNAP;
+        mins = Math.max(0, Math.min(24 * 60 - SNAP, mins));
+        const s = new Date(+col.dataset.d0); s.setHours(Math.floor(mins / 60), mins % 60, 0, 0);
+        return { col, start: s, end: new Date(s.getTime() + (st.e.end - st.e.start)), top: mins / 60 * HOUR_PX };
+      }
+      function update() {
+        const t = target(), br = st.body.getBoundingClientRect(), cr = t.col.getBoundingClientRect();
+        st.g.style.left = (cr.left - br.left + 1) + 'px'; st.g.style.top = t.top + 'px'; st.g.style.width = Math.max(cr.width - 3, 60) + 'px';
+        st.g.firstChild.textContent = `${t.start.toLocaleDateString('fr-CA', { weekday: 'short', day: 'numeric' })} · ${hhmm(t.start)} – ${hhmm(t.end)}`;
+        st.body.querySelectorAll('.tg-day.drop-on').forEach(c => { if (c !== t.col) c.classList.remove('drop-on'); });
+        t.col.classList.add('drop-on');
+        st.t = t;
+      }
+      function autoScroll() {
+        if (!st || !st.active || !st.wrap) return;
+        const r = st.wrap.getBoundingClientRect(), m = 44; let dy = 0, dx = 0;
+        if (st.y < r.top + m) dy = -10; else if (st.y > r.bottom - m) dy = 10;
+        if (st.x < r.left + TIME_COL + 20 && st.wrap.scrollLeft > 0) dx = -10; else if (st.x > r.right - 30) dx = 10;
+        if (dx || dy) { st.wrap.scrollTop += dy; st.wrap.scrollLeft += dx; update(); }
+      }
+      function moveTo(x, y, ev) {
+        if (!st) return;
+        st.x = x; st.y = y;
+        if (!st.active) {
+          const d = Math.hypot(x - st.x0, y - st.y0);
+          if (st.touch) { if (d > 10) { clearTimeout(st.timer); st = null; } return; } // c'était un défilement
+          if (d > 6) begin(); else return;
+          if (!st) return;
+        }
+        if (ev && ev.cancelable) ev.preventDefault();
+        update();
+      }
+      function end(drop) {
+        if (!st) return;
+        clearTimeout(st.timer);
+        const s0 = st; st = null;
+        if (!s0.active) return;
+        clearInterval(s0.scroll); dropAt = Date.now();
+        s0.g.remove(); s0.el.classList.remove('drag-src');
+        s0.body.querySelectorAll('.drop-on').forEach(c => c.classList.remove('drop-on'));
+        const t = s0.t;
+        if (drop && t && +t.start !== +s0.e.start) moveEvent(s0.e, t.start, t.end, { keepView: true });
+      }
+      // doigt
+      document.addEventListener('touchstart', ev => { const el = ev.target.closest && !ev.target.closest('.tg-done') && ev.target.closest('.tg-ev'); if (el && ev.touches.length === 1) start(el, ev.touches[0].clientX, ev.touches[0].clientY, true); }, { passive: true });
+      document.addEventListener('touchmove', ev => { if (st) moveTo(ev.touches[0].clientX, ev.touches[0].clientY, ev); }, { passive: false });
+      document.addEventListener('touchend', () => end(true));
+      document.addEventListener('touchcancel', () => end(false));
+      // souris
+      document.addEventListener('mousedown', ev => { if (ev.button !== 0) return; const el = ev.target.closest && !ev.target.closest('.tg-done') && ev.target.closest('.tg-ev'); if (el) start(el, ev.clientX, ev.clientY, false); });
+      document.addEventListener('mousemove', ev => { if (st && !st.touch) moveTo(ev.clientX, ev.clientY, ev); });
+      document.addEventListener('mouseup', () => { if (st && !st.touch) end(true); });
+      document.addEventListener('contextmenu', ev => { if (st || Date.now() - dropAt < 600) ev.preventDefault(); });
+      document.addEventListener('keydown', ev => { if (ev.key === 'Escape') end(false); });
+      return { justDropped: () => Date.now() - dropAt < 500 };
+    })();
+
     // déplacer un rendez-vous (commande vocale) — met à jour Google Agenda puis l'affichage
     async function moveEvent(e, ns, ne, opts = {}) {
       const os = e.start, oe = e.end;
@@ -1162,7 +1291,7 @@
         window._lastMove = { key: e.key, os, oe };
         const when = ns.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' }) + (e.allDay ? '' : ' à ' + hhmm(ns));
         toast(`🔁 « ${esc(e.title)} » déplacé au ${esc(when)} <button onclick="undoMove()">Annuler</button>`, 8000);
-        if (!e.allDay) selectDate(ns);
+        if (!e.allDay && !opts.keepView) selectDate(ns);
       }
       return true;
     }
@@ -1258,6 +1387,7 @@
     function ymd(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 
     function slotClick(ev, d0) {
+      if (typeof Drag !== 'undefined' && Drag.justDropped()) return;
       const y = ev.offsetY;
       const mins = Math.max(0, Math.min(23 * 60 + 30, Math.floor(y / HOUR_PX * 2) * 30));
       openAddForm(new Date(d0 + mins * 60000));
