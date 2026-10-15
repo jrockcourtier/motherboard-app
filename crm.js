@@ -75,6 +75,12 @@
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); });
   }
   function initials(n) { return (n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join(''); }
+  function safeUrl(u) { u = String(u || '').trim(); return /^(https?:|onenote:)/i.test(u) ? u : ''; }
+  function linkBtns(c, cls) {
+    const on = safeUrl(c.oneNote), dp = safeUrl(c.dpUrl);
+    if (!on && !dp) return '';
+    return `<div class="${cls}">${on ? `<a href="${e(on)}" target="_blank" rel="noopener">📓 Page OneNote</a>` : ''}${dp ? `<a href="${e(dp)}" target="_blank" rel="noopener">🏠 Fiche DuProprio</a>` : ''}</div>`;
+  }
   function telHref(p) { return 'tel:' + String(p || '').replace(/[^\d+]/g, ''); }
   function list() { return Object.values(contacts).filter(c => !c.deleted); }
   function isDue(c, day) { return c.nextFollowUp && c.nextFollowUp <= (day || todayStr()); }
@@ -233,7 +239,7 @@
       ['Budget', c.budget ? e(c.budget) : ''],
       ['Recherche', c.propertyType ? e(c.propertyType) : ''],
       ['Quartiers', c.neighborhoods ? e(c.neighborhoods) : ''],
-      ['Prix espéré', c.price ? e(c.price) : ''],
+      [c.type === 'proprio' ? 'Prix demandé' : 'Prix espéré', c.price ? e(c.price) : ''],
       ['Commission', c.commission ? e(c.commission) + (String(c.commission).includes('%') ? '' : ' %') : ''],
       ['Source', c.source ? e(c.source) : ''],
       ['Premier contact', c.firstContact ? fmtDate(c.firstContact) : ''],
@@ -257,6 +263,7 @@
         <a class="${maps ? '' : 'off'}" href="${maps || '#'}" target="_blank" rel="noopener">🗺<span>Itinéraire</span></a>
         <a href="#" onclick="event.preventDefault();CRM.meeting()">📅<span>Rendez-vous</span></a>
       </div>
+      ${linkBtns(c, 'crm-links')}
       ${callPanel(c)}
       <div class="f-label">Étape du dossier</div>
       <div class="chips crm-stages">${t.stages.map(s => `<button class="${c.stage === s ? 'on' : ''}" onclick="CRM.stage(${JSON.stringify(s).replace(/"/g, '&quot;')})">${e(s)}</button>`).join('')}</div>
@@ -295,7 +302,8 @@
         ${fld('email', 'Courriel', 'nom@exemple.com', 'email', 'inputmode="email"')}
         ${fld('address', c.type === 'acheteur' ? 'Adresse actuelle' : 'Adresse de la propriété', 'Optionnel')}
         ${c.type === 'acheteur' ? fld('budget', 'Budget', 'ex. 450 000 $ – 550 000 $') + fld('neighborhoods', 'Quartiers recherchés', 'ex. Plateau, Rosemont, Villeray') : ''}
-        ${c.type === 'vendeur' || c.type === 'proprio' ? fld('price', 'Prix espéré / minimum', 'ex. 625 000 $') : ''}
+        ${c.type === 'vendeur' ? fld('price', 'Prix espéré / minimum', 'ex. 625 000 $') : ''}
+        ${c.type === 'proprio' ? fld('price', 'Prix demandé (DuProprio)', 'ex. 625 000 $') + fld('dpUrl', 'Lien DuProprio', 'https://duproprio.com/…', 'url', 'inputmode="url"') + fld('oneNote', 'Lien de la page OneNote', 'OneNote → clic droit sur la page → Copier le lien', 'url', 'inputmode="url"') : ''}
         ${fld('commission', 'Commission (%)', 'ex. 4', 'text', 'inputmode="decimal"')}
         ${fld('source', 'Source', 'ex. Centris, référence, appel proprio, Instagram')}
         <div class="f-row"><label>Premier contact<input type="date" name="firstContact" value="${e(c.firstContact || '')}"></label><label>Prochain suivi<input type="date" name="nextFollowUp" value="${e(c.nextFollowUp || '')}"></label></div>
@@ -306,7 +314,7 @@
   }
   function collectForm() {
     const f = $('#crm-form'); if (!f) return;
-    ['name', 'stage', 'phone', 'email', 'address', 'budget', 'neighborhoods', 'price', 'commission', 'source', 'firstContact', 'nextFollowUp', 'firstNote'].forEach(k => {
+    ['name', 'stage', 'phone', 'email', 'address', 'budget', 'neighborhoods', 'price', 'dpUrl', 'oneNote', 'commission', 'source', 'firstContact', 'nextFollowUp', 'firstNote'].forEach(k => {
       if (f[k]) editing[k] = f[k].value.trim();
     });
   }
@@ -479,6 +487,7 @@
           ${c.address ? `<div class="dial-meta">📍 ${e(c.address)}</div>` : ''}
           ${c.budget || c.price ? `<div class="dial-meta">💰 ${e(c.budget || c.price)}</div>` : ''}
           ${lc ? `<div class="dial-meta">Dernier appel : ${OUT[lc.outcome].i} ${OUT[lc.outcome].l} ${ago(lc.at)} · ${(c.calls || []).length} tentative(s)</div>` : '<div class="dial-meta">Jamais appelé</div>'}
+          ${linkBtns(c, 'crm-links dial-links')}
           ${lastNote ? `<div class="dial-note">📝 ${e(lastNote.text).slice(0, 220)}</div>` : ''}
           ${!c.dncChecked ? `<div class="dial-warn">LNNTE non vérifiée · <a href="https://lnnte-dncl.gc.ca/" target="_blank" rel="noopener">vérifier</a> · <button onclick="Dialer.lnnte()">✓ Vérifiée</button></div>` : ''}
         </div>
@@ -493,6 +502,8 @@
       const id = this.q[this.i];
       const o = CRM.logCall(outcome, { id, noteId: 'dial-note', silent: true });
       this.done[outcome] = (this.done[outcome] || 0) + 1;
+      this.last = { id, outcome, i: this.i };
+      if (outcome !== 'parle' && outcome !== 'rdv' && typeof toast === 'function') toast(`${OUT[outcome].i} ${OUT[outcome].l} — ${e(contacts[id].name)} <button onclick="Dialer.undo()">Annuler</button>`);
       if (outcome === 'parle') {
         document.getElementById('dial-after').innerHTML = `<div class="crm-after-q">Quand le rappeler ?</div><div class="chips">${[[1, 'Demain'], [7, '1 sem'], [14, '2 sem'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Dialer.follow(${d})">${l}</button>`).join('')}<button onclick="Dialer.follow(0, true)">Aucun</button></div><label class="crm-cal"><input type="checkbox" id="dial-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
         return;
@@ -515,6 +526,11 @@
       setTimeout(back, 800);
     },
     next() { this.i++; this.render(); },
+    undo() {
+      const l = this.last; if (!l) return;
+      CRM.undoCall(l.id); this.done[l.outcome] = Math.max(0, (this.done[l.outcome] || 1) - 1);
+      this.last = null; this.i = l.i; document.getElementById('dial-modal').classList.add('open'); this.render();
+    },
     open() { const id = this.q[this.i]; document.getElementById('dial-modal').classList.remove('open'); CRM.open(id); },
     stop() { document.getElementById('dial-modal').classList.remove('open'); renderList(); },
     summary() {

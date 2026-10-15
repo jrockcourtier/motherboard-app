@@ -131,7 +131,7 @@
     if (!p.phone && !ex.phone) q.push({ key: 'phone', ask: 'Quel est son numéro de téléphone ?', ph: '514 555-1234', inputmode: 'tel' });
     if ((p.type === 'acheteur') && !p.budget && !ex.budget) q.push({ key: 'budget', ask: 'Quel est son budget ?', ph: 'ex. 450 000 $' });
     if ((p.type === 'acheteur') && !p.neighborhoods && !ex.neighborhoods) q.push({ key: 'neighborhoods', ask: 'Quels secteurs l\'intéressent ?', ph: 'ex. Rosemont, Villeray' });
-    if ((p.type === 'vendeur' || p.type === 'proprio') && !p.price && !ex.price) q.push({ key: 'price', ask: 'Quel prix espère-t-il ?', ph: 'ex. 625 000 $' });
+    if ((p.type === 'vendeur' || p.type === 'proprio') && !p.price && !ex.price) q.push({ key: 'price', ask: p.type === 'proprio' ? 'Quel est son prix demandé ?' : 'Quel prix espère-t-il ?', ph: 'ex. 625 000 $' });
     if (!p.followUp || !p.followUp.date) q.push({ key: 'followUp', ask: p.followUp ? 'Quand voulez-vous le rappeler ?' : 'Voulez-vous un rappel ? Quand ?', ph: 'ex. mardi prochain à 10 h, dans 2 semaines…', chips: [['+1', 'Demain'], ['+7', 'Dans 1 semaine'], ['+14', 'Dans 2 semaines'], ['+30', 'Dans 1 mois']] });
     return q;
   }
