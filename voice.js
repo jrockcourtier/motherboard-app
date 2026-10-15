@@ -124,8 +124,8 @@
 
   // ---------- analyse complète ----------
   const COLOR_WORDS = [['lavande', /mauve pale|violet pale|lavande|lilas/], ['mauve', /mauve(?: fonce)?|violet(?:te)?(?: fonce)?|pourpre/], ['rouge', /rouge/],
-    ['vert', /verte?/], ['orange', /orange/], ['bleu', /bleue?|turquoise/], ['jaune', /jaune/], ['rose', /rose/], ['gris', /grise?/]];
-  const COLOR_RX = /(?:(?:mets?|met|mettre|place|colore)[- ]?(?:le|la|les|moi)?[- ]?(?:le|la)?\s+)?(?:en|de couleur|couleur|colore en)\s+(mauve pale|violet pale|mauve fonce|violet fonce|mauve|violette?|pourpre|lavande|lilas|rouge|verte?|orange|bleue?|turquoise|jaune|rose|grise?)\b/;
+    ['sauge', /vert (?:sauge|pale)|sauge/], ['vert', /verte?/], ['orange', /orange/], ['paon', /turquoise|bleu pale|bleu ciel/], ['bleu', /bleue?/], ['jaune', /jaune/], ['rose', /rose/], ['gris', /grise?/]];
+  const COLOR_RX = /(?:(?:mets?|met|mettre|place|colore)[- ]?(?:le|la|les|moi)?[- ]?(?:le|la)?\s+)?(?:en|de couleur|couleur|colore en)\s+(mauve pale|violet pale|mauve fonce|violet fonce|mauve|violette?|pourpre|lavande|lilas|rouge|vert (?:sauge|pale)|sauge|verte?|orange|bleu (?:pale|ciel)|bleue?|turquoise|jaune|rose|grise?)\b/;
 
   // « ajoute un rendez-vous … » / « ajoute une tâche … » : tout ce qui suit devient le titre (sans la date ni l'heure)
   const HEAD_RX = /^(?:(?:ok|bon|alors|euh|oui|peux-tu|pourrais-tu|est-ce que tu peux|tu peux|j'aimerais que tu|j'aimerais|je veux que tu|je veux|je voudrais|il faut|faut|svp|stp)[\s,]+)*(?:(?:m'|me\s+|nous\s+)?(?:ajout\w*|rajout\w*|mets?|mettre|cre[ea]\w*|planifi\w*|inscri\w*|prevoi\w*|prevo\w*|bloqu\w*|book\w*|reserv\w*|program\w*|note)(?:[- ](?:moi|nous|lui))?[\s,]+(?:(?:dans mon agenda|a mon agenda)[\s,]+)?(?:(?:un|une|le|la|mon|ma|des)\s+)?(?:(?:nouveau|nouvel|nouvelle|petit|petite|autre)\s+)?|(?:(?:un|une|nouveau|nouvelle)\s+)?)(rendez-vous|rendez vous|rdv|taches?|to-?do|evenement|rappel)\b[\s,]*(?:(?:(?:pour|de|qui s'appelle|appelee?|intitulee?|titre)\b|d'|:|-)[\s,]*)*/;
@@ -461,7 +461,7 @@
       const time = p.allDay ? 'toute la journée' : p.start != null ? `${fmtMin(p.start)}${p.duration ? ' – ' + fmtMin(p.start + p.duration) : ''}` : '<i>heure ?</i>';
       box.innerHTML = line('Action', p.kind === 'task' ? '☐ Nouvelle tâche' : '📅 Nouveau rendez-vous') + line('Titre', esc(p.title)) + line('Quand', `${date} · ${time}`) + (p.ambiguous ? `<div class="ampm-row">${ampmChips(p.start, 'Voice.pm')}</div>` : '') +
         (p.contact ? line('Client', '👤 ' + esc(p.contact.name)) : '') + (p.location ? line('Lieu', '📍 ' + esc(p.location)) : '') +
-        (p.kind === 'task' ? '' : line('Catégorie', `${({ visite: '🏡 Visite', reunion: '💼 Rendez-vous', travail: '💻 Travail', suivi: '📱 Suivi', personnel: '🌿 Personnel', urgent: '‼️ Urgent' })[p.type] || p.type}${p.color ? ' · couleur ' + p.color.replace('lavande', 'mauve pâle') : ''}`));
+        (p.kind === 'task' ? '' : line('Catégorie', `${({ visite: '🏡 Visite', reunion: '💼 Rendez-vous', travail: '💻 Travail', suivi: '📱 Suivi', personnel: '🌿 Personnel', urgent: '‼️ Urgent' })[p.type] || p.type}${p.color ? ' · couleur ' + p.color.replace('lavande', 'mauve pâle').replace('paon', 'turquoise').replace('sauge', 'vert sauge') : ''}`));
       if (go) go.textContent = p.kind === 'task' ? 'Préparer la tâche' : 'Préparer le rendez-vous';
     }
   }
