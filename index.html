@@ -485,6 +485,8 @@
     .tg-ev.tg-ghost { position: fixed; z-index: 400; border-radius: 4px; border-left: 3px solid; padding: 2px 4px; box-shadow: 0 8px 20px rgba(0,0,0,.3); pointer-events: none; transform: scale(1.03); overflow: hidden; }
     .tg-ghost .tg-ghost-time { position: absolute; left: 4px; top: -20px; background: #222; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
     .tg-ev.tg-ghost { overflow: visible; }
+    .flip-hint { position: fixed; width: 34px; z-index: 390; pointer-events: none; display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl; font-size: 12px; font-weight: 800; color: #fff; background: linear-gradient(to left, rgba(10,10,10,.75), rgba(10,10,10,.15)); transition: opacity .1s; }
+    .flip-hint.l { background: linear-gradient(to right, rgba(10,10,10,.75), rgba(10,10,10,.15)); }
     .tg-day.drop-on { background: rgba(212,175,55,.08); }
     .tg-ev.lifting { box-shadow: 0 0 0 3px var(--primary-gold); }
     .auth-link { display: block; text-align: center; text-decoration: none; width: 100%; padding: 14px; margin-top: 12px; position: relative; z-index: 2; }
@@ -660,7 +662,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v13.7</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v13.8</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -693,7 +695,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v13.7';
+    const APP_VERSION = 'v13.8';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -1198,12 +1200,13 @@
       const LONG = 400, SNAP = 15, SEL = '.tg-ev, .tg-adchip, #jour .event-card.ad-drag';
       const canMove = (e) => !writableCals.length || writableCals.some(c => c.id === e.calId);
       const grab = (t) => t && t.closest && !t.closest('.tg-done, .done-btn') ? t.closest(SEL) : null;
+      // la grille peut être redessinée pendant le glisser (changement de semaine) : on la relit à chaque fois
+      const q = (k) => document.querySelector(st.view + (k === 'body' ? ' .tg-body' : k === 'wrap' ? ' .tg-wrap' : ' .tg-allday'));
       function start(el, x, y, touch) {
         const e = events.find(k => k.key === el.dataset.key); if (!e) return;
         const r = el.getBoundingClientRect();
         const view = el.closest('#semaine') ? '#semaine' : '#jour';
         st = { el, e, view, timedSrc: el.classList.contains('tg-ev'), srcD0: +(el.dataset.d0 || startOfDay(e.start).getTime()),
-          body: document.querySelector(view + ' .tg-body'), wrap: document.querySelector(view + ' .tg-wrap'), adRow: document.querySelector(view + ' .tg-allday'),
           x0: x, y0: y, x, y, touch, active: false, grabY: el.classList.contains('tg-ev') ? y - r.top : 8, h: r.height };
         if (touch) st.timer = setTimeout(begin, LONG);
       }
@@ -1231,10 +1234,11 @@
       function target() {
         const e = st.e;
         // 1) rangée « Journée » (vue Semaine) : un événement de toute la journée change de jour
-        if (!st.timedSrc && st.adRow) {
-          const ar = st.adRow.getBoundingClientRect();
+        const adRow = q('ad'), body = q('body');
+        if (!st.timedSrc && adRow) {
+          const ar = adRow.getBoundingClientRect();
           if (st.y < ar.bottom + 6) {
-            const cell = colAt('.tg-adcell', st.adRow), cr = cell.getBoundingClientRect();
+            const cell = colAt('.tg-adcell', adRow), cr = cell.getBoundingClientRect();
             const delta = +cell.dataset.d0 - st.srcD0;
             const ns = new Date(+e.start + delta), ne = new Date(+e.end + delta);
             // corrige un éventuel changement d'heure (heure avancée)
@@ -1243,9 +1247,9 @@
           }
         }
         // 2) grille horaire
-        if (!st.body) return null;
-        const col = colAt('.tg-day', st.body); if (!col) return null;
-        const br = st.body.getBoundingClientRect(), cr = col.getBoundingClientRect();
+        if (!body) return null;
+        const col = colAt('.tg-day', body); if (!col) return null;
+        const br = body.getBoundingClientRect(), cr = col.getBoundingClientRect();
         let mins = Math.round((st.y - st.grabY - br.top) / HOUR_PX * 60 / SNAP) * SNAP;
         mins = Math.max(0, Math.min(24 * 60 - SNAP, mins));
         const dur = e.allDay ? 60 * 60000 : (e.end - e.start);
@@ -1264,11 +1268,36 @@
         if (t.col) t.col.classList.add('drop-on');
       }
       function autoScroll() {
-        if (!st || !st.active || !st.wrap) return;
-        const r = st.wrap.getBoundingClientRect(), m = 44; let dy = 0, dx = 0;
-        if (st.y > r.top - 10 && st.y < r.top + m && st.wrap.scrollTop > 0) dy = -10; else if (st.y > r.bottom - m && st.y < r.bottom + 60) dy = 10;
-        if (st.x < r.left + TIME_COL + 20 && st.wrap.scrollLeft > 0) dx = -10; else if (st.x > r.right - 30) dx = 10;
-        if (dx || dy) { st.wrap.scrollTop += dy; st.wrap.scrollLeft += dx; update(); }
+        const wrap = st && st.active && q('wrap');
+        if (!wrap) return;
+        const r = wrap.getBoundingClientRect(), m = 44; let dy = 0, dx = 0;
+        if (st.y > r.top - 10 && st.y < r.top + m && wrap.scrollTop > 0) dy = -10; else if (st.y > r.bottom - m && st.y < r.bottom + 60) dy = 10;
+        const atRight = wrap.scrollLeft + wrap.clientWidth >= wrap.scrollWidth - 2, atLeft = wrap.scrollLeft <= 0;
+        const nearR = st.x > Math.min(r.right, window.innerWidth) - 30, nearL = st.x < r.left + TIME_COL + 16;
+        if (nearL && !atLeft) dx = -10; else if (nearR && !atRight) dx = 10;
+        if (dx || dy) { wrap.scrollTop += dy; wrap.scrollLeft += dx; update(); }
+        // tenir au bord ≈ 1 s → semaine (ou jour) suivante / précédente, comme Google Agenda
+        const dir = nearR && atRight ? 1 : nearL && atLeft ? -1 : 0;
+        if (!dir) { st.edge = null; hint(0); return; }
+        if (!st.edge || st.edge.dir !== dir) st.edge = { dir, t: Date.now() };
+        hint(dir, Math.min(1, (Date.now() - st.edge.t) / 900));
+        if (Date.now() - st.edge.t >= 900) { flip(dir); st.edge = { dir, t: Date.now() + 400 }; }
+      }
+      function hint(dir, p) {
+        if (!dir) { if (st && st.hint) st.hint.style.opacity = 0; return; }
+        if (!st.hint) { st.hint = document.createElement('div'); st.hint.className = 'flip-hint'; document.body.appendChild(st.hint); }
+        const r = q('wrap').getBoundingClientRect(), h = st.hint;
+        h.className = 'flip-hint ' + (dir > 0 ? 'r' : 'l');
+        h.textContent = dir > 0 ? (st.view === '#jour' ? 'Jour suivant ›' : 'Semaine suivante ›') : (st.view === '#jour' ? '‹ Jour précédent' : '‹ Semaine précédente');
+        Object.assign(h.style, { top: r.top + 'px', height: r.height + 'px', opacity: .35 + .65 * p, [dir > 0 ? 'right' : 'left']: (dir > 0 ? Math.max(0, window.innerWidth - Math.min(r.right, window.innerWidth)) : r.left + TIME_COL) + 'px', [dir > 0 ? 'left' : 'right']: 'auto' });
+      }
+      function flip(dir) {
+        const w0 = q('wrap'), top = w0 ? w0.scrollTop : 0;
+        selectDate(addDays(selectedDate, st.view === '#jour' ? dir : 7 * dir));
+        const w = q('wrap');
+        if (w) { w.scrollTop = top; w.scrollLeft = dir > 0 ? 0 : w.scrollWidth; }
+        if (navigator.vibrate) try { navigator.vibrate(10); } catch (er) {}
+        update();
       }
       function moveTo(x, y, ev) {
         if (!st) return;
@@ -1288,18 +1317,27 @@
         const s0 = st; st = null;
         if (!s0.active) return;
         clearInterval(s0.scroll); dropAt = Date.now();
-        s0.g.remove(); s0.el.classList.remove('drag-src');
+        s0.g.remove(); s0.el.classList.remove('drag-src'); if (s0.hint) s0.hint.remove();
         document.querySelectorAll('.drop-on').forEach(c => c.classList.remove('drop-on'));
         const t = s0.t;
         if (!drop || !t) return;
-        if (t.allDay === !!s0.e.allDay && +t.start === +s0.e.start) return;
-        moveEvent(s0.e, t.start, t.end, { keepView: true, allDay: t.allDay });
+        const ev0 = events.find(k => k.key === s0.e.key) || s0.e;
+        if (t.allDay === !!ev0.allDay && +t.start === +ev0.start) return;
+        moveEvent(ev0, t.start, t.end, { keepView: true, allDay: t.allDay });
       }
       // doigt
-      document.addEventListener('touchstart', ev => { const el = grab(ev.target); if (el && ev.touches.length === 1) start(el, ev.touches[0].clientX, ev.touches[0].clientY, true); }, { passive: true });
-      document.addEventListener('touchmove', ev => { if (st) moveTo(ev.touches[0].clientX, ev.touches[0].clientY, ev); }, { passive: false });
-      document.addEventListener('touchend', () => end(true));
-      document.addEventListener('touchcancel', () => end(false));
+      // les événements tactiles restent liés à l'élément touché, même s'il est retiré de la page (changement de semaine) :
+      // on écoute donc directement sur lui plutôt que sur le document
+      document.addEventListener('touchstart', ev => {
+        const el = grab(ev.target); if (!el || ev.touches.length !== 1) return;
+        const tgt = ev.target;
+        const mv = (e2) => { if (st) moveTo(e2.touches[0].clientX, e2.touches[0].clientY, e2); };
+        const off = () => { tgt.removeEventListener('touchmove', mv); tgt.removeEventListener('touchend', fin); tgt.removeEventListener('touchcancel', cnl); };
+        const fin = () => { off(); end(true); }, cnl = () => { off(); end(false); };
+        tgt.addEventListener('touchmove', mv, { passive: false });
+        tgt.addEventListener('touchend', fin); tgt.addEventListener('touchcancel', cnl);
+        start(el, ev.touches[0].clientX, ev.touches[0].clientY, true);
+      }, { passive: true });
       // souris
       document.addEventListener('mousedown', ev => { if (ev.button !== 0) return; const el = grab(ev.target); if (el) start(el, ev.clientX, ev.clientY, false); });
       document.addEventListener('mousemove', ev => { if (st && !st.touch) moveTo(ev.clientX, ev.clientY, ev); });
