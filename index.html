@@ -592,7 +592,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v13.2</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v13.3</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -625,7 +625,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v13.2';
+    const APP_VERSION = 'v13.3';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -1074,6 +1074,29 @@
       let r = await send();
       if (r.status === 401 && serverAuth && await getServerToken()) r = await send();
       return r.ok;
+    }
+    // déplacer un rendez-vous (commande vocale) — met à jour Google Agenda puis l'affichage
+    async function moveEvent(e, ns, ne, opts = {}) {
+      const os = e.start, oe = e.end;
+      const body = e.allDay
+        ? { start: { date: ymd(ns) }, end: { date: ymd(ne) } }
+        : { start: { dateTime: ns.toISOString(), timeZone: 'America/Toronto' }, end: { dateTime: ne.toISOString(), timeZone: 'America/Toronto' } };
+      e.start = ns; e.end = ne; renderAll(); saveCache();
+      const ok = await patchEvent(e, body).catch(() => false);
+      if (!ok) { e.start = os; e.end = oe; renderAll(); saveCache(); toast(`Impossible de déplacer « ${esc(e.title)} » (Google a refusé).`); return false; }
+      if (!opts.silent) {
+        window._lastMove = { key: e.key, os, oe };
+        const when = ns.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' }) + (e.allDay ? '' : ' à ' + hhmm(ns));
+        toast(`🔁 « ${esc(e.title)} » déplacé au ${esc(when)} <button onclick="undoMove()">Annuler</button>`, 8000);
+        if (!e.allDay) selectDate(ns);
+      }
+      return true;
+    }
+    function undoMove() {
+      const m = window._lastMove; if (!m) return; window._lastMove = null;
+      const e = events.find(x => x.key === m.key); if (!e) return;
+      document.querySelectorAll('.mb-toast').forEach(x => x.remove());
+      moveEvent(e, m.os, m.oe, { silent: true });
     }
     function saveCache() { store('mb_cache', events.map(x => ({ ...x, start: x.start.getTime(), end: x.end.getTime() }))); }
     async function markEventDone(key, opts = {}) {

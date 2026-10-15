@@ -225,6 +225,95 @@
 
 
 
+
+  // ---------- déplacer un rendez-vous ----------
+  // « Déplace mon rendez-vous avec Danny Bouchard à 10 h », « Change la visite de samedi à dimanche 14 h »,
+  // « Repousse le dentiste à demain », « Recule le rendez-vous de jeudi d'une heure »
+  const MOVE_RX = /\b(?:deplace|deplacer|deplace-le|deplace-la|decale|decaler|repousse|repousser|reporte|reporter|recule|reculer|avance|avancer|bouge|bouger|change|changer|modifie|modifier|remets?|remettre)\b/;
+  const WHEN_START = '(?:demain|apres-demain|apres demain|aujourd\'hui|ce (?:matin|midi|soir)|cet apres-midi|la semaine prochaine|(?:dimanche|lundi|mardi|mercredi|jeudi|vendredi|samedi)|le\\s+(?:\\d{1,2}|1er|premier)\\b|(?:\\d{1,2}|1er|premier)\\s+(?:janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)|midi|minuit|\\d{1,2}\\s*(?:h|heures?|:)|(?:une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze)\\s+heures?)';
+  const STOP = new Set(['deplace', 'deplacer', 'decale', 'decaler', 'repousse', 'repousser', 'reporte', 'reporter', 'recule', 'reculer', 'avance', 'avancer', 'bouge', 'bouger', 'change', 'changer', 'modifie', 'modifier', 'remet', 'remets', 'remettre',
+    'rendez-vous', 'rendez', 'vous', 'avec', 'pour', 'dans', 'mon', 'mes', 'notre', 'leur', 'celui', 'celle', 'prevu', 'prevue', 'aujourd\'hui', 'demain', 'heure', 'heures', 'plutot', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche',
+    'matin', 'soir', 'apres-midi', 'midi', 'minuit', 'agenda', 'calendrier', 'prochain', 'prochaine', 'semaine', 'est-ce', 'peux-tu', 'stp', 'svp', 'merci', 'moi', 'le', 'la', 'les', 'du', 'des']);
+  const MOVE_START = new RegExp('^(?:(?:ok|bon|alors|euh|peux-tu|pourrais-tu|est-ce que tu peux|j\'aimerais|je veux|je voudrais|il faut|faut|svp|stp)\\s+)*(?:me\\s+|tu peux\\s+)?' + MOVE_RX.source.replace('\\b(?:', '(?:'));
+  function isMove(t) { return MOVE_START.test(t.replace(/[,.;:!?]/g, " ").replace(/\s+/g, " ").trim()) && !/\b(?:couleur|en (?:rouge|vert|orange|mauve|bleu|jaune|rose|gris))\b/.test(t.replace(/\b(?:a|au|pour)\s.*$/, '')); }
+  function parseShift(t) {
+    const m = t.match(/\b(?:de|d')\s*(\d+|une|un|deux|trois|quatre|quinze|trente|quarante-cinq|vingt)\s*(minutes?|min|heures?|h|jours?|semaines?)\b(?:\s*et demie?)?/);
+    if (!m) return null;
+    let n = /^\d+$/.test(m[1]) ? +m[1] : NOMBRES[m[1]] || 1;
+    let mins = /^min/.test(m[2]) ? n : /^(h|heure)/.test(m[2]) ? n * 60 : /^jour/.test(m[2]) ? n * 1440 : n * 10080;
+    if (/et demie?/.test(m[0])) mins += 30;
+    if (/\b(?:avance|avancer)\b/.test(t)) mins = -mins;
+    return mins;
+  }
+  function moveCandidates(src, now) {
+    if (typeof events === 'undefined') return [];
+    const date = parseDate(src, now);
+    const tm = src.match(new RegExp(`\\b${TIME_RX}`));
+    let srcMin = null; if (tm) { timeCtx = {}; srcMin = parseTime(tm[1]); timeCtx = {}; }
+    const contact = findContact(src);
+    const words = src.replace(/[^a-z0-9' -]/g, ' ').split(/\s+/).filter(w => w.length >= 4 && !STOP.has(w));
+    const wantVisite = /\bvisites?\b/.test(src), wantRdv = /rendez-vous|\brdv\b|rencontre|reunion/.test(src);
+    const from = new Date(now); from.setHours(0, 0, 0, 0); from.setDate(from.getDate() - 1);
+    const until = new Date(now); until.setDate(until.getDate() + 60);
+    const res = [];
+    events.forEach(e => {
+      if (e.done || e.start < from || e.start > until) return;
+      let sc = 0;
+      const ti = strip(e.title + ' ' + (e.location || ''));
+      if (date) { const d = new Date(e.start); d.setHours(0, 0, 0, 0); if (d.getTime() !== date.getTime()) return; sc += 5; }
+      if (srcMin != null && !e.allDay) {
+        const m = e.start.getHours() * 60 + e.start.getMinutes();
+        if (m === srcMin || m === (srcMin + 720) % 1440 || m === srcMin - 720) sc += 6; else return;
+      }
+      if (contact) {
+        const last = strip(contact.name).split(/\s+/).filter(x => x.length > 1).slice(-1)[0];
+        if (e.contactId === contact.id || (last && ti.includes(last))) sc += 10; else return;
+      }
+      words.forEach(w => { if (ti.includes(w) || (w.length >= 5 && ti.split(/\W+/).some(x => Math.abs(x.length - w.length) <= 1 && lev(x, w) <= 1))) sc += 4; });
+      if (wantVisite && typeof typeOf === 'function' && typeOf(e) === 'visite') sc += 2;
+      if (wantRdv && typeof typeOf === 'function' && ['reunion', 'visite'].includes(typeOf(e))) sc += 1;
+      const specific = date || srcMin != null || contact || words.length;
+      if (!specific) { if (e.start < now || e.allDay) return; sc += 1; }
+      if (sc > 0) res.push({ e, sc: sc + (canWrite(e) ? 1 : 0) });
+    });
+    // à score égal : le plus proche dans le temps (à venir d'abord)
+    res.sort((a, b) => b.sc - a.sc || (Math.abs(a.e.start - now) - Math.abs(b.e.start - now)));
+    return res.map(x => x.e);
+  }
+  function parseMove(raw, now = new Date()) {
+    const t = strip(raw).trim();
+    // la cible = après le DERNIER « à / au / pour / vers / plutôt » suivi d'une date ou d'une heure
+    const rx = new RegExp(`(?:^|\\s)(?:a|au|pour|vers|plutot|jusqu'a)\\s+(?:(?:le|la)\\s+)?(?=${WHEN_START})`, 'g');
+    let cut = -1, m;
+    while ((m = rx.exec(t))) cut = m.index;
+    const shift = cut < 0 && /\b(?:repousse|repousser|recule|reculer|avance|avancer|decale|decaler)\b/.test(t) ? parseShift(t) : null;
+    let src = cut >= 0 ? t.slice(0, cut) : t, dst = cut >= 0 ? t.slice(cut) : '';
+    if (shift != null) src = src.replace(/\b(?:de|d')\s*(\d+|une|un|deux|trois|quatre|quinze|trente|quarante-cinq|vingt)\s*(minutes?|min|heures?|h|jours?|semaines?)\b(?:\s*et demie?)?/, ' ');
+    // « de samedi à dimanche » : le « de … » appartient à la source
+    const cands = moveCandidates(src, now);
+    const target = dst ? parseCommand(dst, now) : null;
+    return { intent: 'move', cands, target, shift, prochain: /\bprochaine?\b/.test(dst), hasTarget: !!(target && (target.date || target.start != null)) || shift != null };
+  }
+  function newTimes(e, mv, pm) {
+    const dur = e.end - e.start;
+    let s = new Date(e.start);
+    if (mv.shift != null) s = new Date(s.getTime() + mv.shift * 60000);
+    const tg = mv.target;
+    if (tg) {
+      if (tg.ambiguous && pm !== null && pm !== undefined) setPm(tg, pm);
+      if (tg.date) {
+        s.setFullYear(tg.date.getFullYear(), tg.date.getMonth(), tg.date.getDate());
+        // « vendredi prochain » alors que le rendez-vous est déjà ce vendredi → la semaine suivante
+        if (mv.prochain && s.toDateString() === e.start.toDateString()) s.setDate(s.getDate() + 7);
+      }
+      if (tg.start != null && !e.allDay) s.setHours(Math.floor(tg.start / 60), tg.start % 60, 0, 0);
+    }
+    return { start: s, end: new Date(s.getTime() + dur) };
+  }
+  let moveSel = { text: null, i: 0 };
+  const fmtWhen = (d, allDay) => d.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' }) + (allDay ? '' : ' · ' + fmtMin(d.getHours() * 60 + d.getMinutes()));
+  const canWrite = (e) => typeof writableCals === 'undefined' || !writableCals.length || writableCals.some(c => c.id === e.calId);
+
   // ---------- comprendre l'intention (un seul micro pour tout) ----------
   const TABS = [['semaine', /\bsemaine\b/], ['mois', /\bmois\b/], ['contacts', /\bcontacts?\b|\bclients\b|crm/], ['transactions', /transactions?/], ['jour', /journee|aujourd'hui|demain|\bjour\b|agenda|calendrier|horaire|horaire|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche/]];
   function route(raw, now = new Date()) {
@@ -234,6 +323,8 @@
     // ✅ suivi fait
     if (/(suivi|rappel|appel)\s+(?:est\s+|a ete\s+)?(?:fait|faite|termine|complete|reglee?)|(?:j'ai|c'est)\s+(?:fait|termine|complete|reglee?)\s+(?:mon|le|ma|la)?\s*(?:suivi|rappel|appel)|coche(?:r)?\s+(?:le|mon)?\s*suivi|suivi\s+(?:avec\s+\S+.*?\s+)?(?:fait|termine)/.test(t))
       return { intent: 'done', contact };
+    // 🔁 déplacer un rendez-vous
+    if (isMove(t)) { const mv = parseMove(raw, now); if (mv.cands.length || mv.hasTarget) return mv; }
     // 📂 ouvrir une fiche
     if (contact && /^(?:\w+\s+)?(?:ouvre|ouvrir|ouvre-moi|montre|montre-moi|affiche|affiche-moi|trouve|cherche|va (?:a|dans|sur)|sors|sort)\b/.test(t) && !hasTime)
       return { intent: 'open', contact };
@@ -295,7 +386,7 @@
       <div id="voice-preview" class="voice-preview"></div>
       <button type="button" class="sheet-save voice-go" onclick="Voice.go()">Préparer le rendez-vous</button>
       <button type="button" class="vc-switch" onclick="VoiceCRM.open(document.getElementById('voice-text').value)">👤 Plutôt une fiche contact / une note d'appel →</button>
-      <div class="voice-ex">Vous pouvez dire :<br>• 📅 « Rendez-vous vendredi à 14 h, business plan »<br>• 👤 « Discussion avec Danny Bouchard, acheteur, il cherche à Rosemont… »<br>• 📂 « Ouvre la fiche de Marc Tremblay »<br>• ✅ « Suivi fait avec Lara »<br>• 🗓 « Montre-moi demain » · « Ma semaine »</div>
+      <div class="voice-ex">Vous pouvez dire :<br>• 📅 « Rendez-vous vendredi à 14 h, business plan »<br>• 👤 « Discussion avec Danny Bouchard, acheteur, il cherche à Rosemont… »<br>• 🔁 « Déplace mon rendez-vous avec Danny Bouchard à 10 h »<br>• 📂 « Ouvre la fiche de Marc Tremblay »<br>• ✅ « Suivi fait avec Lara »<br>• 🗓 « Montre-moi demain » · « Ma semaine »</div>
     </div>`;
     document.body.appendChild(m);
     const ta = m.querySelector('#voice-text');
@@ -317,6 +408,19 @@
     if (r.intent === 'done') {
       box.innerHTML = line('Action', '✅ Suivi fait') + line('Client', r.contact ? '👤 ' + esc(r.contact.name) : '<i>aucun contact reconnu</i>');
       if (go) go.textContent = 'Cocher le suivi';
+    } else if (r.intent === 'move') {
+      if (moveSel.text !== txt) moveSel = { text: txt, i: 0 };
+      if (pmChoice.text !== txt) pmChoice = { text: txt, pm: null };
+      const e = r.cands[moveSel.i];
+      if (!e) { box.innerHTML = line('Action', '🔁 Déplacer') + line('Rendez-vous', '<i>pas trouvé — dites le nom du client, le jour ou l\'heure actuelle</i>'); if (go) go.textContent = 'Déplacer'; return; }
+      const nt = newTimes(e, { ...r, target: r.target ? { ...r.target } : null }, pmChoice.pm);
+      const others = r.cands.slice(0, 4).map((x, i) => i === moveSel.i ? '' : `<button type="button" onclick="Voice.pick(${i})">${esc(x.title.slice(0, 28))} · ${x.start.toLocaleDateString('fr-CA', { weekday: 'short', day: 'numeric' })}${x.allDay ? '' : ' ' + fmtMin(x.start.getHours() * 60 + x.start.getMinutes())}</button>`).join('');
+      box.innerHTML = line('Action', '🔁 Déplacer') + line('Rendez-vous', esc(e.title)) + line('Avant', fmtWhen(e.start, e.allDay)) +
+        (r.hasTarget ? line('Après', '<span style="color:#2E7D32">' + fmtWhen(nt.start, e.allDay) + '</span>') : line('Après', '<i>à quelle date / heure ? ex. « … à vendredi 10 h »</i>')) +
+        (r.target && r.target.ambiguous && !e.allDay ? `<div class="ampm-row">${ampmChips(nt.start.getHours() * 60 + nt.start.getMinutes(), 'Voice.pm')}</div>` : '') +
+        (!canWrite(e) ? line('⚠️', 'Calendrier en lecture seule (' + esc(e.cal || '') + ')') : '') +
+        (others ? `<div class="ampm-row"><div class="ampm"><span>Pas le bon ?</span>${others}</div></div>` : '');
+      if (go) go.textContent = 'Déplacer le rendez-vous';
     } else if (r.intent === 'open') {
       box.innerHTML = line('Action', '📂 Ouvrir la fiche') + line('Client', '👤 ' + esc(r.contact.name));
       if (go) go.textContent = 'Ouvrir la fiche';
@@ -370,6 +474,8 @@
     findContact,
     setPm, ampmChips,
     pm(v) { pmChoice = { text: document.getElementById('voice-text').value, pm: v }; preview(); },
+    pick(i) { moveSel = { text: document.getElementById('voice-text').value, i }; pmChoice = { text: moveSel.text, pm: null }; preview(); },
+    parseMove,
     route,
     open() {
       document.querySelectorAll('.mb-toast').forEach(x => x.remove());
@@ -422,6 +528,15 @@
           hint.textContent = 'Je n\'ai pas trouvé ce suivi. Dites le nom du client, ex. « suivi fait avec Lara Gagnon ».'; return;
         }
         Voice.close(); CRM.doneFollowUp(r.contact.id); return;
+      }
+      if (r.intent === 'move') {
+        if (moveSel.text !== txt) moveSel = { text: txt, i: 0 };
+        const e = r.cands[moveSel.i];
+        if (!e) { hint.textContent = 'Je n\'ai pas trouvé ce rendez-vous. Dites le nom du client, le jour ou l\'heure actuelle.'; return; }
+        if (!r.hasTarget) { hint.textContent = 'À quelle date ou heure ? Ex. « déplace-le à vendredi 10 h ».'; return; }
+        if (!canWrite(e)) { hint.textContent = `Ce rendez-vous est dans « ${e.cal} », en lecture seule ici. Déplacez-le à sa source (ex. Domodo).`; return; }
+        const nt = newTimes(e, r, pmChoice.text === txt ? pmChoice.pm : null);
+        Voice.close(); moveEvent(e, nt.start, nt.end); return;
       }
       if (r.intent === 'open') { Voice.close(); CRM.open(r.contact.id); return; }
       if (r.intent === 'nav') {
