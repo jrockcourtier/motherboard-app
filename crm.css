@@ -62,7 +62,9 @@
 
 /* onglets sans calendrier : on masque le mini-calendrier et les stats */
 body[data-tab="contacts"] .mini-calendar, body[data-tab="contacts"] .stats-grid,
-body[data-tab="transactions"] .mini-calendar, body[data-tab="transactions"] .stats-grid { display: none; }
+body[data-tab="transactions"] .mini-calendar, body[data-tab="transactions"] .stats-grid,
+body[data-tab="semaine"] .mini-calendar, body[data-tab="semaine"] .stats-grid,
+body[data-tab="mois"] .mini-calendar, body[data-tab="mois"] .stats-grid { display: none; }
 
 /* ===== Commande vocale ===== */
 .fab-mic { bottom: calc(90px + env(safe-area-inset-bottom)) !important; width: 50px !important; height: 50px !important; right: 22px !important; font-size: 22px !important; background: var(--white) !important; border-color: var(--primary-dark) !important; }
