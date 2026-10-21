@@ -64,7 +64,8 @@
 body[data-tab="contacts"] .mini-calendar, body[data-tab="contacts"] .stats-grid,
 body[data-tab="transactions"] .mini-calendar, body[data-tab="transactions"] .stats-grid,
 body[data-tab="semaine"] .mini-calendar, body[data-tab="semaine"] .stats-grid,
-body[data-tab="mois"] .mini-calendar, body[data-tab="mois"] .stats-grid { display: none; }
+body[data-tab="mois"] .mini-calendar, body[data-tab="mois"] .stats-grid,
+body[data-tab="prospection"] .mini-calendar, body[data-tab="prospection"] .stats-grid, body[data-tab="prospection"] .legend { display: none; }
 
 /* ===== Commande vocale ===== */
 .fab-mic { bottom: calc(90px + env(safe-area-inset-bottom)) !important; width: 50px !important; height: 50px !important; right: 22px !important; font-size: 22px !important; background: var(--white) !important; border-color: var(--primary-dark) !important; }
@@ -165,3 +166,44 @@ body[data-tab="mois"] .mini-calendar, body[data-tab="mois"] .stats-grid { displa
 
 /* carte de contact pour l'iPhone */
 .crm-vcard { display: block; width: 100%; margin: 8px 0 2px; padding: 10px; border: 1px solid var(--border-light); background: var(--white); border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; color: var(--text-primary); }
+
+/* ===== Prospection ===== */
+#prospection { padding-bottom: 20px; }
+.pr-top { display: flex; gap: 8px; padding: 12px 12px 6px; align-items: center; }
+.pr-select { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; padding: 10px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--white); }
+.pr-title { flex: 1; font-size: 16px; }
+.pr-top .crm-add { padding: 10px 14px; }
+.pr-stats { display: flex; gap: 14px; padding: 2px 14px 6px; font-size: 12px; color: var(--text-secondary); }
+.pr-stats b { color: var(--primary-dark); font-size: 15px; }
+.pr-due { background: var(--urgent); color: #fff; border-radius: 10px; padding: 1px 6px; font-size: 10px; margin-left: 3px; }
+.pr-searchrow { padding: 0 12px 6px; }
+.pr-searchrow .crm-search { width: 100%; }
+.pr-grid { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 0 12px; }
+@media (min-width: 900px) { .pr-grid { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); } }
+.pr-card { display: flex; gap: 10px; align-items: center; padding: 8px; border: 1px solid var(--border-light); border-radius: 10px; background: var(--white); cursor: pointer; }
+.pr-card:active { background: var(--light-bg); }
+.pr-card.dnc { opacity: .55; }
+.pr-thumb { flex: 0 0 96px; width: 96px; height: 72px; object-fit: cover; border-radius: 6px; background: var(--light-bg); }
+.pr-nothumb { display: flex; align-items: center; justify-content: center; font-size: 26px; }
+.pr-body { flex: 1; min-width: 0; }
+.pr-l1 { display: flex; gap: 6px; align-items: baseline; font-size: 15px; }
+.pr-no { font-size: 11px; font-weight: 800; color: #fff; background: var(--primary-dark); border-radius: 6px; padding: 1px 6px; }
+.pr-type { font-size: 11px; color: var(--text-secondary); font-weight: 600; }
+.pr-addr { font-size: 13px; font-weight: 600; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pr-meta { font-size: 11px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pr-lnnte { color: #8A6D00; font-weight: 700; }
+.pr-drop { margin: 14px 12px; padding: 34px 18px; border: 2px dashed var(--border-light); border-radius: 14px; text-align: center; line-height: 1.6; font-size: 14px; }
+.pr-drop-ic { font-size: 40px; }
+#prospection.pr-dragging .pr-drop, #prospection.pr-dragging .pr-grid { outline: 3px dashed var(--primary-gold); outline-offset: 4px; background: #FFFBEA; }
+.pr-sheet { max-width: 620px; }
+.pr-prog { height: 8px; background: var(--light-bg); border-radius: 4px; overflow: hidden; margin: 16px 0 8px; }
+.pr-prog i { display: block; height: 100%; background: #2E7D32; transition: width .2s; }
+.pr-sum { font-size: 13px; padding: 8px 10px; background: var(--light-bg); border-radius: 8px; margin: 6px 0 10px; }
+.pr-rev { max-height: 52vh; overflow: auto; border: 1px solid var(--border-light); border-radius: 8px; }
+.pr-rev-row { display: flex; gap: 10px; align-items: center; padding: 7px 8px; border-bottom: 1px solid var(--border-light); font-size: 12px; line-height: 1.4; }
+.pr-rev-row img, .pr-rev-row .pr-nothumb { width: 64px; height: 48px; object-fit: cover; border-radius: 4px; flex: 0 0 64px; background: var(--light-bg); }
+.pr-rev-row.bad { color: var(--urgent); }
+.crm-thumb { display: block; width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; margin: 6px 0; }
+.dial-thumb { width: 100%; max-width: 320px; height: 150px; object-fit: cover; border-radius: 10px; }
+/* message en haut quand une fenêtre est ouverte (ne cache pas les boutons du mode appels) */
+body:has(.modal.open) .mb-toast { top: calc(12px + env(safe-area-inset-top)); bottom: auto; }

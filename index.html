@@ -674,7 +674,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v14.1</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v15</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -690,6 +690,7 @@
     <button class="tab-btn" onclick="showTab(event, 'mois')">Mois</button>
     <button class="tab-btn" onclick="showTab(event, 'transactions')">Transactions</button>
     <button class="tab-btn" onclick="showTab(event, 'contacts')">Contacts</button>
+    <button class="tab-btn" onclick="showTab(event, 'prospection')">Prospection</button>
   </div>
 
   <div class="mini-calendar" id="mini-calendar"></div>
@@ -701,13 +702,14 @@
     <div class="tab-content" id="mois" style="overflow-y: auto;"></div>
     <div class="tab-content" id="transactions"></div>
     <div class="tab-content" id="contacts"></div>
+    <div class="tab-content" id="prospection"></div>
   </div>
 
   <script>
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v14.1';
+    const APP_VERSION = 'v15';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -948,6 +950,7 @@
       store('mb_tab', name);
       document.body.dataset.tab = name;
       if (name === 'semaine') renderSemaine();
+      if (name === 'prospection' && window.Prospect) Prospect.render();
     }
 
     // ================== RENDU ==================
@@ -1732,7 +1735,7 @@
   </script>
 
   <button class="fab fab-mic" onclick="Voice.open()" aria-label="Commande vocale">🎤</button>
-  <button class="fab" onclick="document.body.dataset.tab==='contacts' && window.CRM ? CRM.edit() : openAddForm()" aria-label="Ajouter">+</button>
+  <button class="fab" onclick="document.body.dataset.tab==='prospection' && window.Prospect ? Prospect.pick() : document.body.dataset.tab==='contacts' && window.CRM ? CRM.edit() : openAddForm()" aria-label="Ajouter">+</button>
   <div class="modal" id="add-modal" onclick="if(event.target===this)closeAddForm()">
     <form class="sheet" id="add-form" onsubmit="saveEvent(event)">
       <div class="sheet-head"><button type="button" class="sheet-x" onclick="closeAddForm()">✕</button><b>Nouveau rendez-vous</b><button type="submit" id="add-save" class="sheet-save">Enregistrer</button></div>
@@ -1788,6 +1791,7 @@
   </div>
   <link rel="stylesheet" href="crm.css">
   <script src="crm.js"></script>
+  <script src="prospect.js"></script>
   <script src="voice.js"></script>
   <script src="voicecrm.js"></script>
 </body>

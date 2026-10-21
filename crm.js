@@ -7,18 +7,18 @@
   const TYPES_C = {
     acheteur: { label: 'Acheteur', color: '#1976D2', stages: ['Nouveau lead', 'Qualifié (financement)', 'En recherche (Matrix)', 'En visites', "Offre d'achat", 'Conditions', 'Notaire', 'Client passé'] },
     vendeur:  { label: 'Vendeur',  color: '#9C27B0', stages: ['Lead', 'Évaluation', 'CCV signé', 'En vigueur', 'Offre acceptée', 'Conditions', 'Vendu / Notaire', 'Client passé'] },
-    proprio:  { label: 'Proprio',  color: '#00796B', stages: ['À appeler', 'Appelé – rappeler', 'Intéressé', 'Rendez-vous', 'Converti en vendeur', 'Pas intéressé'] },
+    proprio:  { label: 'Proprio',  color: '#00796B', stages: ['À appeler', 'Appelé – rappeler', 'Intéressé', 'Rendez-vous', 'Signé', 'Pas intéressé', 'Injoignable'] },
     client:   { label: 'Client',   color: '#D4AF37', stages: ['Actif', 'Client passé'] }
   };
   const OUT = {
-    pas_reponse:   { l: 'Pas de réponse', i: '📵', conv: false, days: 4 },
-    message:       { l: 'Message laissé', i: '📨', conv: false, days: 4 },
+    pas_reponse:   { l: 'Pas de réponse', i: '📵', conv: false, days: 2 },
+    message:       { l: 'Message laissé', i: '📨', conv: false, days: 3 },
     parle:         { l: 'Parlé',          i: '💬', conv: true },
     rdv:           { l: 'RDV fixé',       i: '📅', conv: true },
     pas_interesse: { l: 'Pas intéressé',  i: '🙅', conv: true, days: 90 }
   };
   const HOT = ['En visites', "Offre d'achat", 'Conditions', 'Notaire', 'Évaluation', 'CCV signé', 'En vigueur', 'Offre acceptée', 'Intéressé', 'Rendez-vous'];
-  const CLOSED = ['Client passé', 'Pas intéressé', 'Vendu / Notaire', 'Converti en vendeur'];
+  const CLOSED = ['Client passé', 'Pas intéressé', 'Vendu / Notaire', 'Converti en vendeur', 'Signé', 'Injoignable'];
   const SMART = [
     ['tous', 'Tous', () => true],
     ['appeler', '📞 À appeler', c => !c.dnc && isDue(c)],
@@ -103,6 +103,7 @@
     renderList();
     if (openId === c.id) renderSheet();
     refreshJour();
+    if (window.Prospect && Prospect.changed) Prospect.changed();
     flush();
   }
   let flushing = false;
@@ -151,7 +152,8 @@
     const q = query.trim().toLowerCase();
     const all = list();
     const sm = (SMART.find(x => x[0] === smart) || SMART[0])[2];
-    const rows = all.filter(c => sm(c) && (filter === 'tous' || c.type === filter) &&
+    // les fiches DuProprio pas encore appelées restent dans l'onglet Prospection (sinon la liste de contacts déborde)
+    const rows = all.filter(c => !(filter === 'tous' && !q && c.plist && (c.stage || 'À appeler') === 'À appeler') && sm(c) && (filter === 'tous' || c.type === filter) &&
       (!q || [c.name, c.phone, c.email, c.address, c.neighborhoods, c.stage].join(' ').toLowerCase().includes(q)));
     const due = rows.filter(c => isDue(c)).sort((a, b) => a.nextFollowUp.localeCompare(b.nextFollowUp));
     const rest = rows.filter(c => !isDue(c)).sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
@@ -235,7 +237,10 @@
     const t = TYPES_C[c.type] || TYPES_C.client;
     const info = [
       ['Courriel', c.email ? `<a href="mailto:${e(c.email)}">${e(c.email)}</a>` : ''],
+      ['Propriétaire', c.owner ? e(c.owner) : ''],
       ['Adresse', c.address ? e(c.address) : ''],
+      ['Type', c.ptype ? e(c.ptype) : ''],
+      ['Liste', c.plist ? e(c.plist) + (c.porder ? ' · #' + c.porder : '') : ''],
       ['Budget', c.budget ? e(c.budget) : ''],
       ['Recherche', c.propertyType ? e(c.propertyType) : ''],
       ['Quartiers', c.neighborhoods ? e(c.neighborhoods) : ''],
@@ -263,6 +268,7 @@
         <a class="${maps ? '' : 'off'}" href="${maps || '#'}" target="_blank" rel="noopener">🗺<span>Itinéraire</span></a>
         <a href="#" onclick="event.preventDefault();CRM.meeting()">📅<span>Rendez-vous</span></a>
       </div>
+      ${window.Prospect ? Prospect.thumbHtml(c, 'crm-thumb') : ''}
       ${linkBtns(c, 'crm-links')}
       <button class="crm-vcard" onclick="CRM.vcard()">📇 Ajouter à mes contacts iPhone</button>
       ${callPanel(c)}
@@ -304,7 +310,7 @@
         ${fld('address', c.type === 'acheteur' ? 'Adresse actuelle' : 'Adresse de la propriété', 'Optionnel')}
         ${c.type === 'acheteur' ? fld('budget', 'Budget', 'ex. 450 000 $ – 550 000 $') + fld('neighborhoods', 'Quartiers recherchés', 'ex. Plateau, Rosemont, Villeray') : ''}
         ${c.type === 'vendeur' ? fld('price', 'Prix espéré / minimum', 'ex. 625 000 $') : ''}
-        ${c.type === 'proprio' ? fld('price', 'Prix demandé (DuProprio)', 'ex. 625 000 $') + fld('dpUrl', 'Lien DuProprio', 'https://duproprio.com/…', 'url', 'inputmode="url"') + fld('oneNote', 'Lien de la page OneNote', 'OneNote → clic droit sur la page → Copier le lien', 'url', 'inputmode="url"') : ''}
+        ${c.type === 'proprio' ? fld('owner', 'Nom du propriétaire', 'ex. Mathieu') + fld('price', 'Prix demandé (DuProprio)', 'ex. 625 000 $') + fld('dpUrl', 'Lien DuProprio', 'https://duproprio.com/…', 'url', 'inputmode="url"') + fld('oneNote', 'Lien de la page OneNote', 'OneNote → clic droit sur la page → Copier le lien', 'url', 'inputmode="url"') : ''}
         ${fld('commission', 'Commission (%)', 'ex. 4', 'text', 'inputmode="decimal"')}
         ${fld('source', 'Source', 'ex. Centris, référence, appel proprio, Instagram')}
         <div class="f-row"><label>Premier contact<input type="date" name="firstContact" value="${e(c.firstContact || '')}"></label><label>Prochain suivi<input type="date" name="nextFollowUp" value="${e(c.nextFollowUp || '')}"></label></div>
@@ -315,7 +321,7 @@
   }
   function collectForm() {
     const f = $('#crm-form'); if (!f) return;
-    ['name', 'stage', 'phone', 'email', 'address', 'budget', 'neighborhoods', 'price', 'dpUrl', 'oneNote', 'commission', 'source', 'firstContact', 'nextFollowUp', 'firstNote'].forEach(k => {
+    ['name', 'stage', 'phone', 'email', 'address', 'budget', 'neighborhoods', 'price', 'owner', 'dpUrl', 'oneNote', 'commission', 'source', 'firstContact', 'nextFollowUp', 'firstNote'].forEach(k => {
       if (f[k]) editing[k] = f[k].value.trim();
     });
   }
@@ -364,12 +370,18 @@
       if (outcome === 'rdv') c.nextFollowUp = '';
       if (outcome === 'pas_interesse' && c.type === 'proprio') c.stage = 'Pas intéressé';
       if (outcome === 'rdv' && c.type === 'proprio') c.stage = 'Rendez-vous';
+      if (outcome === 'parle' && c.type === 'proprio' && (!c.stage || c.stage === 'À appeler')) c.stage = 'Appelé – rappeler';
+      // 6 essais sans jamais parler à la personne → « Injoignable » (on arrête de l'appeler)
+      if (!o.conv && c.type === 'proprio') {
+        let n = 0; for (let k = c.calls.length - 1; k >= 0 && !OUT[c.calls[k].outcome].conv; k--) n++;
+        if (n >= 6) { c.stage = 'Injoignable'; c.nextFollowUp = ''; }
+      }
       if (ta) ta.value = '';
       save(c);
       if (opts.silent) return o;
       const after = document.getElementById('crm-after');
       if (outcome === 'parle') {
-        if (after) after.innerHTML = `<div class="crm-after-q">Quand le rappeler ?</div><div class="chips">${[[1, 'Demain'], [7, '1 sem'], [14, '2 sem'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="CRM.planFollow(${d})">${l}</button>`).join('')}<button onclick="CRM.planFollow(0, true)">Aucun</button></div><label class="crm-cal"><input type="checkbox" id="crm-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
+        if (after) after.innerHTML = `<div class="crm-after-q">Quand le rappeler ?</div><div class="chips">${[[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="CRM.planFollow(${d})">${l}</button>`).join('')}<button onclick="CRM.planFollow(0, true)">Aucun</button></div><label class="crm-cal"><input type="checkbox" id="crm-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
       } else if (outcome === 'rdv') { CRM.meeting(); }
       else if (typeof toast === 'function') toast(`${o.i} ${o.l} — prochain suivi ${o.days ? 'dans ' + (o.days >= 30 ? Math.round(o.days / 30) + ' mois' : o.days + ' jours') : ''} <button onclick="CRM.undoCall('${id}')">Annuler</button>`);
       return o;
@@ -394,6 +406,7 @@
     dial(ids) { Dialer.start(ids || (() => { const sm = (SMART.find(x => x[0] === smart) || SMART[0])[2]; return list().filter(c => sm(c) && (filter === 'tous' || c.type === filter) && c.phone && !c.dnc).sort((a, b) => (a.nextFollowUp || '9').localeCompare(b.nextFollowUp || '9')).map(c => c.id); })()); },
     dueIds() { return list().filter(c => !c.dnc && isDue(c) && c.phone).map(c => c.id); },
     _out: OUT,
+    _stats: () => stats(),
     // fiche contact → carte vCard : l'iPhone (ou le Mac) propose « Créer un contact »
     vcard(id) {
       const c = contacts[id || openId]; if (!c) return;
@@ -500,8 +513,9 @@
         <div class="sheet-head"><button type="button" class="sheet-x" onclick="Dialer.stop()">✕</button><b>Mode appels · ${this.i + 1} / ${this.q.length}</b><button class="sheet-save" onclick="Dialer.next()">Passer ›</button></div>
         <div class="dial-progress"><i style="width:${Math.round(this.i / this.q.length * 100)}%"></i></div>
         <div class="dial-card">
-          <div class="crm-av big" style="background:${t.color}">${e(initials(c.name))}</div>
-          <div class="dial-name">${e(c.name)}</div>
+          ${window.Prospect && Prospect.thumb(c.id) ? Prospect.thumbHtml(c, 'dial-thumb') : `<div class="crm-av big" style="background:${t.color}">${e(initials(c.name))}</div>`}
+          <div class="dial-name">${e(c.name)}${c.owner ? ' · ' + e(c.owner) : ''}</div>
+          ${c.ptype || c.porder ? `<div class="dial-meta">${c.ptype ? e(c.ptype) : ''}${c.porder ? ' · fiche #' + c.porder : ''}</div>` : ''}
           <div class="crm-sub"><span class="crm-badge" style="color:${t.color};border-color:${t.color}">${t.label}</span> ${e(c.stage || '')}</div>
           ${c.address ? `<div class="dial-meta">📍 ${e(c.address)}</div>` : ''}
           ${c.budget || c.price ? `<div class="dial-meta">💰 ${e(c.budget || c.price)}</div>` : ''}
@@ -524,7 +538,7 @@
       this.last = { id, outcome, i: this.i };
       if (outcome !== 'parle' && outcome !== 'rdv' && typeof toast === 'function') toast(`${OUT[outcome].i} ${OUT[outcome].l} — ${e(contacts[id].name)} <button onclick="Dialer.undo()">Annuler</button>`);
       if (outcome === 'parle') {
-        document.getElementById('dial-after').innerHTML = `<div class="crm-after-q">Quand le rappeler ?</div><div class="chips">${[[1, 'Demain'], [7, '1 sem'], [14, '2 sem'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Dialer.follow(${d})">${l}</button>`).join('')}<button onclick="Dialer.follow(0, true)">Aucun</button></div><label class="crm-cal"><input type="checkbox" id="dial-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
+        document.getElementById('dial-after').innerHTML = `<div class="crm-after-q">Quand le rappeler ?</div><div class="chips">${[[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Dialer.follow(${d})">${l}</button>`).join('')}<button onclick="Dialer.follow(0, true)">Aucun</button></div><label class="crm-cal"><input type="checkbox" id="dial-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
         return;
       }
       if (outcome === 'rdv') { const c = contacts[id]; Dialer.pauseFor(c); return; }
