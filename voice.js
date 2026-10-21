@@ -392,6 +392,13 @@
     if (ta) ta.focus();
   }
 
+  // brouillon : ce qui a été dicté reste là si on part dans une autre app (l'iPhone coupe le micro)
+  const DRAFT = 'mb_voice_draft';
+  function saveDraft(v) { try { if (v && v.trim()) localStorage.setItem(DRAFT, JSON.stringify({ v, at: Date.now() })); else localStorage.removeItem(DRAFT); } catch (e) {} }
+  function loadDraft() { try { const d = JSON.parse(localStorage.getItem(DRAFT) || 'null'); return d && Date.now() - d.at < 30 * 60000 ? d.v : ''; } catch (e) { return ''; } }
+  function clearDraft() { try { localStorage.removeItem(DRAFT); } catch (e) {} }
+  document.addEventListener('visibilitychange', () => { const ta = document.getElementById('voice-text'); if (document.hidden && ta) saveDraft(ta.value); });
+
   function sheet() {
     let m = document.getElementById('voice-modal');
     if (m) return m;
@@ -412,7 +419,7 @@
     const ta = m.querySelector('#voice-text');
     ['input', 'change', 'keyup', 'paste', 'compositionend'].forEach(e => ta.addEventListener(e, () => setTimeout(preview, 0)));
     let last = '';
-    setInterval(() => { const mm = document.getElementById('voice-modal'); if (mm && mm.classList.contains('open') && ta.value !== last) { last = ta.value; preview(); } }, 500);
+    setInterval(() => { const mm = document.getElementById('voice-modal'); if (mm && mm.classList.contains('open') && ta.value !== last) { last = ta.value; preview(); saveDraft(ta.value); } }, 500);
     ta.addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); Voice.go(); } });
     ta.setAttribute('enterkeyhint', 'go');
     return m;
@@ -497,14 +504,21 @@
     pick(i) { moveSel = { text: document.getElementById('voice-text').value, i }; pmChoice = { text: moveSel.text, pm: null }; preview(); },
     parseMove,
     route,
+    clear() { clearDraft(); const ta = document.getElementById('voice-text'); if (ta) { ta.value = ''; ta.focus(); } preview(); },
     open() {
       document.querySelectorAll('.mb-toast').forEach(x => x.remove());
       const m = sheet(); m.classList.add('open');
-      document.getElementById('voice-text').value = ''; preview();
+      const draft = loadDraft();
+      document.getElementById('voice-text').value = draft ? draft + ' ' : ''; preview();
+      if (draft) {
+        keyboardMode('✍️ J\'ai gardé ce que vous aviez dicté. Touchez le <b>🎤 du clavier</b> pour continuer, ou <a href="#" onclick="event.preventDefault();Voice.clear()">effacer</a>.');
+        return;
+      }
       if (useSR()) { document.getElementById('voice-hint').textContent = 'Touchez le micro et parlez.'; Voice.toggle(); }
       else keyboardMode(); // iPhone : la dictée du clavier est la plus fiable (et le clavier s'ouvre tout de suite)
     },
     close() {
+      clearDraft();
       if (rec && listening) try { rec.stop(); } catch (e) {}
       const m = document.getElementById('voice-modal'); if (m) m.classList.remove('open');
     },

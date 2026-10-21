@@ -264,6 +264,7 @@
         <a href="#" onclick="event.preventDefault();CRM.meeting()">📅<span>Rendez-vous</span></a>
       </div>
       ${linkBtns(c, 'crm-links')}
+      <button class="crm-vcard" onclick="CRM.vcard()">📇 Ajouter à mes contacts iPhone</button>
       ${callPanel(c)}
       <div class="f-label">Étape du dossier</div>
       <div class="chips crm-stages">${t.stages.map(s => `<button class="${c.stage === s ? 'on' : ''}" onclick="CRM.stage(${JSON.stringify(s).replace(/"/g, '&quot;')})">${e(s)}</button>`).join('')}</div>
@@ -393,6 +394,24 @@
     dial(ids) { Dialer.start(ids || (() => { const sm = (SMART.find(x => x[0] === smart) || SMART[0])[2]; return list().filter(c => sm(c) && (filter === 'tous' || c.type === filter) && c.phone && !c.dnc).sort((a, b) => (a.nextFollowUp || '9').localeCompare(b.nextFollowUp || '9')).map(c => c.id); })()); },
     dueIds() { return list().filter(c => !c.dnc && isDue(c) && c.phone).map(c => c.id); },
     _out: OUT,
+    // fiche contact → carte vCard : l'iPhone (ou le Mac) propose « Créer un contact »
+    vcard(id) {
+      const c = contacts[id || openId]; if (!c) return;
+      const esc2 = (v) => String(v || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1');
+      const parts = String(c.name || '').trim().split(/\s+/);
+      const last = parts.length > 1 ? parts.pop() : '', first = parts.join(' ');
+      const t = TYPES_C[c.type] || TYPES_C.client;
+      const note = [t.label + (c.stage ? ' · ' + c.stage : ''), c.budget ? 'Budget : ' + c.budget : '', c.price ? 'Prix : ' + c.price : '', c.neighborhoods ? 'Quartiers : ' + c.neighborhoods : '', 'Fiche Motherboard'].filter(Boolean).join(' — ');
+      const lines = ['BEGIN:VCARD', 'VERSION:3.0', `N:${esc2(last)};${esc2(first)};;;`, `FN:${esc2(c.name)}`,
+        c.phone ? `TEL;TYPE=CELL:${String(c.phone).replace(/[^\d+]/g, '')}` : '', c.email ? `EMAIL;TYPE=INTERNET:${esc2(c.email)}` : '',
+        c.address ? `ADR;TYPE=HOME:;;${esc2(c.address)};;;;` : '', `NOTE:${esc2(note)}`, 'END:VCARD'].filter(Boolean);
+      const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/vcard;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = (c.name || 'contact').replace(/[^\w\- ]+/g, '') + '.vcf';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      if (typeof toast === 'function') toast('📇 Touchez « Créer un nouveau contact » (ou « Ajouter ») pour l\'enregistrer dans votre téléphone.');
+    },
     search(v) { query = v; renderList(); },
     open(id) { openId = id; editing = null; modal().classList.add('open'); renderSheet(); },
     close() { openId = null; editing = null; const m = document.getElementById('crm-modal'); if (m) m.classList.remove('open'); },

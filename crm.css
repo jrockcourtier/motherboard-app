@@ -162,3 +162,6 @@ body[data-tab="mois"] .mini-calendar, body[data-tab="mois"] .stats-grid { displa
 .crm-links a + a { color: #B34700; background: #FFF1E6; border-color: #FFD9BF; }
 .dial-links { width: 100%; }
 .mb-toast { z-index: 300 !important; }
+
+/* carte de contact pour l'iPhone */
+.crm-vcard { display: block; width: 100%; margin: 8px 0 2px; padding: 10px; border: 1px solid var(--border-light); background: var(--white); border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; color: var(--text-primary); }

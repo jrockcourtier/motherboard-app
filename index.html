@@ -477,6 +477,14 @@
     .f-check { flex-direction: row !important; align-items: center; gap: 6px !important; text-transform: none !important; font-size: 14px !important; padding-bottom: 10px; color: var(--text-primary) !important; font-weight: 500 !important; }
     .f-msg { margin-top: 12px; font-size: 13px; color: var(--urgent); }
     .tg-day { cursor: copy; }
+    .f-hint { font-weight: 500; text-transform: none; color: var(--text-secondary); font-size: 11px; }
+    .guest-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+    .guest-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--light-bg); border: 1px solid var(--border-light); border-radius: 14px; padding: 5px 6px 5px 10px; font-size: 12px; font-weight: 600; }
+    .guest-chip button { border: 0; background: none; cursor: pointer; font-size: 12px; color: var(--text-secondary); }
+    .guest-sugg button { border: 1px dashed var(--primary-gold); background: #FFFBEA; border-radius: 14px; padding: 6px 10px; font-size: 12px; font-weight: 600; cursor: pointer; margin: 2px 0 6px; }
+    .guest-row { display: flex; gap: 6px; margin-bottom: 10px; }
+    .guest-row input { flex: 1; min-width: 0; font-size: 16px; padding: 10px; border: 1px solid var(--border-light); border-radius: 8px; }
+    .guest-row button { border: 0; background: var(--primary-dark); color: var(--primary-gold); border-radius: 8px; padding: 0 12px; font-weight: 700; cursor: pointer; }
     .tg-jour { height: 62vh; min-height: 320px; margin-top: 6px; border-radius: 8px; border: 1px solid var(--border-light); }
     .tg-jour .tg-ev-title { font-size: 12px; }
     .tg-ev { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: pan-x pan-y; }
@@ -666,7 +674,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v13.12</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v14</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -699,7 +707,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v13.12';
+    const APP_VERSION = 'v14';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -1542,7 +1550,9 @@
       const cals = writableCals.length ? writableCals : [{ id: 'primary', name: 'jrockcourtier@gmail.com', primary: true }];
       sel.innerHTML = cals.map(c => `<option value="${esc(c.id)}">${esc(c.primary ? c.name + ' (principal)' : c.name)}</option>`).join('');
       const last = load('mb_lastcal'); if (last && cals.some(c => c.id === last)) sel.value = last;
+      formGuests = []; f.guest.value = '';
       setFormType('reunion'); setFormDur(60); setFormColor(null); toggleAllDay();
+      setTimeout(renderGuests, 0);
       document.getElementById('add-msg').textContent = !canWrite ? 'Pour ajouter des rendez-vous, Google doit vous donner une permission de plus. Touchez « Autoriser ».' : '';
       document.getElementById('add-auth').style.display = canWrite ? 'none' : 'block';
       document.getElementById('add-modal').classList.add('open');
@@ -1560,6 +1570,56 @@
     function setFormDur(m) {
       formDur = m;
       document.querySelectorAll('#add-durs button').forEach(b => b.classList.toggle('on', +b.dataset.m === m));
+      syncEndFromStart();
+    }
+    // heure de fin : toujours = début + durée ; la modifier change la durée
+    const toMin = (v) => { const m = /^(\d{1,2}):(\d{2})/.exec(v || ''); return m ? +m[1] * 60 + +m[2] : null; };
+    const fromMin = (n) => { n = ((n % 1440) + 1440) % 1440; return `${pad(Math.floor(n / 60))}:${pad(n % 60)}`; };
+    function syncEndFromStart() {
+      const f = document.getElementById('add-form'); if (!f || !f.endtime) return;
+      const st = toMin(f.time.value); if (st == null) return;
+      f.endtime.value = fromMin(st + formDur);
+    }
+    function syncDurFromEnd() {
+      const f = document.getElementById('add-form');
+      const st = toMin(f.time.value), en = toMin(f.endtime.value); if (st == null || en == null) return;
+      let d = en - st; if (d <= 0) d += 1440;          // fin après minuit
+      formDur = d;
+      document.querySelectorAll('#add-durs button').forEach(b => b.classList.toggle('on', +b.dataset.m === d));
+    }
+    // ===== invités =====
+    let formGuests = [];
+    const EMAIL_RX = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+    function crmWithEmail() { return window.CRM && CRM._all ? Object.values(CRM._all()).filter(c => !c.deleted && c.email && EMAIL_RX.test(c.email)) : []; }
+    function addGuest(v) {
+      const f = document.getElementById('add-form'), inp = f.guest;
+      v = String(v || '').trim().replace(/[,;]+$/, '');
+      if (!v) return;
+      let email = (v.match(/<([^>]+)>/) || [])[1] || v;
+      if (!EMAIL_RX.test(email)) {
+        const low = v.toLowerCase();
+        const c = crmWithEmail().find(k => k.name.toLowerCase() === low) || crmWithEmail().find(k => k.name.toLowerCase().includes(low));
+        if (c) email = c.email;
+      }
+      const msg = document.getElementById('add-msg');
+      if (!EMAIL_RX.test(email)) { msg.textContent = `« ${v} » n'est pas un courriel (et aucun contact avec courriel ne porte ce nom).`; return; }
+      email = email.toLowerCase();
+      if (!formGuests.includes(email)) formGuests.push(email);
+      inp.value = ''; msg.textContent = '';
+      renderGuests();
+    }
+    function removeGuest(i) { formGuests.splice(i, 1); renderGuests(); }
+    function renderGuests() {
+      const box = document.getElementById('add-guests'); if (!box) return;
+      const byMail = {}; crmWithEmail().forEach(c => byMail[c.email.toLowerCase()] = c.name);
+      box.innerHTML = formGuests.map((g, i) => `<span class="guest-chip">👤 ${esc(byMail[g] ? byMail[g] + ' · ' + g : g)}<button type="button" onclick="removeGuest(${i})" aria-label="Retirer">✕</button></span>`).join('');
+      // suggestion : le client lié au rendez-vous
+      const sug = document.getElementById('add-guest-sugg');
+      const c = window.pendingContactId && window.CRM && CRM._all ? CRM._all()[window.pendingContactId] : null;
+      sug.innerHTML = c && c.email && EMAIL_RX.test(c.email) && !formGuests.includes(c.email.toLowerCase())
+        ? `<button type="button" onclick="addGuest('${esc(c.email)}')">+ Inviter ${esc(c.name)} (${esc(c.email)})</button>` : '';
+      const dl = document.getElementById('guest-list');
+      if (dl) dl.innerHTML = crmWithEmail().map(k => `<option value="${esc(k.name)} <${esc(k.email)}>"></option>`).join('');
     }
     function toggleAllDay() {
       const ad = document.querySelector('#add-form [name=allday]').checked;
@@ -1580,6 +1640,9 @@
         colorId: formColor ? COLORS[formColor].g : GCOLORS[formType],
         extendedProperties: { private: Object.assign({ mbType: formType }, formColor ? { mbColor: formColor } : {}, window.pendingContactId ? { mbContact: window.pendingContactId } : {}) }
       };
+      if (f.guest.value.trim()) addGuest(f.guest.value);   // courriel tapé mais pas encore ajouté
+      if (f.guest.value.trim()) return;                       // courriel invalide : on n'enregistre pas
+      if (formGuests.length) body.attendees = formGuests.map(email => ({ email }));
       if (allDay) {
         const d = new Date(date + 'T00:00:00');
         body.start = { date }; body.end = { date: ymd(addDays(d, 1)) };
@@ -1594,7 +1657,7 @@
       const btn = document.getElementById('add-save');
       btn.disabled = true; btn.textContent = 'Enregistrement…';
       try {
-        const send = () => fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`, {
+        const send = () => fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events${formGuests.length ? '?sendUpdates=all' : ''}`, {
           method: 'POST', headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' }, body: JSON.stringify(body)
         });
         let r = await send();
@@ -1614,6 +1677,7 @@
         closeAddForm();
         selectDate(new Date(date + 'T00:00:00'));
         setStatus('Rendez-vous ajouté ✓');
+        if (formGuests.length && typeof toast === 'function') toast(`✉️ Invitation envoyée à ${formGuests.length} invité${formGuests.length > 1 ? 's' : ''}`);
         setTimeout(() => ensureLoaded(true), 1500);
       } catch (err) {
         msg.textContent = 'Erreur : ' + err.message + '. Réessayez.';
@@ -1697,7 +1761,7 @@
       </div>
       <div class="f-row"><label>Date<input type="date" name="date"></label><label class="f-check"><input type="checkbox" name="allday" onchange="toggleAllDay()"> Toute la journée</label></div>
       <div id="add-timerow">
-        <div class="f-row"><label>Heure<input type="time" name="time" step="900"></label></div>
+        <div class="f-row"><label>Début<input type="time" name="time" step="300" oninput="syncEndFromStart()"></label><label>Fin<input type="time" name="endtime" step="300" oninput="syncDurFromEnd()"></label></div>
         <div class="f-label">Durée</div>
         <div class="chips" id="add-durs">
           <button type="button" data-m="15" onclick="setFormDur(15)">15 min</button><button type="button" data-m="30" onclick="setFormDur(30)">30 min</button>
@@ -1705,6 +1769,11 @@
           <button type="button" data-m="90" onclick="setFormDur(90)">1 h 30</button><button type="button" data-m="120" onclick="setFormDur(120)">2 h</button>
         </div>
       </div>
+      <div class="f-label">Invités <span class="f-hint">(Google leur envoie l'invitation)</span></div>
+      <div id="add-guests" class="guest-chips"></div>
+      <div id="add-guest-sugg" class="guest-sugg"></div>
+      <div class="guest-row"><input name="guest" list="guest-list" placeholder="Courriel ou nom d'un contact" autocomplete="off" autocapitalize="off" inputmode="email" onkeydown="if(event.key==='Enter'||event.key===','){event.preventDefault();addGuest(this.value)}" onchange="if(/@|\S\s\S/.test(this.value))addGuest(this.value)"><button type="button" onclick="addGuest(document.querySelector('#add-form [name=guest]').value)">+ Inviter</button></div>
+      <datalist id="guest-list"></datalist>
       <label class="f-block">Adresse / lieu<input name="location" placeholder="Optionnel" autocomplete="off"></label>
       <label class="f-block">Notes<textarea name="notes" rows="2" placeholder="Optionnel"></textarea></label>
       <label class="f-block">Agenda<select name="cal"></select></label>
