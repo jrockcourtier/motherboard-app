@@ -304,3 +304,14 @@ body.pr-dossier-open .fab, body.pr-dossier-open .fab-mic { display: none !import
 .pr-done { font-weight: 700; }
 .pr-card.next { border: 2px solid #0b8043; box-shadow: 0 0 0 3px rgba(11,128,67,.12); }
 .pr-next { background: #0b8043; color: #fff; font-size: 10.5px; font-weight: 800; padding: 1px 6px; border-radius: 6px; margin-right: 4px; white-space: nowrap; }
+
+/* v15.8 — horaire de rappels */
+.pr-plan { margin-left: auto; border: 1px solid var(--border-light); background: var(--white); border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--text-secondary); }
+.pr-stats { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.pr-days { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 14px; }
+.pr-days label { cursor: pointer; }
+.pr-days input { display: none; }
+.pr-days span { display: inline-block; min-width: 46px; text-align: center; padding: 8px 6px; border-radius: 10px; border: 1.5px solid var(--border-light); font-weight: 700; }
+.pr-days input:checked + span { background: #0b8043; border-color: #0b8043; color: #fff; }
+.pr-hours { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.pr-hours select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border-light); font-size: 15px; }

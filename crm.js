@@ -72,7 +72,24 @@
   const e = (s) => (typeof esc === 'function' ? esc(s) : String(s || ''));
   const todayStr = () => ymdC(new Date());
   function ymdC(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
-  function addDaysStr(n) { const d = new Date(); d.setDate(d.getDate() + n); return ymdC(d); }
+  // ---------- horaire d'appels : jours permis + bloc fixe (rappels automatiques seulement) ----------
+  const CP_DEF = { days: [1, 2, 3, 4, 5], start: 600, end: 720 };
+  function callPlan() { try { const p = JSON.parse(localStorage.getItem('mb_callplan') || 'null'); return Object.assign({}, CP_DEF, p || {}); } catch (x) { return Object.assign({}, CP_DEF); } }
+  function setCallPlan(p) { try { localStorage.setItem('mb_callplan', JSON.stringify(Object.assign(callPlan(), p))); } catch (x) {} }
+  function callDay(ymd) {
+    const p = callPlan(); if (!p.days.length || p.days.length === 7) return ymd;
+    const d = new Date(ymd + 'T12:00:00');
+    for (let i = 0; i < 7 && !p.days.includes(d.getDay()); i++) d.setDate(d.getDate() + 1);
+    return ymdC(d);
+  }
+  // créneau libre de 15 min dans le bloc d'appels pour ce jour-là (minutes depuis minuit)
+  function callSlot(ymd) {
+    const p = callPlan(); let n = 0;
+    try { (typeof events !== 'undefined' ? events : []).forEach(ev => { if (ev.allDay || ymdC(ev.start) !== ymd) return; const m = ev.start.getHours() * 60 + ev.start.getMinutes(); if (m >= p.start && m < p.end && (ev.type === 'suivi' || /^📱 Rappeler/.test(ev.title || ''))) n++; }); } catch (x) {}
+    const m = p.start + 15 * n; return m < p.end ? m : Math.max(p.start, p.end - 15);
+  }
+  // rappels automatiques (2 j, 3 j, 1 sem…) : jamais un jour non permis ; une date choisie à la main reste telle quelle
+  function addDaysStr(n) { const d = new Date(); d.setDate(d.getDate() + n); return n > 0 ? callDay(ymdC(d)) : ymdC(d); }
   function fmtDate(s) {
     if (!s) return '';
     const d = new Date(s.length === 10 ? s + 'T12:00:00' : s);
@@ -148,6 +165,13 @@
         else if (pending.has(it.id) && (theirs.updatedAt || '') > (mine.updatedAt || '')) { contacts[it.id] = theirs; pending.delete(it.id); }
       });
       persist(); setSync('ok');
+      try {
+        if (!localStorage.getItem('mb_cp_mig1')) {
+          const t = todayStr();
+          Object.values(contacts).forEach(c => { if (!c.deleted && c.type === 'proprio' && c.nextFollowUp && c.nextFollowUp > t) { const d = callDay(c.nextFollowUp); if (d !== c.nextFollowUp) { c.nextFollowUp = d; c.updatedAt = new Date().toISOString(); pending.add(c.id); } } });
+          localStorage.setItem('mb_cp_mig1', 'contacts'); persist();
+        }
+      } catch (x) {}
       renderList(); if (openId) renderSheet(); refreshJour();
       flush();
     } catch (err) { setSync('offline'); }
@@ -411,8 +435,7 @@
       const wantCal = !none && document.getElementById('crm-cal') && document.getElementById('crm-cal').checked;
       c.nextFollowUp = none ? '' : addDaysStr(days); save(c);
       if (wantCal && window.VoiceCRM && VoiceCRM.reminder) {
-        const d = new Date(); d.setDate(d.getDate() + days);
-        const r = await VoiceCRM.reminder(c, { date: d, start: null }).catch(() => 'error');
+        const r = await VoiceCRM.reminder(c, { date: new Date(c.nextFollowUp + 'T12:00:00'), start: callSlot(c.nextFollowUp) }).catch(() => 'error');
         if (typeof toast === 'function') toast(r === 'ok' ? '📅 Rappel ajouté à votre agenda' : "Suivi enregistré (l'agenda n'a pas pu être mis à jour)");
       }
       if (after) after.innerHTML = '';
@@ -426,6 +449,21 @@
     dueIds() { return list().filter(c => !c.dnc && isDue(c) && c.phone).map(c => c.id); },
     _out: OUT,
     _stats: () => stats(),
+    callPlan, setCallPlan, callDay, callSlot,
+    // une seule fois : les rappels de prospection déjà prévus un jour non permis passent au prochain jour d'appels
+    _migrateCal(evs, move) {
+      try { if (localStorage.getItem('mb_cp_mig_cal')) return; } catch (x) { return; }
+      const p = callPlan(), now = new Date(); let moved = 0;
+      (evs || []).forEach(ev => {
+        const c = ev.contactId && contacts[ev.contactId];
+        if (!c || c.type !== 'proprio' || ev.allDay || ev.start < now || p.days.includes(ev.start.getDay()) || !/^📱 Rappeler/.test(ev.title || '')) return;
+        const day = callDay(ymdC(ev.start)), m = callSlot(day);
+        const ns = new Date(day + 'T00:00:00'); ns.setHours(Math.floor(m / 60), m % 60, 0, 0);
+        move(ev, ns, new Date(ns.getTime() + (ev.end - ev.start)), { silent: true, keepView: true }); moved++;
+      });
+      try { localStorage.setItem('mb_cp_mig_cal', '1'); } catch (x) {}
+      if (moved && typeof toast === 'function') toast(`📅 ${moved} rappel${moved > 1 ? 's' : ''} du week-end déplacé${moved > 1 ? 's' : ''} au prochain jour d'appels (${String(Math.floor(p.start / 60))} h)`);
+    },
     // fiche contact → carte vCard : l'iPhone (ou le Mac) propose « Créer un contact »
     vcard(id) {
       const c = contacts[id || openId]; if (!c) return;
@@ -576,7 +614,7 @@
       const c = contacts[this.q[this.i]];
       const wantCal = !none && document.getElementById('dial-cal') && document.getElementById('dial-cal').checked;
       c.nextFollowUp = none ? '' : addDaysStr(days); save(c);
-      if (wantCal && window.VoiceCRM && VoiceCRM.reminder) { const d = new Date(); d.setDate(d.getDate() + days); VoiceCRM.reminder(c, { date: d, start: null }).catch(() => {}); }
+      if (wantCal && window.VoiceCRM && VoiceCRM.reminder) VoiceCRM.reminder(c, { date: new Date(c.nextFollowUp + 'T12:00:00'), start: callSlot(c.nextFollowUp) }).catch(() => {});
       this.next();
     },
     pauseFor(c) {

@@ -709,7 +709,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v15.7';
+    const APP_VERSION = 'v15.8';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -913,6 +913,7 @@
         events = await fetchRange(need.start, need.end);
         loadedRange = need;
         store('mb_cache', events.map(e => ({ ...e, start: e.start.getTime(), end: e.end.getTime() })));
+        try { if (window.CRM && CRM._migrateCal && Object.keys(CRM._all()).length) CRM._migrateCal(events, moveEvent); } catch (x) {}
         setStatus(calErrors.length ? `⚠️ Calendrier non lu : ${calErrors.join(', ')} — vérifiez le partage` : `À jour · ${hhmm(new Date())} · ${loadedCals.length} calendrier(s)`, calErrors.length > 0); if (calErrors.length) console.warn('Calendriers en erreur', calErrors);
       } catch (err) {
         setStatus(err.message === 'expired' ? 'Session Google expirée — touchez « Reconnecter Google »' : 'Erreur : ' + err.message, true);

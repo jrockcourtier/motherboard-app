@@ -443,12 +443,45 @@
     toastMsg(`${OUTL[k]} — ${c.nextFollowUp ? 'rappel le ' + fmtD(c.nextFollowUp) : 'archivé'} <button onclick="CRM.undoCall('${c.id}')">Annuler</button>`);
   }
   const addDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-  function followDate(v) { if (!v) return; const d = Math.round((new Date(v + 'T12:00:00') - new Date(today() + 'T12:00:00')) / 864e5); follow(d); }
-  function follow(days) {
+  // ---------- horaire d'appels ----------
+  const JOURS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+  const hm = (m) => `${Math.floor(m / 60)} h${m % 60 ? String(m % 60).padStart(2, '0') : ''}`;
+  function daysLabel(d) {
+    const s = [...d].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
+    const run = s.length > 2 && s.every((x, i) => i === 0 || (x - s[i - 1] + 7) % 7 === 1);
+    return !s.length || s.length === 7 ? 'tous les jours' : run ? `${JOURS[s[0]].toLowerCase()}–${JOURS[s[s.length - 1]].toLowerCase()}` : s.map(x => JOURS[x].toLowerCase()).join(', ');
+  }
+  function planChip() {
+    if (!window.CRM || !CRM.callPlan) return '';
+    const p = CRM.callPlan();
+    return `<button class="pr-plan" onclick="Prospect.plan()" title="Jours et heures où tombent tes rappels automatiques">🕙 Rappels : ${daysLabel(p.days)} · ${hm(p.start)}–${hm(p.end)} ⚙️</button>`;
+  }
+  function plan() {
+    const p = CRM.callPlan(), box = modal().querySelector('.sheet');
+    const opts = (sel) => Array.from({ length: 29 }, (_, i) => 420 + i * 30).map(m => `<option value="${m}" ${m === sel ? 'selected' : ''}>${hm(m)}</option>`).join('');
+    box.innerHTML = `
+      <div class="sheet-head"><button type="button" class="sheet-x" onclick="Prospect.closeModal()">✕</button><b>Horaire de rappels</b><button class="sheet-save" onclick="Prospect.savePlan()">Enregistrer</button></div>
+      <div class="f-label">Jours où tes rappels automatiques peuvent tomber</div>
+      <div class="pr-days">${[1, 2, 3, 4, 5, 6, 0].map(d => `<label><input type="checkbox" value="${d}" ${p.days.includes(d) ? 'checked' : ''}><span>${JOURS[d]}</span></label>`).join('')}</div>
+      <div class="f-label">Bloc d'appels</div>
+      <div class="pr-hours">de <select id="pr-h1">${opts(p.start)}</select> à <select id="pr-h2">${opts(p.end)}</select></div>
+      <div class="crm-muted" style="margin-top:12px;line-height:1.45">Les rappels « 3 jours », « 1 sem », « pas de réponse »… tombent au prochain jour coché, dans ce bloc, aux 15 min (10 h, 10 h 15, 10 h 30…).<br>Si tu choisis toi-même une date dans le calendrier 📅 (un samedi par exemple), elle est respectée telle quelle.</div>`;
+    modal().classList.add('open');
+  }
+  function savePlan() {
+    const days = [...document.querySelectorAll('.pr-days input:checked')].map(i => +i.value);
+    let a = +document.getElementById('pr-h1').value, b = +document.getElementById('pr-h2').value; if (b <= a) b = a + 60;
+    if (!days.length) { toastMsg('Coche au moins un jour.'); return; }
+    CRM.setCallPlan({ days, start: a, end: b }); closeModal(); render();
+    toastMsg(`🕙 Rappels : ${daysLabel(days)} · ${hm(a)}–${hm(b)}`);
+  }
+  function followDate(v) { if (!v) return; follow(0, v); }
+  // chips (3 j, 1 sem…) : prochain jour d'appels permis ; date choisie dans le calendrier : respectée telle quelle (week-end compris)
+  function follow(days, exact) {
     const c = CRM._all()[cur]; if (!c) return;
-    c.nextFollowUp = addDays(days); CRM.upsert(c);
+    c.nextFollowUp = exact || (CRM.callDay ? CRM.callDay(addDays(days)) : addDays(days)); CRM.upsert(c);
     const cal = document.getElementById('pd-cal');
-    if (cal && cal.checked && window.VoiceCRM && VoiceCRM.reminder) { const d = new Date(); d.setDate(d.getDate() + days); VoiceCRM.reminder(c, { date: d, start: null }).catch(() => {}); }
+    if (cal && cal.checked && window.VoiceCRM && VoiceCRM.reminder) VoiceCRM.reminder(c, { date: new Date(c.nextFollowUp + 'T12:00:00'), start: CRM.callSlot ? CRM.callSlot(c.nextFollowUp) : null }).catch(() => {});
     document.getElementById('pd-after').innerHTML = '';
     toastMsg(`💬 Parlé — rappel le ${fmtD(c.nextFollowUp)}`);
   }
@@ -490,7 +523,7 @@
           <b>Glisse ici tes PDF DuProprio</b> (ou touche « Importer des PDF »)<br>
           <span class="crm-muted">Sur l'ordi : ouvre ton dossier <i>Fiche prospection › Sud-Ouest</i>, sélectionne tout (⌘A) et glisse les fichiers ici. L'app lit le prix, l'adresse, le téléphone et la photo de chaque fiche, et crée ta liste dans l'ordre de tes numéros.</span>
         </div>` : `
-      ${st ? `<div class="pr-stats"><span><b>${st.d.calls}</b> appels aujourd'hui</span><span><b>${st.d.conv}</b> conversations</span><span><b>${st.d.rdv}</b> RDV</span></div>` : ''}
+      ${st ? `<div class="pr-stats"><span><b>${st.d.calls}</b> appels aujourd'hui</span><span><b>${st.d.conv}</b> conversations</span><span><b>${st.d.rdv}</b> RDV</span>${planChip()}</div>` : ''}
       <div class="crm-filters pr-cols">${COLS.map(([k, l]) => `<button class="${col === k && !q ? 'on' : ''}" onclick="Prospect.col('${k}')">${l} ${by[k].length}${k === 'suivi' && due ? ` <span class="pr-due">${due} à rappeler</span>` : ''}</button>`).join('')}</div>
       <div class="pr-searchrow"><input class="crm-search" type="search" placeholder="🔍 Adresse, numéro, nom…" value="${e(q)}" oninput="Prospect.search(this.value)"></div>
       ${callable.length ? `<button class="crm-dial" onclick="Prospect.dial()">▶ Appeler ${col === 'suivi' ? 'les rappels dus' : 'la liste'} (${callable.length})</button>` : ''}
@@ -533,7 +566,7 @@
   function changed() { clearTimeout(rt); rt = setTimeout(() => { if (cur) { renderFiche(false); return; } const r = document.getElementById('prospection'); if (r && r.classList.contains('active')) render(); }, 150); }
 
   window.Prospect = {
-    offer, toContact,
+    offer, toContact, plan, savePlan,
     render, changed, thumb, thumbHtml, importFiles, confirmImport, closeModal, pick, dial, _parse: parseText,
     open: openFiche, close: closeFiche, step, typed, quick, set, out, follow, followDate, big,
     pane(k) { pane = k; const g = document.querySelector('#pr-dossier .pd-grid'); if (g) g.className = 'pd-grid pane-' + k; document.querySelectorAll('#pr-dossier .pd-tabs button').forEach(b => b.classList.toggle('on', b.getAttribute('onclick').includes("'" + k + "'"))); },
