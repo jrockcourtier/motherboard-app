@@ -10,6 +10,23 @@
     proprio:  { label: 'Proprio',  color: '#00796B', stages: ['À appeler', 'Appelé – rappeler', 'Intéressé', 'Rendez-vous', 'Signé', 'Pas intéressé', 'Injoignable'] },
     client:   { label: 'Client',   color: '#D4AF37', stages: ['Actif', 'Client passé'] }
   };
+  // catégorie affichée : un proprio DuProprio devient « Vendeur potentiel » dès qu'on lui a parlé, puis « Vendeur » une fois signé
+  const CATS = { vpot: { label: 'Vendeur potentiel', color: '#C2185B' } };
+  function cat(c) {
+    if (c.type !== 'proprio') return c.type;
+    const st = c.stage || 'À appeler';
+    if (st === 'Signé' || st === 'Converti en vendeur') return 'vendeur';
+    if (st === 'Pas intéressé' || st === 'Injoignable') return 'proprio';
+    if (c.isContact || st === 'Intéressé' || st === 'Rendez-vous' || (c.calls || []).some(k => OUT[k.outcome] && OUT[k.outcome].conv)) return 'vpot';
+    return 'proprio';
+  }
+  function catInfo(c) { const k = cat(c); return CATS[k] || TYPES_C[k] || TYPES_C.client; }
+  // nom affiché : « POT-Valérie - 418-100 rue Murray » pour les proprios dont on connaît le prénom
+  function dname(c) {
+    const o = String(c.owner || '').trim();
+    if (c.type !== 'proprio' || !o) return c.name || '';
+    return (cat(c) === 'vendeur' ? '' : 'POT-') + o + ' - ' + c.name;
+  }
   const OUT = {
     pas_reponse:   { l: 'Pas de réponse', i: '📵', conv: false, days: 2 },
     message:       { l: 'Message laissé', i: '📨', conv: false, days: 3 },
@@ -42,7 +59,7 @@
     }));
     return s;
   }
-  const FILTERS = [['tous', 'Tous'], ['acheteur', 'Acheteurs'], ['vendeur', 'Vendeurs'], ['proprio', 'Proprios'], ['client', 'Clients']];
+  const FILTERS = [['tous', 'Tous'], ['acheteur', 'Acheteurs'], ['vpot', 'Vendeurs potentiels'], ['vendeur', 'Vendeurs'], ['proprio', 'Proprios']];
 
   let contacts = {};                 // id -> contact
   let pending = new Set();           // ids à envoyer au serveur
@@ -153,19 +170,19 @@
     const all = list();
     const sm = (SMART.find(x => x[0] === smart) || SMART[0])[2];
     // les fiches DuProprio pas encore appelées restent dans l'onglet Prospection (sinon la liste de contacts déborde)
-    const rows = all.filter(c => !(filter === 'tous' && !q && c.plist && !c.isContact && (c.stage || 'À appeler') === 'À appeler') && sm(c) && (filter === 'tous' || c.type === filter) &&
-      (!q || [c.name, c.phone, c.email, c.address, c.neighborhoods, c.stage].join(' ').toLowerCase().includes(q)));
+    const rows = all.filter(c => !(filter === 'tous' && !q && c.plist && !c.isContact && (c.stage || 'À appeler') === 'À appeler') && sm(c) && (filter === 'tous' || cat(c) === filter) &&
+      (!q || [c.name, c.owner, c.phone, c.email, c.address, c.neighborhoods, c.stage].join(' ').toLowerCase().includes(q)));
     const due = rows.filter(c => isDue(c)).sort((a, b) => a.nextFollowUp.localeCompare(b.nextFollowUp));
     const rest = rows.filter(c => !isDue(c)).sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
-    const counts = {}; all.forEach(c => counts[c.type] = (counts[c.type] || 0) + 1);
+    const counts = {}; all.forEach(c => { const k = cat(c); counts[k] = (counts[k] || 0) + 1; });
 
     const card = (c) => {
-      const t = TYPES_C[c.type] || TYPES_C.client;
+      const t = catInfo(c);
       const fu = c.nextFollowUp ? `<span class="crm-fu ${isDue(c) ? 'due' : ''}">🔔 ${c.nextFollowUp === todayStr() ? "Aujourd'hui" : fmtDate(c.nextFollowUp)}</span>` : '';
       return `<div class="crm-card" onclick="CRM.open('${c.id}')">
-        <div class="crm-av" style="background:${t.color}">${e(initials(c.name))}</div>
+        <div class="crm-av" style="background:${t.color}">${e(initials(c.owner && c.type === 'proprio' ? c.owner : c.name))}</div>
         <div class="crm-main">
-          <div class="crm-name">${e(c.name)}</div>
+          <div class="crm-name">${e(dname(c))}</div>
           <div class="crm-sub"><span class="crm-badge" style="color:${t.color};border-color:${t.color}">${t.label}</span> ${e(c.stage || '')}</div>
           <div class="crm-sub2">${c.dnc ? '⛔ Ne pas appeler · ' : ''}${c.phone ? '📞 ' + e(c.phone) : ''}${lastCall(c) ? ` · ${OUT[lastCall(c).outcome].i} ${OUT[lastCall(c).outcome].l.toLowerCase()} ${ago(lastCall(c).at)}` : c.lastContact ? ` · dernier contact ${ago(c.lastContact)}` : ''}</div>
         </div>
@@ -234,7 +251,7 @@
     const c = contacts[openId];
     const sh = $('#crm-sheet');
     if (!c || !sh) return;
-    const t = TYPES_C[c.type] || TYPES_C.client;
+    const t = catInfo(c);
     const info = [
       ['Courriel', c.email ? `<a href="mailto:${e(c.email)}">${e(c.email)}</a>` : ''],
       ['Propriétaire', c.owner ? e(c.owner) : ''],
@@ -258,8 +275,8 @@
     const fuBtn = (n, l) => `<button onclick="CRM.followUp(${n === null ? 'null' : `'${addDaysStr(n)}'`})">${l}</button>`;
 
     sh.innerHTML = `
-      <div class="sheet-head"><button type="button" class="sheet-x" onclick="CRM.close()">✕</button><b>${e(c.name)}</b><span class="sheet-acts"><button type="button" class="sheet-trash" onclick="CRM.askDelete(true)" title="Supprimer ce contact" aria-label="Supprimer ce contact">🗑</button><button class="sheet-save" onclick="CRM.edit('${c.id}')">Modifier</button></span></div>
-      <div class="crm-hero"><div class="crm-av big" style="background:${t.color}">${e(initials(c.name))}</div>
+      <div class="sheet-head"><button type="button" class="sheet-x" onclick="CRM.close()">✕</button><b>${e(dname(c))}</b><span class="sheet-acts"><button type="button" class="sheet-trash" onclick="CRM.askDelete(true)" title="Supprimer ce contact" aria-label="Supprimer ce contact">🗑</button><button class="sheet-save" onclick="CRM.edit('${c.id}')">Modifier</button></span></div>
+      <div class="crm-hero"><div class="crm-av big" style="background:${t.color}">${e(initials(c.owner && c.type === 'proprio' ? c.owner : c.name))}</div>
         <div><span class="crm-badge" style="color:${t.color};border-color:${t.color}">${t.label}</span>${c.phone ? `<div class="crm-phone">${e(c.phone)}</div>` : ''}</div></div>
       <div class="crm-actions">
         <a class="${c.phone ? '' : 'off'}" href="${c.phone ? telHref(c.phone) : '#'}" onclick="CRM.touch()">📞<span>Appeler</span></a>
@@ -273,7 +290,7 @@
       <button class="crm-vcard" onclick="CRM.vcard()">📇 Ajouter à mes contacts iPhone</button>
       ${callPanel(c)}
       <div class="f-label">Étape du dossier</div>
-      <div class="chips crm-stages">${t.stages.map(s => `<button class="${c.stage === s ? 'on' : ''}" onclick="CRM.stage(${JSON.stringify(s).replace(/"/g, '&quot;')})">${e(s)}</button>`).join('')}</div>
+      <div class="chips crm-stages">${(TYPES_C[c.type] || TYPES_C.client).stages.map(s => `<button class="${c.stage === s ? 'on' : ''}" onclick="CRM.stage(${JSON.stringify(s).replace(/"/g, '&quot;')})">${e(s)}</button>`).join('')}</div>
       <div class="f-label">Prochain suivi ${c.nextFollowUp ? `· <span class="${isDue(c) ? 'crm-due-txt' : ''}">${c.nextFollowUp === todayStr() ? "aujourd'hui" : fmtDate(c.nextFollowUp)}</span>` : '· aucun'}</div>
       <div class="chips">${fuBtn(0, "Aujourd'hui")}${fuBtn(1, '+1 j')}${fuBtn(3, '+3 j')}${fuBtn(7, '+1 sem')}${fuBtn(14, '+2 sem')}${fuBtn(30, '+1 mois')}${c.nextFollowUp ? fuBtn(null, '✓ Fait / aucun') : ''}
         <label class="crm-datepick">📅<input type="date" value="${c.nextFollowUp || ''}" onchange="CRM.followUp(this.value||null)"></label></div>
@@ -303,7 +320,7 @@
         <div class="sheet-head"><button type="button" class="sheet-x" onclick="CRM.cancelEdit()">✕</button><b>${contacts[c.id] ? 'Modifier le contact' : 'Nouveau contact'}</b><button type="submit" class="sheet-save">Enregistrer</button></div>
         <input name="name" class="f-title" placeholder="Nom complet" value="${e(c.name || '')}" autocomplete="off">
         <div class="f-label">Type</div>
-        <div class="chips">${Object.entries(TYPES_C).map(([k, v]) => `<button type="button" class="${c.type === k ? 'on' : ''}" onclick="CRM.setType('${k}')">${v.label}</button>`).join('')}</div>
+        <div class="chips">${Object.entries(TYPES_C).filter(([k]) => k !== 'client' || c.type === 'client').map(([k, v]) => `<button type="button" class="${c.type === k ? 'on' : ''}" onclick="CRM.setType('${k}')">${v.label}</button>`).join('')}</div>
         <label class="f-block">Étape<select name="stage">${t.stages.map(s => `<option ${c.stage === s ? 'selected' : ''}>${e(s)}</option>`).join('')}</select></label>
         ${fld('phone', 'Téléphone', '514 555-1234', 'tel', 'inputmode="tel"')}
         ${fld('email', 'Courriel', 'nom@exemple.com', 'email', 'inputmode="email"')}
@@ -405,7 +422,7 @@
       const k = c.calls.pop(); if (k && 'prevFu' in k) { c.nextFollowUp = k.prevFu; c.stage = k.prevStage || c.stage; } save(c); document.querySelectorAll('.mb-toast').forEach(x => x.remove());
     },
     delCall(callId) { const c = contacts[openId]; c.calls = (c.calls || []).filter(k => k.id !== callId); save(c); },
-    dial(ids) { Dialer.start(ids || (() => { const sm = (SMART.find(x => x[0] === smart) || SMART[0])[2]; return list().filter(c => sm(c) && (filter === 'tous' || c.type === filter) && c.phone && !c.dnc).sort((a, b) => (a.nextFollowUp || '9').localeCompare(b.nextFollowUp || '9')).map(c => c.id); })()); },
+    dial(ids) { Dialer.start(ids || (() => { const sm = (SMART.find(x => x[0] === smart) || SMART[0])[2]; return list().filter(c => sm(c) && (filter === 'tous' || cat(c) === filter) && c.phone && !c.dnc).sort((a, b) => (a.nextFollowUp || '9').localeCompare(b.nextFollowUp || '9')).map(c => c.id); })()); },
     dueIds() { return list().filter(c => !c.dnc && isDue(c) && c.phone).map(c => c.id); },
     _out: OUT,
     _stats: () => stats(),
