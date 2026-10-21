@@ -158,6 +158,7 @@
     if ((m = t.match(range))) { out.start = parseTime(m[1]); out.end = parseTime(m[2]); hide(m.index, m[0].length); }
     else if ((m = t.match(single1))) { out.start = parseTime(m[1]); hide(m.index, m[0].length); }
     else if ((m = t.match(single2))) { out.start = parseTime(m[1]); hide(m.index, m[0].length); }
+    if (out.start != null && out.end == null && (m = t.match(new RegExp(`(?:jusqu'a|jusqu'au|au plus tard a)\\s+${TIME_RX}`)))) { out.end = parseTime(m[1]); hide(m.index, m[0].length); if (out.end === 0) out.end = 1440; }
     if (out.start != null && out.end != null && out.end <= out.start && out.end + 720 > out.start) out.end += 720;
     // heure déjà passée aujourd'hui sans précision (« à 9 h » dit à 16 h) → le soir
     const isToday = !out.date || (out.date.getFullYear() === now.getFullYear() && out.date.getMonth() === now.getMonth() && out.date.getDate() === now.getDate());
@@ -169,6 +170,15 @@
     out.ambiguous = !!timeCtx.amb && out.start != null && !out.allDay;
     timeCtx = {};
     out.duration = out.end != null && out.start != null ? out.end - out.start : parseDuration(t);
+    // répétition : « tous les soirs », « chaque jour », « en semaine », « chaque semaine », « tous les mois »
+    const REP_RX = [['weekdays', /\b(?:en semaine|du lundi au vendredi|tous les jours de (?:la )?semaine|chaque jour de semaine)\b/], ['daily', /\b(?:tous les (?:jours|soirs|matins|midis)|chaque (?:jour|soir|matin|midi)|quotidien(?:nement)?)\b/],
+      ['weekly', /\b(?:toutes les semaines|chaque semaine|aux semaines|hebdomadaire|tous les (?:lundis|mardis|mercredis|jeudis|vendredis|samedis|dimanches)|chaque (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche))\b/], ['monthly', /\b(?:tous les mois|chaque mois|mensuel(?:lement)?)\b/]];
+    for (const [k, rx] of REP_RX) { const mm = t.match(rx); if (mm) { out.repeat = k; hide(mm.index, mm[0].length); break; } }
+    // rappel : « rappel à l'heure », « rappel 10 minutes avant », « avertis-moi 30 min avant »
+    if ((m = t.match(/\b(?:avec (?:un )?)?(?:rappel|alerte|notification|avertis-moi|previens-moi)\s+(?:a l'heure|au debut|(\d+|dix|quinze|trente|une)\s*(minutes?|min|heures?|h)\s+(?:avant|d'avance))/))) {
+      out.remind = m[1] ? ((/^\d+$/.test(m[1]) ? +m[1] : NOMBRES[m[1]]) * (/^h|heure/.test(m[2]) ? 60 : 1)) : 0;
+      hide(m.index, m[0].length);
+    }
     if (/toute la journee|journee complete/.test(t)) out.allDay = true;
 
     // couleur demandée : « en rouge », « mets-le en vert »…
@@ -467,6 +477,7 @@
       const date = p.date ? p.date.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' }) : '<i>date ? (aujourd\'hui par défaut)</i>';
       const time = p.allDay ? 'toute la journée' : p.start != null ? `${fmtMin(p.start)}${p.duration ? ' – ' + fmtMin(p.start + p.duration) : ''}` : '<i>heure ?</i>';
       box.innerHTML = line('Action', p.kind === 'task' ? '☐ Nouvelle tâche' : '📅 Nouveau rendez-vous') + line('Titre', esc(p.title)) + line('Quand', `${date} · ${time}`) + (p.ambiguous ? `<div class="ampm-row">${ampmChips(p.start, 'Voice.pm')}</div>` : '') +
+        (p.repeat ? line('Répéter', '🔁 ' + ({ daily: 'Chaque jour', weekdays: 'En semaine (lun–ven)', weekly: 'Chaque semaine', monthly: 'Chaque mois' })[p.repeat]) : '') + (p.remind != null ? line('Rappel', '🔔 ' + (p.remind ? (p.remind >= 60 ? p.remind / 60 + ' h' : p.remind + ' min') + ' avant' : "à l'heure")) : '') +
         (p.contact ? line('Client', '👤 ' + esc(p.contact.name)) : '') + (p.location ? line('Lieu', '📍 ' + esc(p.location)) : '') +
         (p.kind === 'task' ? '' : line('Catégorie', `${({ visite: '🏡 Visite', reunion: '💼 Rendez-vous', travail: '💻 Travail', suivi: '📱 Suivi', personnel: '🌿 Personnel', urgent: '‼️ Urgent' })[p.type] || p.type}${p.color ? ' · couleur ' + p.color.replace('lavande', 'mauve pâle').replace('paon', 'turquoise').replace('sauge', 'vert sauge') : ''}`));
       if (go) go.textContent = p.kind === 'task' ? 'Préparer la tâche' : 'Préparer le rendez-vous';
@@ -491,6 +502,8 @@
     if (typeof setFormColor === 'function') setFormColor(p.color || null);
     if (typeof setFormDur === 'function') setFormDur(p.duration && p.duration > 0 ? p.duration : p.kind === 'task' ? 30 : 60);
     window.pendingContactId = p.contact ? p.contact.id : null;
+    if (p.repeat && f.querySelector('[name=repeat]')) f.querySelector('[name=repeat]').value = p.repeat;
+    if (p.remind != null && f.querySelector('[name=remind]')) f.querySelector('[name=remind]').value = String(p.remind);
     const msg = document.getElementById('add-msg');
     if (msg && !msg.textContent) { msg.style.color = '#2E7D32'; msg.textContent = `🎤 Compris ! Vérifiez puis touchez « Enregistrer ».${p.start == null && !p.allDay ? ' (Heure non reconnue : 9 h par défaut.)' : ''}`; }
     setTimeout(() => { if (msg) msg.style.color = ''; }, 8000);

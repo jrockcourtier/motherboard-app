@@ -674,7 +674,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v14</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v14.1</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -707,7 +707,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v14';
+    const APP_VERSION = 'v14.1';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -1550,7 +1550,7 @@
       const cals = writableCals.length ? writableCals : [{ id: 'primary', name: 'jrockcourtier@gmail.com', primary: true }];
       sel.innerHTML = cals.map(c => `<option value="${esc(c.id)}">${esc(c.primary ? c.name + ' (principal)' : c.name)}</option>`).join('');
       const last = load('mb_lastcal'); if (last && cals.some(c => c.id === last)) sel.value = last;
-      formGuests = []; f.guest.value = '';
+      formGuests = []; f.guest.value = ''; f.repeat.value = ''; f.remind.value = '';
       setFormType('reunion'); setFormDur(60); setFormColor(null); toggleAllDay();
       setTimeout(renderGuests, 0);
       document.getElementById('add-msg').textContent = !canWrite ? 'Pour ajouter des rendez-vous, Google doit vous donner une permission de plus. Touchez « Autoriser ».' : '';
@@ -1643,6 +1643,9 @@
       if (f.guest.value.trim()) addGuest(f.guest.value);   // courriel tapé mais pas encore ajouté
       if (f.guest.value.trim()) return;                       // courriel invalide : on n'enregistre pas
       if (formGuests.length) body.attendees = formGuests.map(email => ({ email }));
+      const RR = { daily: 'RRULE:FREQ=DAILY', weekdays: 'RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', weekly: 'RRULE:FREQ=WEEKLY', monthly: 'RRULE:FREQ=MONTHLY' };
+      if (RR[f.repeat.value]) body.recurrence = [RR[f.repeat.value]];
+      if (f.remind.value !== '') body.reminders = { useDefault: false, overrides: [{ method: 'popup', minutes: +f.remind.value }] };
       if (allDay) {
         const d = new Date(date + 'T00:00:00');
         body.start = { date }; body.end = { date: ymd(addDays(d, 1)) };
@@ -1678,7 +1681,7 @@
         selectDate(new Date(date + 'T00:00:00'));
         setStatus('Rendez-vous ajouté ✓');
         if (formGuests.length && typeof toast === 'function') toast(`✉️ Invitation envoyée à ${formGuests.length} invité${formGuests.length > 1 ? 's' : ''}`);
-        setTimeout(() => ensureLoaded(true), 1500);
+        setTimeout(() => ensureLoaded(true), body.recurrence ? 300 : 1500);
       } catch (err) {
         msg.textContent = 'Erreur : ' + err.message + '. Réessayez.';
       } finally {
@@ -1774,6 +1777,8 @@
       <div id="add-guest-sugg" class="guest-sugg"></div>
       <div class="guest-row"><input name="guest" list="guest-list" placeholder="Courriel ou nom d'un contact" autocomplete="off" autocapitalize="off" inputmode="email" onkeydown="if(event.key==='Enter'||event.key===','){event.preventDefault();addGuest(this.value)}" onchange="if(/@|\S\s\S/.test(this.value))addGuest(this.value)"><button type="button" onclick="addGuest(document.querySelector('#add-form [name=guest]').value)">+ Inviter</button></div>
       <datalist id="guest-list"></datalist>
+      <div class="f-row"><label>Répéter<select name="repeat"><option value="">Jamais</option><option value="daily">Chaque jour</option><option value="weekdays">En semaine (lun–ven)</option><option value="weekly">Chaque semaine</option><option value="monthly">Chaque mois</option></select></label>
+        <label>Rappel<select name="remind"><option value="">Par défaut</option><option value="0">À l'heure</option><option value="10">10 min avant</option><option value="30">30 min avant</option><option value="60">1 h avant</option><option value="1440">1 jour avant</option></select></label></div>
       <label class="f-block">Adresse / lieu<input name="location" placeholder="Optionnel" autocomplete="off"></label>
       <label class="f-block">Notes<textarea name="notes" rows="2" placeholder="Optionnel"></textarea></label>
       <label class="f-block">Agenda<select name="cal"></select></label>
