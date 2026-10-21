@@ -353,6 +353,8 @@
   // ---------- API publique (onclick) ----------
   window.CRM = {
     upsert(c) { save(c); return c; },
+    focus(id) { openId = id; },
+    _timeline(id) { const c = contacts[id]; return c ? timeline(c, relatedEvents(c)) : ''; },
     newId: () => uuid(),
     types: TYPES_C,
     filter(k) { filter = k; renderList(); },

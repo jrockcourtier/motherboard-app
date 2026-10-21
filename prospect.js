@@ -134,7 +134,7 @@
     // nom du fichier : « Sud-Ouest 27 Sept 2026- 41.pdf » → liste « Sud-Ouest 27 Sept 2026 », fiche #41
     const fm = file.name.replace(/\.pdf$/i, '').match(/^(.*?)[\s_-]*(\d{1,3})$/);
     if (fm && fm[1].trim().length > 2) { info.list = fm[1].replace(/[\s_-]+$/, '').trim(); info.order = +fm[2]; }
-    info.file = file.name;
+    info.file = file.name; info._f = file;
     return info;
   }
 
@@ -180,7 +180,7 @@
     const known = {}; all().forEach(c => { if (c.listingNo) known[c.listingNo] = c; });
     // aussi les proprios déjà au CRM sans liste, par numéro
     if (window.CRM) Object.values(CRM._all()).forEach(c => { if (!c.deleted && c.listingNo && !known[c.listingNo]) known[c.listingNo] = c; });
-    const now = new Date().toISOString(), up = [];
+    const now = new Date().toISOString(), up = [], toUpload = [];
     let added = 0, updated = 0, order = Math.max(0, ...all().filter(c => c.plist === name).map(c => c.porder || 0));
     pendingImport.filter(r => !r.error && r.no).forEach(r => {
       const old = known[r.no];
@@ -191,6 +191,7 @@
         }
         if (r.phone && !old.phone) old.phone = r.phone;
         if (!old.plist) { old.plist = name; old.porder = r.order || ++order; old.importedAt = now; }
+        if (!old.hasPdf && r._f) toUpload.push([old, r._f]);
         CRM.upsert(old); updated++;
         if (r.thumb && !thumbs[old.id]) { thumbs[old.id] = r.thumb; up.push({ id: old.id, data: { t: r.thumb } }); }
         return;
@@ -203,13 +204,188 @@
         plist: name, porder: r.order || ++order, importedAt: now, source: 'DuProprio', firstContact: '', notes: [], calls: [], createdAt: now
       };
       CRM.upsert(c); added++;
+      if (r._f) toUpload.push([c, r._f]);
       if (r.thumb) { thumbs[id] = r.thumb; up.push({ id, data: { t: r.thumb } }); }
     });
     ls.set('mb_thumbs', thumbs);
     uploadThumbs(up);
+    uploadPdfs(toUpload);
     curList = name; ls.set('mb_plist', curList); col = 'appeler';
     closeModal(); render();
     toastMsg(`✅ ${added} fiche${added > 1 ? 's' : ''} ajoutée${added > 1 ? 's' : ''} à « ${name} »${updated ? ` · ${updated} mise${updated > 1 ? 's' : ''} à jour` : ''}`);
+  }
+
+
+  // ---------- copies des PDF : Supabase Storage (privé) + cache du navigateur ----------
+  const pdfMem = {};                       // id -> Blob (session en cours)
+  let upQueue = [], upBusy = false, upDone = 0, upTotal = 0;
+  function uploadPdfs(list) {
+    list.forEach(([c, f]) => { pdfMem[c.id] = f; upQueue.push([c.id, f]); });
+    upTotal += list.length; pumpUploads();
+  }
+  async function pumpUploads() {
+    if (upBusy) return; upBusy = true;
+    while (upQueue.length) {
+      const [id, f] = upQueue.shift();
+      try {
+        const r = await fetch('/api/pdf?id=' + id, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/pdf' }, body: f });
+        if (r.ok) { const c = CRM._all()[id]; if (c && !c.hasPdf) { c.hasPdf = true; CRM.upsert(c); } try { (await caches.open('mb-fiches')).put('/api/pdf?id=' + id, new Response(f, { headers: { 'Content-Type': 'application/pdf' } })); } catch (x) {} }
+      } catch (x) {}
+      upDone++; showUp();
+    }
+    upBusy = false; showUp();
+  }
+  function showUp() {
+    let el = document.getElementById('pr-upload');
+    if (!el) { el = document.createElement('div'); el.id = 'pr-upload'; el.className = 'pr-upload'; document.body.appendChild(el); }
+    if (upDone >= upTotal) { el.textContent = `☁️ ${upTotal} fiche${upTotal > 1 ? 's' : ''} PDF sauvegardée${upTotal > 1 ? 's' : ''}`; setTimeout(() => el.remove(), 3000); upDone = upTotal = 0; return; }
+    el.textContent = `☁️ Sauvegarde des PDF… ${upDone} / ${upTotal}`;
+  }
+  async function getPdf(id) {
+    if (pdfMem[id]) return pdfMem[id];
+    const url = '/api/pdf?id=' + id;
+    try { const cc = await caches.open('mb-fiches'); const hit = await cc.match(url); if (hit) return pdfMem[id] = await hit.blob(); } catch (x) {}
+    const r = await fetch(url, { credentials: 'same-origin' });
+    if (!r.ok) return null;
+    const b = await r.blob();
+    try { (await caches.open('mb-fiches')).put(url, new Response(b, { headers: { 'Content-Type': 'application/pdf' } })); } catch (x) {}
+    return pdfMem[id] = b;
+  }
+
+  // ---------- le dossier : PDF à gauche · propriété au centre · notes à droite ----------
+  let cur = null, order = [], pane = window.innerWidth < 900 ? 'prop' : 'notes', saveT = null;
+  const OUTS = [['pas_reponse', '📵', 'Pas de réponse'], ['message', '📨', 'Message'], ['parle', '💬', 'Parlé'], ['rdv', '📅', 'RDV'], ['pas_interesse', '🙅', 'Pas intéressé']];
+  const QUICK = [['Nom du proprio', 'Nom du proprio : '], ['Prix minimum', 'Prix minimum : '], ['Commission', 'Commission : '], ['Délai', 'Délai : '], ['Motivation', 'Motivation : '], ['Courtier ?', 'A déjà un courtier : ']];
+  function openFiche(id) {
+    const c = CRM._all()[id]; if (!c) return;
+    cur = id; CRM.focus(id);
+    const items = all().filter(k => k.plist === c.plist);
+    const inCol = items.filter(k => colOf(k) === colOf(c));
+    const list = (q ? items.filter(k => [k.name, k.address, k.owner, k.phone, k.listingNo].join(' ').toLowerCase().includes(q.toLowerCase())) : inCol);
+    order = list.sort((a, b) => (a.porder || 0) - (b.porder || 0)).map(k => k.id);
+    let m = document.getElementById('pr-dossier');
+    if (!m) { m = document.createElement('div'); m.id = 'pr-dossier'; m.className = 'pr-dossier'; document.body.appendChild(m); }
+    m.classList.add('open'); document.body.classList.add('pr-dossier-open');
+    renderFiche(true);
+  }
+  document.addEventListener('keydown', ev => { if (!cur || /INPUT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) return; if (ev.key === 'Escape') closeFiche(); if (ev.key === 'ArrowRight') step(1); if (ev.key === 'ArrowLeft') step(-1); });
+  function closeFiche() { const m = document.getElementById('pr-dossier'); if (m) m.classList.remove('open'); document.body.classList.remove('pr-dossier-open'); flushNote(); cur = null; render(); }
+  function step(d) { flushNote(); const i = order.indexOf(cur); const n = order[i + d]; if (n) openFiche(n); }
+  function renderFiche(full) {
+    const c = CRM._all()[cur]; const m = document.getElementById('pr-dossier'); if (!c || !m) return;
+    const i = order.indexOf(cur);
+    if (full) {
+      m.innerHTML = `
+        <div class="pd-top">
+          <button class="pd-x" onclick="Prospect.close()" aria-label="Fermer">✕</button>
+          <div class="pd-title"><b>${e(c.plist || 'Prospection')}</b><span>fiche #${e(c.porder || '')} · ${i + 1} / ${order.length}</span></div>
+          <div class="pd-nav"><button ${i <= 0 ? 'disabled' : ''} onclick="Prospect.step(-1)">‹ Précédente</button><button ${i >= order.length - 1 ? 'disabled' : ''} onclick="Prospect.step(1)">Suivante ›</button></div>
+        </div>
+        <div class="pd-tabs">${[['pdf', '📄 Fiche'], ['prop', '🏠 Propriété'], ['notes', '📝 Notes']].map(([k, l]) => `<button class="${pane === k ? 'on' : ''}" onclick="Prospect.pane('${k}')">${l}</button>`).join('')}</div>
+        <div class="pd-grid pane-${pane}">
+          <section class="pd-col pd-pdf"><div class="pd-pdfbar"><h4>📄 Fiche DuProprio complète</h4><button id="pd-big" onclick="Prospect.big()">Ouvrir en grand ↗</button></div><div class="pd-pages" id="pd-pages"><div class="crm-muted pd-wait">Chargement de la fiche…</div></div></section>
+          <section class="pd-col pd-prop" id="pd-prop"></section>
+          <section class="pd-col pd-notes">
+            <h4>📝 Notes de l'appel <span class="pd-saved" id="pd-saved">enregistré automatiquement</span></h4>
+            <textarea id="pd-note" placeholder="Écris tes notes pendant l'appel, comme dans OneNote…&#10;&#10;Ex. : Mathieu — minimum 750 k — 3 % — veut attendre 2 semaines" oninput="Prospect.typed()">${e(c.pnotes || '')}</textarea>
+            <div class="pd-quick">${QUICK.map(([l, t]) => `<button onclick="Prospect.quick('${t}')">+ ${l}</button>`).join('')}</div>
+            <h4>Résultat de l'appel</h4>
+            <div class="crm-outcomes">${OUTS.map(([k, ic, l]) => `<button onclick="Prospect.out('${k}')">${ic}<span>${l}</span></button>`).join('')}</div>
+            <div id="pd-after" class="crm-after"></div>
+            <h4>Historique</h4>
+            <div class="crm-timeline" id="pd-hist"></div>
+          </section>
+        </div>`;
+      loadPdfView(c);
+    }
+    renderProp(c);
+    const h = document.getElementById('pd-hist'); if (h) h.innerHTML = CRM._timeline(c.id);
+  }
+  function renderProp(c) {
+    const el = document.getElementById('pd-prop'); if (!el) return;
+    const lc = lastCall(c), n = (c.calls || []).length;
+    const fu = c.nextFollowUp ? (c.nextFollowUp <= today() ? `<div class="pd-fu due">🔔 À rappeler ${c.nextFollowUp === today() ? "aujourd'hui" : 'depuis le ' + fmtD(c.nextFollowUp)}</div>` : `<div class="pd-fu">🔔 Prochain rappel : ${fmtD(c.nextFollowUp)}</div>`) : '';
+    el.innerHTML = `
+      ${thumb(c.id) ? `<img class="pd-photo" src="${thumb(c.id)}" alt="">` : '<div class="pd-photo pr-nothumb">🏠</div>'}
+      <div class="pd-price">${e(c.price || '')} <span>${e(c.ptype || '')}${c.rooms ? ' · ' + e(c.rooms) + ' ch.' : ''}</span></div>
+      <div class="pd-addr">${e(c.name)}</div>
+      <div class="crm-muted">${e((c.address || '').replace(c.name + ', ', ''))}${c.listingNo ? ' · DuProprio #' + e(c.listingNo) : ''}</div>
+      ${c.dnc ? '<div class="crm-dnc-banner">⛔ Ne pas appeler</div>' : c.phone ? `<a class="dial-call" href="tel:${String(c.phone).replace(/[^\d+]/g, '')}" onclick="CRM.touch && CRM.touch()">📞 Appeler ${e(c.phone)}</a>` : '<div class="pd-nophone">📵 Pas de téléphone sur la fiche — contacte-le via DuProprio</div>'}
+      <div class="pd-facts">
+        <div>Propriétaire<b><input value="${e(c.owner || '')}" placeholder="nom ?" onchange="Prospect.set('owner', this.value)"></b></div>
+        <div>Étape<b>${e(c.stage || 'À appeler')}</b></div>
+        <div>Prochain rappel<b>${c.nextFollowUp ? fmtD(c.nextFollowUp) : '—'}</b></div>
+        <div>Appels<b>${n ? n + ' essai' + (n > 1 ? 's' : '') : 'jamais appelé'}</b></div>
+      </div>
+      ${lc ? `<div class="crm-muted" style="margin-top:6px">Dernier : ${OUTL[lc.outcome] || ''} · ${new Date(lc.at).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })}</div>` : ''}
+      ${!c.dncChecked && !c.dnc && c.phone ? `<div class="dial-warn">LNNTE non vérifiée · <a href="https://lnnte-dncl.gc.ca/" target="_blank" rel="noopener">vérifier</a> · <button onclick="Prospect.set('dncChecked', true)">✓ Vérifiée</button></div>` : ''}
+      ${fu}
+      <div class="pd-stages">${['À appeler', 'Appelé – rappeler', 'Intéressé', 'Rendez-vous', 'Signé', 'Pas intéressé'].map(s => `<button class="${(c.stage || 'À appeler') === s ? 'on' : ''}" onclick="Prospect.set('stage', ${JSON.stringify(s).replace(/"/g, '&quot;')})">${s === 'Signé' ? '✍️ Signé' : e(s)}</button>`).join('')}</div>
+      <div class="pd-links">${c.dpUrl ? `<a href="${e(c.dpUrl)}" target="_blank" rel="noopener">🏠 Annonce DuProprio</a>` : ''}<button onclick="CRM.open('${c.id}')">Fiche contact complète</button>
+        <label class="pd-dnc"><input type="checkbox" ${c.dnc ? 'checked' : ''} onchange="Prospect.set('dnc', this.checked)"> ⛔ Ne pas appeler</label></div>`;
+  }
+  async function loadPdfView(c) {
+    const box = document.getElementById('pd-pages'); if (!box) return;
+    let blob = null;
+    try { blob = await getPdf(c.id); } catch (x) {}
+    if (cur !== c.id) return;
+    if (!blob) { box.innerHTML = `<div class="pd-wait">📄 Le PDF complet n'est pas encore sauvegardé pour cette fiche.<br><span class="crm-muted">Réimporte tes PDF du dossier (les fiches existantes ne seront pas dupliquées) : ils seront gardés pour l'ordi et le téléphone.</span>${c.dpUrl ? `<br><a href="${e(c.dpUrl)}" target="_blank" rel="noopener">Voir l'annonce sur DuProprio ↗</a>` : ''}</div>`; return; }
+    try {
+      const p = await lib();
+      const doc = await p.getDocument({ data: new Uint8Array(await blob.arrayBuffer()), verbosity: 0, isEvalSupported: false }).promise;
+      box.innerHTML = '';
+      const w = Math.max(280, box.clientWidth - 16), dpr = Math.min(2, window.devicePixelRatio || 1);
+      for (let n = 1; n <= doc.numPages; n++) {
+        if (cur !== c.id) return;
+        const page = await doc.getPage(n);
+        const vp0 = page.getViewport({ scale: 1 }), scale = w / vp0.width, vp = page.getViewport({ scale: scale * dpr });
+        const cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height; cv.style.width = w + 'px'; cv.className = 'pd-page';
+        box.appendChild(cv);
+        await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+      }
+    } catch (x) { box.innerHTML = `<div class="pd-wait">Impossible d'afficher le PDF (${e(x.message || x)}).</div>`; }
+  }
+  async function big() { const b = cur && await getPdf(cur); if (b) window.open(URL.createObjectURL(b), '_blank'); }
+  // notes : enregistrement automatique (comme OneNote)
+  function typed() { const s = document.getElementById('pd-saved'); if (s) { s.textContent = '…'; s.classList.add('busy'); } clearTimeout(saveT); saveT = setTimeout(flushNote, 700); }
+  function flushNote() {
+    clearTimeout(saveT);
+    const ta = document.getElementById('pd-note'); if (!ta || !cur) return;
+    const c = CRM._all()[cur]; if (!c || (c.pnotes || '') === ta.value) { const s = document.getElementById('pd-saved'); if (s) { s.textContent = 'enregistré automatiquement'; s.classList.remove('busy'); } return; }
+    c.pnotes = ta.value;
+    const om = ta.value.match(/^\s*Nom du proprio\s*:\s*(.+)$/mi); if (om && om[1].trim() && om[1].trim() !== c.owner) c.owner = om[1].trim();
+    CRM.upsert(c);
+    const s = document.getElementById('pd-saved'); if (s) { s.textContent = '✓ enregistré'; s.classList.remove('busy'); }
+  }
+  function quick(t) {
+    const ta = document.getElementById('pd-note'); if (!ta) return;
+    const v = ta.value, pre = v && !v.endsWith('\n') ? '\n' : '';
+    ta.value = v + pre + t; ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); typed();
+  }
+  function set(k, v) { const c = CRM._all()[cur]; if (!c) return; c[k] = v; if (k === 'dnc' && v) c.nextFollowUp = ''; CRM.upsert(c); }
+  function out(k) {
+    flushNote();
+    const c = CRM._all()[cur]; if (!c) return;
+    const first = (c.pnotes || '').split('\n').map(x => x.trim()).filter(Boolean).slice(-1)[0] || '';
+    const ta = document.createElement('textarea'); ta.id = 'pd-tmp'; ta.value = k === 'parle' || k === 'rdv' || k === 'pas_interesse' ? first.slice(0, 160) : ''; ta.style.display = 'none'; document.body.appendChild(ta);
+    CRM.logCall(k, { id: c.id, noteId: 'pd-tmp', silent: true }); ta.remove();
+    const after = document.getElementById('pd-after');
+    if (k === 'parle') {
+      after.innerHTML = `<div class="crm-after-q">Quand le rappeler ?</div><div class="chips">${[[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Prospect.follow(${d})">${l}</button>`).join('')}<label class="crm-datepick">📅<input type="date" onchange="Prospect.followDate(this.value)"></label></div><label class="crm-cal"><input type="checkbox" id="pd-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
+      return;
+    }
+    if (k === 'rdv') { CRM.focus(c.id); CRM.meeting(); return; }
+    toastMsg(`${OUTL[k]} — ${c.nextFollowUp ? 'rappel le ' + fmtD(c.nextFollowUp) : 'archivé'} <button onclick="CRM.undoCall('${c.id}')">Annuler</button>`);
+  }
+  const addDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  function followDate(v) { if (!v) return; const d = Math.round((new Date(v + 'T12:00:00') - new Date(today() + 'T12:00:00')) / 864e5); follow(d); }
+  function follow(days) {
+    const c = CRM._all()[cur]; if (!c) return;
+    c.nextFollowUp = addDays(days); CRM.upsert(c);
+    const cal = document.getElementById('pd-cal');
+    if (cal && cal.checked && window.VoiceCRM && VoiceCRM.reminder) { const d = new Date(); d.setDate(d.getDate() + days); VoiceCRM.reminder(c, { date: d, start: null }).catch(() => {}); }
+    document.getElementById('pd-after').innerHTML = '';
+    toastMsg(`💬 Parlé — rappel le ${fmtD(c.nextFollowUp)}`);
   }
 
   // ---------- affichage ----------
@@ -261,7 +437,7 @@
     const lc = lastCall(c);
     const nCalls = (c.calls || []).length;
     const fu = c.nextFollowUp ? `<span class="${isDue(c) ? 'crm-due-txt' : ''}">🔔 ${c.nextFollowUp === today() ? "aujourd'hui" : fmtD(c.nextFollowUp)}</span>` : '';
-    return `<div class="pr-card${c.dnc ? ' dnc' : ''}" onclick="CRM.open('${c.id}')">
+    return `<div class="pr-card${c.dnc ? ' dnc' : ''}" onclick="Prospect.open('${c.id}')">
       ${thumbHtml(c, 'pr-thumb')}
       <div class="pr-body">
         <div class="pr-l1"><span class="pr-no">#${e(c.porder || '')}</span><b>${e(c.price || '')}</b><span class="pr-type">${e(c.ptype || '')}</span></div>
@@ -286,10 +462,12 @@
   }
   function dial() { if (window.CRM) CRM.dial(dialIds().map(c => c.id)); }
   let rt = null;
-  function changed() { clearTimeout(rt); rt = setTimeout(() => { const r = document.getElementById('prospection'); if (r && r.classList.contains('active')) render(); }, 150); }
+  function changed() { clearTimeout(rt); rt = setTimeout(() => { if (cur) { renderFiche(false); return; } const r = document.getElementById('prospection'); if (r && r.classList.contains('active')) render(); }, 150); }
 
   window.Prospect = {
     render, changed, thumb, thumbHtml, importFiles, confirmImport, closeModal, pick, dial, _parse: parseText,
+    open: openFiche, close: closeFiche, step, typed, quick, set, out, follow, followDate, big,
+    pane(k) { pane = k; const g = document.querySelector('#pr-dossier .pd-grid'); if (g) g.className = 'pd-grid pane-' + k; document.querySelectorAll('#pr-dossier .pd-tabs button').forEach(b => b.classList.toggle('on', b.getAttribute('onclick').includes("'" + k + "'"))); },
     list(v) { curList = v; ls.set('mb_plist', v); render(); },
     col(k) { col = k; q = ''; render(); },
     search(v) { q = v; render(); const s = document.querySelector('#prospection .crm-search'); if (s) { s.focus(); s.setSelectionRange(v.length, v.length); } }
