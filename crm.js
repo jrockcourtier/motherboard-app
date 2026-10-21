@@ -153,7 +153,7 @@
     const all = list();
     const sm = (SMART.find(x => x[0] === smart) || SMART[0])[2];
     // les fiches DuProprio pas encore appelées restent dans l'onglet Prospection (sinon la liste de contacts déborde)
-    const rows = all.filter(c => !(filter === 'tous' && !q && c.plist && (c.stage || 'À appeler') === 'À appeler') && sm(c) && (filter === 'tous' || c.type === filter) &&
+    const rows = all.filter(c => !(filter === 'tous' && !q && c.plist && !c.isContact && (c.stage || 'À appeler') === 'À appeler') && sm(c) && (filter === 'tous' || c.type === filter) &&
       (!q || [c.name, c.phone, c.email, c.address, c.neighborhoods, c.stage].join(' ').toLowerCase().includes(q)));
     const due = rows.filter(c => isDue(c)).sort((a, b) => a.nextFollowUp.localeCompare(b.nextFollowUp));
     const rest = rows.filter(c => !isDue(c)).sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
@@ -413,18 +413,22 @@
     vcard(id) {
       const c = contacts[id || openId]; if (!c) return;
       const esc2 = (v) => String(v || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1');
+      const pot = c.type === 'proprio' && (c.plist || c.listingNo);
+      const fn = pot ? `POT-${String(c.owner || '').trim() || 'Proprio'} - ${c.name}` : c.name;
       const parts = String(c.name || '').trim().split(/\s+/);
-      const last = parts.length > 1 ? parts.pop() : '', first = parts.join(' ');
+      let last = parts.length > 1 ? parts.pop() : '', first = parts.join(' ');
+      if (pot) { first = fn; last = ''; }   // tout dans le prénom, comme Julien les entre à la main
       const t = TYPES_C[c.type] || TYPES_C.client;
-      const note = [t.label + (c.stage ? ' · ' + c.stage : ''), c.budget ? 'Budget : ' + c.budget : '', c.price ? 'Prix : ' + c.price : '', c.neighborhoods ? 'Quartiers : ' + c.neighborhoods : '', 'Fiche Motherboard'].filter(Boolean).join(' — ');
-      const lines = ['BEGIN:VCARD', 'VERSION:3.0', `N:${esc2(last)};${esc2(first)};;;`, `FN:${esc2(c.name)}`,
+      const note = [t.label + (c.stage ? ' · ' + c.stage : ''), c.budget ? 'Budget : ' + c.budget : '', c.price ? 'Prix : ' + c.price : '', c.neighborhoods ? 'Quartiers : ' + c.neighborhoods : '', c.dpUrl ? 'DuProprio : ' + c.dpUrl : '', c.offer ? 'Proposé : ' + Number(c.offer.amount).toLocaleString('fr-CA') + ' $ (' + String(c.offer.pct).replace('.', ',') + ' %)' : '', 'Fiche Motherboard'].filter(Boolean).join(' — ');
+      const lines = ['BEGIN:VCARD', 'VERSION:3.0', `N:${esc2(last)};${esc2(first)};;;`, `FN:${esc2(fn)}`,
         c.phone ? `TEL;TYPE=CELL:${String(c.phone).replace(/[^\d+]/g, '')}` : '', c.email ? `EMAIL;TYPE=INTERNET:${esc2(c.email)}` : '',
         c.address ? `ADR;TYPE=HOME:;;${esc2(c.address)};;;;` : '', `NOTE:${esc2(note)}`, 'END:VCARD'].filter(Boolean);
       const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/vcard;charset=utf-8' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = (c.name || 'contact').replace(/[^\w\- ]+/g, '') + '.vcf';
+      const a = document.createElement('a'); a.href = url; a.download = (fn || 'contact').replace(/[\\/:*?"<>|]+/g, '').trim() + '.vcf';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 30000);
+      if (!/iPhone|iPad|Android/i.test(navigator.userAgent)) { if (typeof toast === 'function') toast(`📇 « ${fn}.vcf » téléchargé — ouvre-le (barre de téléchargement) puis « Importer » dans Contacts : iCloud l'envoie sur ton iPhone.`); return; }
       if (typeof toast === 'function') toast('📇 Touchez « Créer un nouveau contact » (ou « Ajouter ») pour l\'enregistrer dans votre téléphone.');
     },
     search(v) { query = v; renderList(); },

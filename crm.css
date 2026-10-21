@@ -284,3 +284,12 @@ body.pr-dossier-open .fab, body.pr-dossier-open .fab-mic { display: none !import
 .pd-offer-r input { margin: 0; width: 15px; height: 15px; accent-color: #0b8043; flex: none; align-self: center; }
 .pd-offer-r.on { background: rgba(11,128,67,.12); color: var(--text-primary, inherit); }
 .pd-offer-old { margin-top: 4px; font-size: 11.5px; }
+
+/* v15.4 — proprio → contact */
+.pd-contact-btn { display: flex; flex-direction: column; align-items: center; width: 100%; margin: 8px 0 2px; padding: 9px 12px; border-radius: 12px; border: 1.5px solid #0b8043; background: transparent; color: #0b8043; font-weight: 700; font-size: 15px; cursor: pointer; }
+.pd-contact-btn span { font-size: 12px; font-weight: 500; opacity: .85; margin-top: 1px; }
+.pd-contact-btn:hover { background: rgba(11,128,67,.08); }
+.pd-contact { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 8px 0 2px; padding: 7px 10px; border-radius: 10px; background: rgba(11,128,67,.1); color: #0b8043; font-weight: 700; font-size: 13px; }
+.pd-contact span { font-weight: 500; color: var(--text-secondary); flex: 1; }
+.pd-contact button { border: 0; background: transparent; color: #0b8043; font-weight: 600; cursor: pointer; font-size: 12.5px; }
+.pd-need { outline: 2px solid #d93025 !important; border-radius: 4px; }

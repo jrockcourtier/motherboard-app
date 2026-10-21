@@ -336,6 +336,22 @@
       return `<label class="pd-offer-r${sel === t ? ' on' : ''}"><input type="checkbox" ${sel === t ? 'checked' : ''} onchange="Prospect.offer(${t}, this.checked)"><span class="pd-offer-t">${String(t).replace('.', ',')} %</span><b>${money(v - com)}</b><span class="pd-offer-c">comm. ${money(com)}</span></label>`; }).join('')}
       ${c.offer && c.offer.price !== c.price ? `<div class="pd-offer-old">Déjà proposé : ${String(c.offer.pct).replace('.', ',')} % → ${money(c.offer.amount)} (sur ${e(c.offer.price)})</div>` : ''}</div>`;
   }
+  function toContact(again) {
+    flushNote();
+    const c = CRM._all()[cur]; if (!c) return;
+    if (!String(c.owner || '').trim()) {
+      const inp = document.querySelector('.pd-facts input'); if (inp) { inp.focus(); inp.classList.add('pd-need'); setTimeout(() => inp.classList.remove('pd-need'), 2500); }
+      toastMsg('✍️ Écris d\'abord le prénom du proprio dans « Propriétaire », puis réappuie.'); return;
+    }
+    if (!c.isContact) {
+      c.isContact = true; c.contactAt = new Date().toISOString();
+      c.notes = c.notes || []; c.notes.push({ id: CRM.newId(), at: c.contactAt, text: `📇 Ajouté à mes contacts : POT-${c.owner} - ${c.name}` });
+      if (!c.firstContact) c.firstContact = c.contactAt.slice(0, 10);
+      CRM.upsert(c);
+    }
+    CRM.vcard(c.id);
+    renderFiche(false); render();
+  }
   function offer(t, on) {
     const c = CRM._all()[cur]; if (!c) return; const v = priceNum(c.price); const now = new Date().toISOString();
     c.notes = c.notes || [];
@@ -358,6 +374,8 @@
       <div class="pd-addr">${e(c.name)}</div>
       <div class="crm-muted">${e((c.address || '').replace(c.name + ', ', ''))}${c.listingNo ? ' · DuProprio #' + e(c.listingNo) : ''}</div>
       ${c.dnc ? '<div class="crm-dnc-banner">⛔ Ne pas appeler</div>' : c.phone ? `<a class="dial-call" href="tel:${String(c.phone).replace(/[^\d+]/g, '')}" onclick="CRM.touch && CRM.touch()">📞 Appeler ${e(c.phone)}</a>` : '<div class="pd-nophone">📵 Pas de téléphone sur la fiche — contacte-le via DuProprio</div>'}
+      ${c.isContact ? `<div class="pd-contact ok">✓ Dans tes contacts <span>POT-${e(c.owner || 'Proprio')} - ${e(c.name)}</span><button onclick="Prospect.toContact(true)">📲 Renvoyer au téléphone</button></div>`
+        : `<button class="pd-contact-btn" onclick="Prospect.toContact()">📇 Ajouter à mes contacts <span>POT-${e(c.owner || '…')} - ${e(c.name)}</span></button>`}
       <div class="pd-facts">
         <div>Propriétaire<b><input value="${e(c.owner || '')}" placeholder="nom ?" onchange="Prospect.set('owner', this.value)"></b></div>
         <div>Étape<b>${e(c.stage || 'À appeler')}</b></div>
@@ -409,7 +427,7 @@
     const v = ta.value, pre = v && !v.endsWith('\n') ? '\n' : '';
     ta.value = v + pre + t; ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); typed();
   }
-  function set(k, v) { const c = CRM._all()[cur]; if (!c) return; c[k] = v; if (k === 'dnc' && v) c.nextFollowUp = ''; CRM.upsert(c); }
+  function set(k, v) { const c = CRM._all()[cur]; if (!c) return; c[k] = v; if (k === 'dnc' && v) c.nextFollowUp = ''; CRM.upsert(c); if (k === 'owner') renderProp(c); }
   function out(k) {
     flushNote();
     const c = CRM._all()[cur]; if (!c) return;
@@ -487,7 +505,7 @@
     return `<div class="pr-card${c.dnc ? ' dnc' : ''}" onclick="Prospect.open('${c.id}')">
       ${thumbHtml(c, 'pr-thumb')}
       <div class="pr-body">
-        <div class="pr-l1"><span class="pr-no">#${e(c.porder || '')}</span><b>${e(c.price || '')}</b>${c.priceDropAt ? '<span class="pr-drop" title="Baisse de prix">🔻</span>' : ''}<span class="pr-type">${e(c.ptype || '')}</span></div>
+        <div class="pr-l1"><span class="pr-no">#${e(c.porder || '')}</span><b>${e(c.price || '')}</b>${c.priceDropAt ? '<span class="pr-drop" title="Baisse de prix">🔻</span>' : ''}${c.isContact ? '<span class="pr-drop" title="Dans tes contacts">📇</span>' : ''}<span class="pr-type">${e(c.ptype || '')}</span></div>
         <div class="pr-addr">${e(c.name)}${c.owner ? ` · <b>${e(c.owner)}</b>` : ''}</div>
         <div class="pr-meta">${c.hood ? e(c.hood) + ' · ' : ''}${c.dnc ? '⛔ Ne pas appeler' : c.phone ? '📞 ' + e(c.phone) : '📵 pas de tél.'}${!c.dncChecked && c.phone && !c.dnc ? ' · <span class="pr-lnnte">LNNTE ?</span>' : ''}</div>
         <div class="pr-meta">${lc ? `${OUTL[lc.outcome] || ''}${nCalls > 1 ? ` (${nCalls} appels)` : ''} · ` : ''}${fu}</div>
@@ -512,7 +530,7 @@
   function changed() { clearTimeout(rt); rt = setTimeout(() => { if (cur) { renderFiche(false); return; } const r = document.getElementById('prospection'); if (r && r.classList.contains('active')) render(); }, 150); }
 
   window.Prospect = {
-    offer,
+    offer, toContact,
     render, changed, thumb, thumbHtml, importFiles, confirmImport, closeModal, pick, dial, _parse: parseText,
     open: openFiche, close: closeFiche, step, typed, quick, set, out, follow, followDate, big,
     pane(k) { pane = k; const g = document.querySelector('#pr-dossier .pd-grid'); if (g) g.className = 'pd-grid pane-' + k; document.querySelectorAll('#pr-dossier .pd-tabs button').forEach(b => b.classList.toggle('on', b.getAttribute('onclick').includes("'" + k + "'"))); },
