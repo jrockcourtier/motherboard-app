@@ -293,3 +293,7 @@ body.pr-dossier-open .fab, body.pr-dossier-open .fab-mic { display: none !import
 .pd-contact span { font-weight: 500; color: var(--text-secondary); flex: 1; }
 .pd-contact button { border: 0; background: transparent; color: #0b8043; font-weight: 600; cursor: pointer; font-size: 12.5px; }
 .pd-need { outline: 2px solid #d93025 !important; border-radius: 4px; }
+
+.sheet-acts { display: flex; align-items: center; gap: 4px; }
+.sheet-trash { border: 0; background: transparent; font-size: 17px; cursor: pointer; padding: 4px 6px; border-radius: 8px; opacity: .75; }
+.sheet-trash:hover { opacity: 1; background: rgba(217,48,37,.1); }

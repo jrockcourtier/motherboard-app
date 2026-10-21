@@ -258,7 +258,7 @@
     const fuBtn = (n, l) => `<button onclick="CRM.followUp(${n === null ? 'null' : `'${addDaysStr(n)}'`})">${l}</button>`;
 
     sh.innerHTML = `
-      <div class="sheet-head"><button type="button" class="sheet-x" onclick="CRM.close()">✕</button><b>${e(c.name)}</b><button class="sheet-save" onclick="CRM.edit('${c.id}')">Modifier</button></div>
+      <div class="sheet-head"><button type="button" class="sheet-x" onclick="CRM.close()">✕</button><b>${e(c.name)}</b><span class="sheet-acts"><button type="button" class="sheet-trash" onclick="CRM.askDelete(true)" title="Supprimer ce contact" aria-label="Supprimer ce contact">🗑</button><button class="sheet-save" onclick="CRM.edit('${c.id}')">Modifier</button></span></div>
       <div class="crm-hero"><div class="crm-av big" style="background:${t.color}">${e(initials(c.name))}</div>
         <div><span class="crm-badge" style="color:${t.color};border-color:${t.color}">${t.label}</span>${c.phone ? `<div class="crm-phone">${e(c.phone)}</div>` : ''}</div></div>
       <div class="crm-actions">
@@ -460,8 +460,13 @@
       c.notes.push({ id: uuid(), at: new Date().toISOString(), text: txt }); c.lastContact = todayStr(); save(c);
     },
     delNote(nid) { const c = contacts[openId]; c.notes = (c.notes || []).filter(n => n.id !== nid); save(c); },
-    askDelete() { $('#crm-del').innerHTML = `Supprimer définitivement ce contact ? <button class="danger" onclick="CRM.doDelete()">Oui, supprimer</button><button onclick="CRM.open('${openId}')">Annuler</button>`; },
-    doDelete() { const c = contacts[openId]; if (!c) return; c.deleted = true; save(c); CRM.close(); },
+    askDelete(scroll) { const d = $('#crm-del'); if (!d) return; if (scroll) d.scrollIntoView({ behavior: 'smooth', block: 'center' }); d.innerHTML = `Supprimer ce contact ? <button class="danger" onclick="CRM.doDelete()">Oui, supprimer</button><button onclick="CRM.open('${openId}')">Annuler</button>`; },
+    doDelete() {
+      const c = contacts[openId]; if (!c) return; c.deleted = true; save(c); CRM.close(); renderList();
+      if (window.Prospect && Prospect.changed) Prospect.changed();
+      window.__undoDel = () => { c.deleted = false; save(c); renderList(); if (window.Prospect && Prospect.changed) Prospect.changed(); document.querySelectorAll('.mb-toast').forEach(x => x.remove()); };
+      if (typeof toast === 'function') toast(`🗑 « ${e(c.name)} » supprimé <button onclick="__undoDel()">Annuler</button>`, 8000);
+    },
     meeting() {
       const c = contacts[openId]; if (!c) return;
       CRM.close();
