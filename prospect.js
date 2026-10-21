@@ -53,10 +53,16 @@
 
   // ---------- lecture d'un PDF DuProprio ----------
   let pdfjs = null;
-  async function lib() {
+  // pdf.js 3.11 (version « legacy », compatible avec les navigateurs plus anciens), chargé au besoin
+  function lib() {
     if (pdfjs) return pdfjs;
-    pdfjs = await import('/vendor/pdf.min.mjs');
-    pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.min.mjs';
+    pdfjs = new Promise((ok, ko) => {
+      if (window.pdfjsLib) return ok(window.pdfjsLib);
+      const s = document.createElement('script'); s.src = '/vendor/pdf3.min.js';
+      s.onload = () => { if (!window.pdfjsLib) return ko(new Error('pdf.js absent')); window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdf3.worker.min.js'; ok(window.pdfjsLib); };
+      s.onerror = () => { pdfjs = null; ko(new Error('pdf.js non chargé (connexion ?)')); };
+      document.head.appendChild(s);
+    });
     return pdfjs;
   }
   function parseText(items) {
@@ -111,7 +117,11 @@
   }
   async function readPdf(file) {
     const p = await lib();
-    const doc = await p.getDocument({ data: new Uint8Array(await file.arrayBuffer()), verbosity: 0, isEvalSupported: false }).promise;
+    let buf;
+    try { buf = await file.arrayBuffer(); }
+    catch (x) { const er = new Error('icloud'); er.why = 'Fichier pas encore téléchargé d\'iCloud sur ce Mac'; throw er; }
+    if (!buf || !buf.byteLength) { const er = new Error('vide'); er.why = 'Fichier vide (peut-être encore dans iCloud)'; throw er; }
+    const doc = await p.getDocument({ data: new Uint8Array(buf), verbosity: 0, isEvalSupported: false }).promise;
     const page = await doc.getPage(1);
     const info = parseText((await page.getTextContent()).items);
     try {
@@ -139,7 +149,7 @@
     m.classList.add('open');
     const res = [];
     for (let i = 0; i < files.length; i++) {
-      try { res.push(await readPdf(files[i])); } catch (x) { res.push({ file: files[i].name, error: true }); }
+      try { res.push(await readPdf(files[i])); } catch (x) { console.warn('PDF', files[i].name, x); res.push({ file: files[i].name, error: true, why: x.why || x.message || String(x) }); }
       box.querySelector('.pr-prog i').style.width = Math.round((i + 1) / files.length * 100) + '%';
       box.querySelector('#pr-prog-txt').textContent = `${i + 1} / ${files.length} · ${files[i].name}`;
     }
@@ -158,8 +168,9 @@
       <div class="sheet-head"><button type="button" class="sheet-x" onclick="Prospect.closeModal()">✕</button><b>Importer ${ok.length} fiche${ok.length > 1 ? 's' : ''}</b><button class="sheet-save" onclick="Prospect.confirmImport()">Ajouter</button></div>
       <label class="f-block">Nom de la liste<input id="pr-listname" value="${e(listName)}" autocomplete="off"></label>
       <div class="pr-sum">🆕 <b>${nNew}</b> nouvelle${nNew > 1 ? 's' : ''}${nDup ? ` · ♻️ <b>${nDup}</b> déjà dans tes listes (prix mis à jour)` : ''}${noPhone ? ` · 📵 ${noPhone} sans téléphone sur la fiche` : ''}${nBad ? ` · ⚠️ ${nBad} illisible${nBad > 1 ? 's' : ''}` : ''}</div>
-      <div class="pr-rev">${res.map(r => r.error || !r.no ? `<div class="pr-rev-row bad">⚠️ ${e(r.file)} — fiche non reconnue</div>` :
+      <div class="pr-rev">${res.map(r => r.error || !r.no ? `<div class="pr-rev-row bad">⚠️ ${e(r.file)} — ${r.error ? 'illisible : ' + e(r.why || 'erreur') : 'pas une fiche DuProprio reconnue'}</div>` :
         `<div class="pr-rev-row">${r.thumb ? `<img src="${r.thumb}" alt="">` : '<span class="pr-nothumb">🏠</span>'}<div><b>${r.order ? '#' + r.order + ' · ' : ''}${e(r.price || '')}</b> ${e(r.ptype || '')}<br>${e(r.street || '')} <span class="crm-muted">${e(r.hood || '')}</span><br><span class="crm-muted">${r.phone ? '📞 ' + e(r.phone) : '📵 pas de téléphone'} · DuProprio #${e(r.no)}${known[r.no] ? ' · ♻️ déjà là' : ''}</span></div></div>`).join('')}</div>
+      ${res.some(r => r.error && /iCloud|vide/.test(r.why || '')) ? `<div class="pr-warn">☁️ Ces PDF sont dans iCloud mais pas encore téléchargés sur ce Mac. Dans le Finder : clic droit sur le dossier <b>Sud-Ouest</b> → <b>Télécharger maintenant</b>, attends que les nuages disparaissent, puis réessaie.</div>` : ''}
       <div class="crm-muted" style="margin-top:8px">Les numéros ne sont pas encore vérifiés à la LNNTE : l'app te le rappellera avant chaque appel.</div>`;
   }
   function mode(arr) { const c = {}; let best = null; arr.forEach(x => { c[x] = (c[x] || 0) + 1; if (!best || c[x] > c[best]) best = x; }); return best; }

@@ -207,3 +207,5 @@ body[data-tab="prospection"] .mini-calendar, body[data-tab="prospection"] .stats
 .dial-thumb { width: 100%; max-width: 320px; height: 150px; object-fit: cover; border-radius: 10px; }
 /* message en haut quand une fenêtre est ouverte (ne cache pas les boutons du mode appels) */
 body:has(.modal.open) .mb-toast { top: calc(12px + env(safe-area-inset-top)); bottom: auto; }
+
+.pr-warn { margin-top: 8px; padding: 10px; border-radius: 8px; background: #FFF8E1; color: #6B5300; font-size: 13px; line-height: 1.5; }
