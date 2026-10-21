@@ -11,5 +11,12 @@ module.exports = async (req, res) => {
       out.url = (process.env.SUPABASE_URL || 'défaut').slice(0, 60);
     }
   }
+  if (out.dbKey) {
+    try {
+      const key = L.supabaseKey(), h = { apikey: key }; if (key.startsWith('eyJ')) h.Authorization = 'Bearer ' + key;
+      const r = await fetch((process.env.SUPABASE_URL || 'https://luynpgieqbszsqucldal.supabase.co').replace(/\/$/, '') + '/storage/v1/bucket/fiches', { headers: h });
+      out.storage = r.ok ? 'ok' : 'erreur ' + r.status;
+    } catch (e) { out.storage = 'injoignable'; }
+  }
   L.json(res, 200, out);
 };
