@@ -297,3 +297,10 @@ body.pr-dossier-open .fab, body.pr-dossier-open .fab-mic { display: none !import
 .sheet-acts { display: flex; align-items: center; gap: 4px; }
 .sheet-trash { border: 0; background: transparent; font-size: 17px; cursor: pointer; padding: 4px 6px; border-radius: 8px; opacity: .75; }
 .sheet-trash:hover { opacity: 1; background: rgba(217,48,37,.1); }
+
+/* v15.7 — progression dans la liste d'appels */
+.pr-card.done { opacity: .5; filter: grayscale(1); background: var(--light-bg, #f4f4f4); }
+.pr-card.done:hover { opacity: .8; }
+.pr-done { font-weight: 700; }
+.pr-card.next { border: 2px solid #0b8043; box-shadow: 0 0 0 3px rgba(11,128,67,.12); }
+.pr-next { background: #0b8043; color: #fff; font-size: 10.5px; font-weight: 800; padding: 1px 6px; border-radius: 6px; margin-right: 4px; white-space: nowrap; }

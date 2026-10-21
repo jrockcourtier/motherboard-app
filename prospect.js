@@ -494,21 +494,24 @@
       <div class="crm-filters pr-cols">${COLS.map(([k, l]) => `<button class="${col === k && !q ? 'on' : ''}" onclick="Prospect.col('${k}')">${l} ${by[k].length}${k === 'suivi' && due ? ` <span class="pr-due">${due} à rappeler</span>` : ''}</button>`).join('')}</div>
       <div class="pr-searchrow"><input class="crm-search" type="search" placeholder="🔍 Adresse, numéro, nom…" value="${e(q)}" oninput="Prospect.search(this.value)"></div>
       ${callable.length ? `<button class="crm-dial" onclick="Prospect.dial()">▶ Appeler ${col === 'suivi' ? 'les rappels dus' : 'la liste'} (${callable.length})</button>` : ''}
-      <div class="pr-grid" id="pr-drop">${rows.map(card).join('') || `<div class="crm-empty">${col === 'suivi' ? 'Aucun suivi pour l\'instant. Quand tu parles à quelqu\'un, il arrive ici automatiquement.' : col === 'signe' ? 'Aucun contrat signé… pour l\'instant 💪' : col === 'archive' ? 'Rien d\'archivé.' : 'Toute la liste a été appelée 🎉'}</div>`}</div>`}
+      <div class="pr-grid" id="pr-drop">${(() => { nextId = col === 'appeler' && !q ? ((rows.find(c => !(c.calls || []).length && c.phone && !c.dnc) || {}).id || null) : null; return rows.map(card).join(''); })() || `<div class="crm-empty">${col === 'suivi' ? 'Aucun suivi pour l\'instant. Quand tu parles à quelqu\'un, il arrive ici automatiquement.' : col === 'signe' ? 'Aucun contrat signé… pour l\'instant 💪' : col === 'archive' ? 'Rien d\'archivé.' : 'Toute la liste a été appelée 🎉'}</div>`}</div>`}
       <div style="height:90px"></div>`;
     bindDrop(root);
   }
+  let nextId = null;
   function card(c) {
     const lc = lastCall(c);
     const nCalls = (c.calls || []).length;
+    const done = col === 'appeler' && nCalls > 0 && !isDue(c);   // déjà essayé, pas encore le moment de rappeler
+    const isNext = c.id === nextId;
     const fu = c.nextFollowUp ? `<span class="${isDue(c) ? 'crm-due-txt' : ''}">🔔 ${c.nextFollowUp === today() ? "aujourd'hui" : fmtD(c.nextFollowUp)}</span>` : '';
-    return `<div class="pr-card${c.dnc ? ' dnc' : ''}" onclick="Prospect.open('${c.id}')">
+    return `<div class="pr-card${c.dnc ? ' dnc' : ''}${done ? ' done' : ''}${isNext ? ' next' : ''}" onclick="Prospect.open('${c.id}')">
       ${thumbHtml(c, 'pr-thumb')}
       <div class="pr-body">
-        <div class="pr-l1"><span class="pr-no">#${e(c.porder || '')}</span><b>${e(c.price || '')}</b>${c.priceDropAt ? '<span class="pr-drop" title="Baisse de prix">🔻</span>' : ''}${c.isContact ? '<span class="pr-drop" title="Dans tes contacts">📇</span>' : ''}<span class="pr-type">${e(c.ptype || '')}</span></div>
+        <div class="pr-l1">${isNext ? '<span class="pr-next">▶ Prochain</span>' : ''}<span class="pr-no">#${e(c.porder || '')}</span><b>${e(c.price || '')}</b>${c.priceDropAt ? '<span class="pr-drop" title="Baisse de prix">🔻</span>' : ''}${c.isContact ? '<span class="pr-drop" title="Dans tes contacts">📇</span>' : ''}<span class="pr-type">${e(c.ptype || '')}</span></div>
         <div class="pr-addr">${e(c.name)}${c.owner ? ` · <b>${e(c.owner)}</b>` : ''}</div>
         <div class="pr-meta">${c.hood ? e(c.hood) + ' · ' : ''}${c.dnc ? '⛔ Ne pas appeler' : c.phone ? '📞 ' + e(c.phone) : '📵 pas de tél.'}${!c.dncChecked && c.phone && !c.dnc ? ' · <span class="pr-lnnte">LNNTE ?</span>' : ''}</div>
-        <div class="pr-meta">${lc ? `${OUTL[lc.outcome] || ''}${nCalls > 1 ? ` (${nCalls} appels)` : ''} · ` : ''}${fu}</div>
+        <div class="pr-meta">${done ? `<span class="pr-done">✓ appelé ${new Date(lc.at).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })}</span> · ` : ''}${lc ? `${OUTL[lc.outcome] || ''} · ${nCalls} essai${nCalls > 1 ? 's' : ''} · ` : ''}${fu ? fu.replace('🔔 ', '🔔 rappel ') : ''}</div>
       </div>
       ${c.phone && !c.dnc ? `<a class="crm-call" href="tel:${String(c.phone).replace(/[^\d+]/g, '')}" onclick="event.stopPropagation()" aria-label="Appeler">📞</a>` : ''}
     </div>`;
