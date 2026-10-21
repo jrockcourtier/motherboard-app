@@ -155,11 +155,30 @@
     }
     review(res);
   }
+  // ---------- reconnaître une fiche déjà connue : n° DuProprio, sinon adresse ----------
+  function addrKey(street, city) {
+    const st = String(street || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\b(app|apt|appartement|unite|suite|local)\b.*$/, '').replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\b(rue|avenue|av|ave|boulevard|boul|blvd|chemin|ch|place|pl|croissant|cr|terrasse|montee|rang|route|de|du|des|la|le|l|d|st|ste|saint|sainte)\b/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!/\d/.test(st) || st.length < 4) return '';
+    const pc = (String(city || '').toUpperCase().match(/[A-Z]\d[A-Z]\s?\d[A-Z]\d/) || [''])[0].replace(/\s/g, '');
+    return st + (pc ? '|' + pc.slice(0, 3) : '');
+  }
+  function knownMaps() {
+    const byNo = {}, byAddr = {};
+    const add = c => { if (c.deleted || c.type !== 'proprio' && !c.listingNo) return;
+      if (c.listingNo && !byNo[c.listingNo]) byNo[c.listingNo] = c;
+      const parts = String(c.address || '').split(', '); const k = addrKey(c.name || parts[0], c.address);
+      if (k && !byAddr[k]) byAddr[k] = c; };
+    all().forEach(add); if (window.CRM) Object.values(CRM._all()).forEach(add);
+    return { find: r => byNo[r.no] || byAddr[addrKey(r.street, r.city)] || null };
+  }
+  function priceNum(p) { const n = parseInt(String(p || '').replace(/[^\d]/g, ''), 10); return isNaN(n) ? 0 : n; }
   let pendingImport = [];
   function review(res) {
     pendingImport = res;
     const ok = res.filter(r => !r.error && r.no);
-    const known = {}; all().forEach(c => { if (c.listingNo) known[c.listingNo] = c; });
+    const K = knownMaps(); const known = {}; ok.forEach(r => { const o = K.find(r); if (o) known[r.no] = o; });
     const listName = mode(ok.map(r => r.list).filter(Boolean)) || defaultListName();
     const nNew = ok.filter(r => !known[r.no]).length, nDup = ok.length - nNew, nBad = res.length - ok.length;
     const noPhone = ok.filter(r => !r.phone).length;
@@ -169,7 +188,7 @@
       <label class="f-block">Nom de la liste<input id="pr-listname" value="${e(listName)}" autocomplete="off"></label>
       <div class="pr-sum">🆕 <b>${nNew}</b> nouvelle${nNew > 1 ? 's' : ''}${nDup ? ` · ♻️ <b>${nDup}</b> déjà dans tes listes (prix mis à jour)` : ''}${noPhone ? ` · 📵 ${noPhone} sans téléphone sur la fiche` : ''}${nBad ? ` · ⚠️ ${nBad} illisible${nBad > 1 ? 's' : ''}` : ''}</div>
       <div class="pr-rev">${res.map(r => r.error || !r.no ? `<div class="pr-rev-row bad">⚠️ ${e(r.file)} — ${r.error ? 'illisible : ' + e(r.why || 'erreur') : 'pas une fiche DuProprio reconnue'}</div>` :
-        `<div class="pr-rev-row">${r.thumb ? `<img src="${r.thumb}" alt="">` : '<span class="pr-nothumb">🏠</span>'}<div><b>${r.order ? '#' + r.order + ' · ' : ''}${e(r.price || '')}</b> ${e(r.ptype || '')}<br>${e(r.street || '')} <span class="crm-muted">${e(r.hood || '')}</span><br><span class="crm-muted">${r.phone ? '📞 ' + e(r.phone) : '📵 pas de téléphone'} · DuProprio #${e(r.no)}${known[r.no] ? ' · ♻️ déjà là' : ''}</span></div></div>`).join('')}</div>
+        `<div class="pr-rev-row">${r.thumb ? `<img src="${r.thumb}" alt="">` : '<span class="pr-nothumb">🏠</span>'}<div><b>${r.order ? '#' + r.order + ' · ' : ''}${e(r.price || '')}</b> ${e(r.ptype || '')}<br>${e(r.street || '')} <span class="crm-muted">${e(r.hood || '')}</span><br><span class="crm-muted">${r.phone ? '📞 ' + e(r.phone) : '📵 pas de téléphone'} · DuProprio #${e(r.no)}${known[r.no] ? ' · ♻️ déjà là' + (known[r.no].listingNo && known[r.no].listingNo !== r.no ? ' (même adresse, annonce remise en ligne)' : '') + (known[r.no].price && r.price && priceNum(r.price) < priceNum(known[r.no].price) ? ' · 🔻 baisse de prix' : '') : ''}</span></div></div>`).join('')}</div>
       ${res.some(r => r.error && /iCloud|vide/.test(r.why || '')) ? `<div class="pr-warn">☁️ Ces PDF sont dans iCloud mais pas encore téléchargés sur ce Mac. Dans le Finder : clic droit sur le dossier <b>Sud-Ouest</b> → <b>Télécharger maintenant</b>, attends que les nuages disparaissent, puis réessaie.</div>` : ''}
       <div class="crm-muted" style="margin-top:8px">Les numéros ne sont pas encore vérifiés à la LNNTE : l'app te le rappellera avant chaque appel.</div>`;
   }
@@ -177,21 +196,28 @@
   function defaultListName() { const d = new Date(); return 'Liste ' + d.toLocaleDateString('fr-CA', { month: 'long', year: 'numeric' }); }
   function confirmImport() {
     const name = (document.getElementById('pr-listname').value || '').trim() || defaultListName();
-    const known = {}; all().forEach(c => { if (c.listingNo) known[c.listingNo] = c; });
-    // aussi les proprios déjà au CRM sans liste, par numéro
-    if (window.CRM) Object.values(CRM._all()).forEach(c => { if (!c.deleted && c.listingNo && !known[c.listingNo]) known[c.listingNo] = c; });
+    const K = knownMaps();
     const now = new Date().toISOString(), up = [], toUpload = [];
     let added = 0, updated = 0, order = Math.max(0, ...all().filter(c => c.plist === name).map(c => c.porder || 0));
     pendingImport.filter(r => !r.error && r.no).forEach(r => {
-      const old = known[r.no];
+      const old = K.find(r);
       if (old) {
+        let newPdf = false;
+        old.notes = old.notes || [];
+        if (old.listingNo && r.no !== old.listingNo) {
+          old.notes.push({ id: CRM.newId(), at: now, text: `🔁 Annonce remise en ligne sur DuProprio : #${old.listingNo} → #${r.no}` });
+          old.listingNo = r.no; old.dpUrl = 'https://duproprio.com/' + r.no; newPdf = true;
+        }
         if (r.price && old.price && r.price !== old.price) {
-          old.notes = old.notes || []; old.notes.push({ id: CRM.newId(), at: now, text: `💲 Prix modifié sur DuProprio : ${old.price} → ${r.price}` });
-          old.price = r.price;
+          const a = priceNum(old.price), b = priceNum(r.price);
+          old.notes.push({ id: CRM.newId(), at: now, text: `${b < a ? '🔻 Baisse de prix' : '💲 Prix modifié'} sur DuProprio : ${old.price} → ${r.price}${a && b ? ` (${b < a ? '−' : '+'}${Math.abs(a - b).toLocaleString('fr-CA')} $)` : ''}` });
+          old.priceHist = (old.priceHist || []).concat([{ at: now, from: old.price, to: r.price }]);
+          if (b < a) old.priceDropAt = now; else delete old.priceDropAt;
+          old.prevPrice = old.price; old.price = r.price; newPdf = true;
         }
         if (r.phone && !old.phone) old.phone = r.phone;
         if (!old.plist) { old.plist = name; old.porder = r.order || ++order; old.importedAt = now; }
-        if (!old.hasPdf && r._f) toUpload.push([old, r._f]);
+        if (r._f && (!old.hasPdf || newPdf)) toUpload.push([old, r._f]);
         CRM.upsert(old); updated++;
         if (r.thumb && !thumbs[old.id]) { thumbs[old.id] = r.thumb; up.push({ id: old.id, data: { t: r.thumb } }); }
         return;
@@ -221,6 +247,7 @@
   let upQueue = [], upBusy = false, upDone = 0, upTotal = 0;
   function uploadPdfs(list) {
     list.forEach(([c, f]) => { pdfMem[c.id] = f; upQueue.push([c.id, f]); });
+    caches.open('mb-fiches').then(cc => list.forEach(([c]) => cc.delete('/api/pdf?id=' + c.id))).catch(() => {});
     upTotal += list.length; pumpUploads();
   }
   async function pumpUploads() {
@@ -301,6 +328,24 @@
     renderProp(c);
     const h = document.getElementById('pd-hist'); if (h) h.innerHTML = CRM._timeline(c.id);
   }
+  function money(n) { return Math.round(n).toLocaleString('fr-CA') + ' $'; }
+  function offerCalc(c) {
+    const v = priceNum(c.price); if (!v) return '';
+    const sel = c.offer && c.offer.price === c.price ? c.offer.pct : null;
+    return `<div class="pd-offer"><div class="pd-offer-h">Prix à proposer <span>(prix demandé − commission) · coche ce que tu as proposé</span></div>${[3.5, 3.25, 3].map(t => { const com = v * t / 100;
+      return `<label class="pd-offer-r${sel === t ? ' on' : ''}"><input type="checkbox" ${sel === t ? 'checked' : ''} onchange="Prospect.offer(${t}, this.checked)"><span class="pd-offer-t">${String(t).replace('.', ',')} %</span><b>${money(v - com)}</b><span class="pd-offer-c">comm. ${money(com)}</span></label>`; }).join('')}
+      ${c.offer && c.offer.price !== c.price ? `<div class="pd-offer-old">Déjà proposé : ${String(c.offer.pct).replace('.', ',')} % → ${money(c.offer.amount)} (sur ${e(c.offer.price)})</div>` : ''}</div>`;
+  }
+  function offer(t, on) {
+    const c = CRM._all()[cur]; if (!c) return; const v = priceNum(c.price); const now = new Date().toISOString();
+    c.notes = c.notes || [];
+    if (on) {
+      const amount = Math.round(v * (1 - t / 100));
+      c.offer = { pct: t, amount, price: c.price, at: now };
+      c.notes.push({ id: CRM.newId(), at: now, text: `🤝 Proposé ${money(amount)} (${String(t).replace('.', ',')} % · comm. ${money(v * t / 100)}) — prix demandé ${c.price}` });
+    } else if (c.offer && c.offer.pct === t) { delete c.offer; }
+    CRM.upsert(c); renderFiche(false);
+  }
   function renderProp(c) {
     const el = document.getElementById('pd-prop'); if (!el) return;
     const lc = lastCall(c), n = (c.calls || []).length;
@@ -308,6 +353,8 @@
     el.innerHTML = `
       ${thumb(c.id) ? `<img class="pd-photo" src="${thumb(c.id)}" alt="">` : '<div class="pd-photo pr-nothumb">🏠</div>'}
       <div class="pd-price">${e(c.price || '')} <span>${e(c.ptype || '')}${c.rooms ? ' · ' + e(c.rooms) + ' ch.' : ''}</span></div>
+      ${c.priceDropAt && c.prevPrice ? `<div class="pd-drop">🔻 Baisse de prix le ${new Date(c.priceDropAt).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })} · avant ${e(c.prevPrice)}</div>` : ''}
+      ${offerCalc(c)}
       <div class="pd-addr">${e(c.name)}</div>
       <div class="crm-muted">${e((c.address || '').replace(c.name + ', ', ''))}${c.listingNo ? ' · DuProprio #' + e(c.listingNo) : ''}</div>
       ${c.dnc ? '<div class="crm-dnc-banner">⛔ Ne pas appeler</div>' : c.phone ? `<a class="dial-call" href="tel:${String(c.phone).replace(/[^\d+]/g, '')}" onclick="CRM.touch && CRM.touch()">📞 Appeler ${e(c.phone)}</a>` : '<div class="pd-nophone">📵 Pas de téléphone sur la fiche — contacte-le via DuProprio</div>'}
@@ -440,7 +487,7 @@
     return `<div class="pr-card${c.dnc ? ' dnc' : ''}" onclick="Prospect.open('${c.id}')">
       ${thumbHtml(c, 'pr-thumb')}
       <div class="pr-body">
-        <div class="pr-l1"><span class="pr-no">#${e(c.porder || '')}</span><b>${e(c.price || '')}</b><span class="pr-type">${e(c.ptype || '')}</span></div>
+        <div class="pr-l1"><span class="pr-no">#${e(c.porder || '')}</span><b>${e(c.price || '')}</b>${c.priceDropAt ? '<span class="pr-drop" title="Baisse de prix">🔻</span>' : ''}<span class="pr-type">${e(c.ptype || '')}</span></div>
         <div class="pr-addr">${e(c.name)}${c.owner ? ` · <b>${e(c.owner)}</b>` : ''}</div>
         <div class="pr-meta">${c.hood ? e(c.hood) + ' · ' : ''}${c.dnc ? '⛔ Ne pas appeler' : c.phone ? '📞 ' + e(c.phone) : '📵 pas de tél.'}${!c.dncChecked && c.phone && !c.dnc ? ' · <span class="pr-lnnte">LNNTE ?</span>' : ''}</div>
         <div class="pr-meta">${lc ? `${OUTL[lc.outcome] || ''}${nCalls > 1 ? ` (${nCalls} appels)` : ''} · ` : ''}${fu}</div>
@@ -465,6 +512,7 @@
   function changed() { clearTimeout(rt); rt = setTimeout(() => { if (cur) { renderFiche(false); return; } const r = document.getElementById('prospection'); if (r && r.classList.contains('active')) render(); }, 150); }
 
   window.Prospect = {
+    offer,
     render, changed, thumb, thumbHtml, importFiles, confirmImport, closeModal, pick, dial, _parse: parseText,
     open: openFiche, close: closeFiche, step, typed, quick, set, out, follow, followDate, big,
     pane(k) { pane = k; const g = document.querySelector('#pr-dossier .pd-grid'); if (g) g.className = 'pd-grid pane-' + k; document.querySelectorAll('#pr-dossier .pd-tabs button').forEach(b => b.classList.toggle('on', b.getAttribute('onclick').includes("'" + k + "'"))); },
