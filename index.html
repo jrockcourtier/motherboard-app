@@ -666,7 +666,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v13.11</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span style="opacity:.6">v13.12</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -699,7 +699,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v13.11';
+    const APP_VERSION = 'v13.12';
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
     const JOURS_LONG = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -1207,6 +1207,8 @@
       // la grille peut être redessinée pendant le glisser (changement de semaine) : on la relit à chaque fois
       const q = (k) => document.querySelector(st.view + (k === 'body' ? ' .tg-body' : k === 'wrap' ? ' .tg-wrap' : ' .tg-allday'));
       function start(el, x, y, touch) {
+        if (st) end(false);          // un glisser précédent jamais terminé (bouton lâché hors de la fenêtre)
+        cleanup();
         const e = events.find(k => k.key === el.dataset.key); if (!e) return;
         const r = el.getBoundingClientRect();
         const view = el.closest('#semaine') ? '#semaine' : '#jour';
@@ -1315,13 +1317,19 @@
         if (ev && ev.cancelable) ev.preventDefault();
         update();
       }
+      // retire tout fantôme ou indice resté à l'écran
+      function cleanup() {
+        document.querySelectorAll('.tg-ghost, .flip-hint').forEach(n => n.remove());
+        document.querySelectorAll('.drag-src').forEach(n => n.classList.remove('drag-src'));
+        document.querySelectorAll('.drop-on').forEach(n => n.classList.remove('drop-on'));
+      }
       function end(drop) {
-        if (!st) return;
+        if (!st) { cleanup(); return; }
         clearTimeout(st.timer);
         const s0 = st; st = null;
         if (!s0.active) return;
         clearInterval(s0.scroll); dropAt = Date.now();
-        s0.g.remove(); s0.el.classList.remove('drag-src'); if (s0.hint) s0.hint.remove();
+        cleanup();
         document.querySelectorAll('.drop-on').forEach(c => c.classList.remove('drop-on'));
         const t = s0.t;
         if (!drop || !t) return;
@@ -1344,10 +1352,17 @@
       }, { passive: true });
       // souris
       document.addEventListener('mousedown', ev => { if (ev.button !== 0) return; const el = grab(ev.target); if (el) start(el, ev.clientX, ev.clientY, false); });
-      document.addEventListener('mousemove', ev => { if (st && !st.touch) moveTo(ev.clientX, ev.clientY, ev); });
+      document.addEventListener('mousemove', ev => {
+        if (!st || st.touch) return;
+        if (ev.buttons === 0) { end(false); return; } // bouton lâché hors de la fenêtre : on annule le glisser
+        moveTo(ev.clientX, ev.clientY, ev);
+      });
       document.addEventListener('mouseup', () => { if (st && !st.touch) end(true); });
       document.addEventListener('contextmenu', ev => { if (st || Date.now() - dropAt < 600) ev.preventDefault(); });
       document.addEventListener('keydown', ev => { if (ev.key === 'Escape') end(false); });
+      window.addEventListener('blur', () => end(false));
+      document.addEventListener('visibilitychange', () => { if (document.hidden) end(false); });
+      document.addEventListener('mouseleave', () => { if (st && !st.touch) end(false); });
       return { justDropped: () => Date.now() - dropAt < 500 };
     })();
 
