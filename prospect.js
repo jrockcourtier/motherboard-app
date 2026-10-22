@@ -14,10 +14,11 @@
   const all = () => (window.CRM && CRM._all ? Object.values(CRM._all()) : []).filter(c => !c.deleted && c.type === 'proprio' && c.plist);
   function colOf(c) {
     const s = c.stage || 'À appeler';
-    if (s === 'À appeler') return 'appeler';
     if (s === 'Signé' || s === 'Converti en vendeur') return 'signe';
     if (s === 'Pas intéressé' || s === 'Injoignable') return 'archive';
-    return 'suivi';
+    // Suivi = seulement quand Julien le décide (📌 Suivi) ou qu'il y a de l'intérêt / un RDV
+    if (c.suivi || s === 'Intéressé' || s === 'Rendez-vous') return 'suivi';
+    return 'appeler';
   }
   const isDue = (c) => c.nextFollowUp && c.nextFollowUp <= today();
   function lists() {
@@ -281,7 +282,7 @@
 
   // ---------- le dossier : PDF à gauche · propriété au centre · notes à droite ----------
   let cur = null, order = [], pane = window.innerWidth < 900 ? 'prop' : 'notes', saveT = null;
-  const OUTS = [['pas_reponse', '📵', 'Pas de réponse'], ['message', '📨', 'Message'], ['parle', '💬', 'Parlé'], ['rdv', '📅', 'RDV'], ['pas_interesse', '🙅', 'Pas intéressé']];
+  const OUTS = [['pas_reponse', '📵', 'Pas de réponse'], ['message', '📨', 'Message'], ['parle', '💬', 'Parlé (reste)'], ['suivi', '📌', 'Suivi'], ['rdv', '📅', 'RDV'], ['pas_interesse', '🙅', 'Pas intéressé']];
   const QUICK = [['Nom du proprio', 'Nom du proprio : '], ['Prix minimum', 'Prix minimum : '], ['Commission', 'Commission : '], ['Délai', 'Délai : '], ['Motivation', 'Motivation : '], ['Courtier ?', 'A déjà un courtier : ']];
   function openFiche(id) {
     const c = CRM._all()[id]; if (!c) return;
@@ -385,6 +386,7 @@
       ${lc ? `<div class="crm-muted" style="margin-top:6px">Dernier : ${OUTL[lc.outcome] || ''} · ${new Date(lc.at).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })}</div>` : ''}
       ${!c.dncChecked && !c.dnc && c.phone ? `<div class="dial-warn">LNNTE non vérifiée · <a href="https://lnnte-dncl.gc.ca/" target="_blank" rel="noopener">vérifier</a> · <button onclick="Prospect.set('dncChecked', true)">✓ Vérifiée</button></div>` : ''}
       ${fu}
+      ${colOf(c) === 'suivi' ? `<button class="pd-move" onclick="Prospect.toSuivi(false)">↩ Remettre dans « À appeler »</button>` : colOf(c) === 'appeler' && (c.calls || []).length ? `<button class="pd-move" onclick="Prospect.toSuivi(true)">📌 Mettre en suivi</button>` : ''}
       <div class="pd-stages">${['À appeler', 'Appelé – rappeler', 'Intéressé', 'Rendez-vous', 'Signé', 'Pas intéressé'].map(s => `<button class="${(c.stage || 'À appeler') === s ? 'on' : ''}" onclick="Prospect.set('stage', ${JSON.stringify(s).replace(/"/g, '&quot;')})">${s === 'Signé' ? '✍️ Signé' : e(s)}</button>`).join('')}</div>
       <div class="pd-links">${c.dpUrl ? `<a href="${e(c.dpUrl)}" target="_blank" rel="noopener">🏠 Annonce DuProprio</a>` : ''}<button onclick="CRM.open('${c.id}')">Fiche contact complète</button>
         <label class="pd-dnc"><input type="checkbox" ${c.dnc ? 'checked' : ''} onchange="Prospect.set('dnc', this.checked)"> ⛔ Ne pas appeler</label></div>`;
@@ -427,20 +429,39 @@
     const v = ta.value, pre = v && !v.endsWith('\n') ? '\n' : '';
     ta.value = v + pre + t; ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); typed();
   }
-  function set(k, v) { const c = CRM._all()[cur]; if (!c) return; c[k] = v; if (k === 'dnc' && v) c.nextFollowUp = ''; CRM.upsert(c); if (k === 'owner') renderProp(c); }
+  function set(k, v) { const c = CRM._all()[cur]; if (!c) return; c[k] = v; if (k === 'stage' && (v === 'À appeler' || v === 'Appelé – rappeler')) c.suivi = false; if (k === 'dnc' && v) c.nextFollowUp = ''; CRM.upsert(c); if (k === 'owner') renderProp(c); }
   function out(k) {
     flushNote();
     const c = CRM._all()[cur]; if (!c) return;
     const first = (c.pnotes || '').split('\n').map(x => x.trim()).filter(Boolean).slice(-1)[0] || '';
     const ta = document.createElement('textarea'); ta.id = 'pd-tmp'; ta.value = k === 'parle' || k === 'rdv' || k === 'pas_interesse' ? first.slice(0, 160) : ''; ta.style.display = 'none'; document.body.appendChild(ta);
-    CRM.logCall(k, { id: c.id, noteId: 'pd-tmp', silent: true }); ta.remove();
+    if (k === 'suivi') ta.value = first.slice(0, 160);
+    CRM.logCall(k === 'suivi' ? 'parle' : k, { id: c.id, noteId: 'pd-tmp', silent: true }); ta.remove();
     const after = document.getElementById('pd-after');
     if (k === 'parle') {
-      after.innerHTML = `<div class="crm-after-q">Quand le rappeler ?</div><div class="chips">${[[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Prospect.follow(${d})">${l}</button>`).join('')}<label class="crm-datepick">📅<input type="date" onchange="Prospect.followDate(this.value)"></label></div><label class="crm-cal"><input type="checkbox" id="pd-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
+      // conversation sans suite : reste dans « À appeler », rappel automatique dans 1 semaine (modifiable)
+      c.suivi = false; c.nextFollowUp = CRM.callDay(addDays(7)); CRM.upsert(c);
+      after.innerHTML = `<div class="crm-after-q">💬 Reste dans « À appeler » — rappel le ${fmtD(c.nextFollowUp)}. Changer ?</div><div class="chips">${[[3, '3 jours'], [14, '2 sem'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Prospect.follow(${d})">${l}</button>`).join('')}<label class="crm-datepick">📅<input type="date" onchange="Prospect.followDate(this.value)"></label><button onclick="Prospect.out2suivi()">📌 Finalement, en suivi</button></div>`;
+      toastMsg(`💬 Parlé — reste dans « À appeler » <button onclick="CRM.undoCall('${c.id}')">Annuler</button>`);
+      return;
+    }
+    if (k === 'suivi') {
+      c.suivi = true; CRM.upsert(c);
+      after.innerHTML = `<div class="crm-after-q">📌 En suivi — quand le rappeler ?</div><div class="chips">${[[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Prospect.follow(${d})">${l}</button>`).join('')}<label class="crm-datepick">📅<input type="date" onchange="Prospect.followDate(this.value)"></label></div><label class="crm-cal"><input type="checkbox" id="pd-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
       return;
     }
     if (k === 'rdv') { CRM.focus(c.id); CRM.meeting(); return; }
     toastMsg(`${OUTL[k]} — ${c.nextFollowUp ? 'rappel le ' + fmtD(c.nextFollowUp) : 'archivé'} <button onclick="CRM.undoCall('${c.id}')">Annuler</button>`);
+  }
+  function out2suivi() {
+    const c = CRM._all()[cur]; if (!c) return; c.suivi = true; CRM.upsert(c);
+    document.getElementById('pd-after').innerHTML = `<div class="crm-after-q">📌 En suivi — quand le rappeler ?</div><div class="chips">${[[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Prospect.follow(${d})">${l}</button>`).join('')}<label class="crm-datepick">📅<input type="date" onchange="Prospect.followDate(this.value)"></label></div><label class="crm-cal"><input type="checkbox" id="pd-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
+  }
+  function toSuivi(on) {
+    const c = CRM._all()[cur]; if (!c) return;
+    c.suivi = !!on; if (!on && (c.stage === 'Intéressé' || c.stage === 'Rendez-vous')) c.stage = 'Appelé – rappeler';
+    CRM.upsert(c); renderFiche(false);
+    toastMsg(on ? '📌 Mis en suivi' : '↩ Remis dans « À appeler »');
   }
   const addDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   // ---------- horaire d'appels ----------
@@ -483,7 +504,7 @@
     const cal = document.getElementById('pd-cal');
     if (cal && cal.checked && window.VoiceCRM && VoiceCRM.reminder) VoiceCRM.reminder(c, { date: new Date(c.nextFollowUp + 'T12:00:00'), start: CRM.callSlot ? CRM.callSlot(c.nextFollowUp) : null }).catch(() => {});
     document.getElementById('pd-after').innerHTML = '';
-    toastMsg(`💬 Parlé — rappel le ${fmtD(c.nextFollowUp)}`);
+    toastMsg(`${c.suivi ? '📌 Suivi' : '💬 Reste dans « À appeler »'} — rappel le ${fmtD(c.nextFollowUp)}`);
   }
 
   // ---------- affichage ----------
@@ -566,7 +587,7 @@
   function changed() { clearTimeout(rt); rt = setTimeout(() => { if (cur) { renderFiche(false); return; } const r = document.getElementById('prospection'); if (r && r.classList.contains('active')) render(); }, 150); }
 
   window.Prospect = {
-    offer, toContact, plan, savePlan,
+    out2suivi, toSuivi, offer, toContact, plan, savePlan,
     render, changed, thumb, thumbHtml, importFiles, confirmImport, closeModal, pick, dial, _parse: parseText,
     open: openFiche, close: closeFiche, step, typed, quick, set, out, follow, followDate, big,
     pane(k) { pane = k; const g = document.querySelector('#pr-dossier .pd-grid'); if (g) g.className = 'pd-grid pane-' + k; document.querySelectorAll('#pr-dossier .pd-tabs button').forEach(b => b.classList.toggle('on', b.getAttribute('onclick').includes("'" + k + "'"))); },

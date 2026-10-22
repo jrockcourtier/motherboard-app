@@ -17,7 +17,7 @@
     const st = c.stage || 'À appeler';
     if (st === 'Signé' || st === 'Converti en vendeur') return 'vendeur';
     if (st === 'Pas intéressé' || st === 'Injoignable') return 'proprio';
-    if (c.isContact || st === 'Intéressé' || st === 'Rendez-vous' || (c.calls || []).some(k => OUT[k.outcome] && OUT[k.outcome].conv)) return 'vpot';
+    if (c.isContact || c.suivi || st === 'Intéressé' || st === 'Rendez-vous') return 'vpot';
     return 'proprio';
   }
   function catInfo(c) { const k = cat(c); return CATS[k] || TYPES_C[k] || TYPES_C.client; }
@@ -166,6 +166,11 @@
       });
       persist(); setSync('ok');
       try {
+        // v15.9 : « Parlé » ne met plus en suivi tout seul — on garde en suivi seulement les fiches vraiment travaillées
+        if (!localStorage.getItem('mb_suivi_mig')) {
+          Object.values(contacts).forEach(c => { if (!c.deleted && c.type === 'proprio' && c.plist && c.suivi === undefined && c.stage === 'Appelé – rappeler') { c.suivi = !!(c.owner || c.offer || c.isContact); c.updatedAt = new Date().toISOString(); pending.add(c.id); } });
+          localStorage.setItem('mb_suivi_mig', '1'); persist();
+        }
         if (!localStorage.getItem('mb_cp_mig1')) {
           const t = todayStr();
           Object.values(contacts).forEach(c => { if (!c.deleted && c.type === 'proprio' && c.nextFollowUp && c.nextFollowUp > t) { const d = callDay(c.nextFollowUp); if (d !== c.nextFollowUp) { c.nextFollowUp = d; c.updatedAt = new Date().toISOString(); pending.add(c.id); } } });
@@ -194,7 +199,7 @@
     const all = list();
     const sm = (SMART.find(x => x[0] === smart) || SMART[0])[2];
     // les fiches DuProprio pas encore appelées restent dans l'onglet Prospection (sinon la liste de contacts déborde)
-    const rows = all.filter(c => !(filter === 'tous' && !q && c.plist && !c.isContact && (c.stage || 'À appeler') === 'À appeler') && sm(c) && (filter === 'tous' || cat(c) === filter) &&
+    const rows = all.filter(c => !(filter === 'tous' && !q && c.plist && cat(c) === 'proprio') && sm(c) && (filter === 'tous' || cat(c) === filter) &&
       (!q || [c.name, c.owner, c.phone, c.email, c.address, c.neighborhoods, c.stage].join(' ').toLowerCase().includes(q)));
     const due = rows.filter(c => isDue(c)).sort((a, b) => a.nextFollowUp.localeCompare(b.nextFollowUp));
     const rest = rows.filter(c => !isDue(c)).sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
@@ -604,7 +609,7 @@
       this.last = { id, outcome, i: this.i };
       if (outcome !== 'parle' && outcome !== 'rdv' && typeof toast === 'function') toast(`${OUT[outcome].i} ${OUT[outcome].l} — ${e(contacts[id].name)} <button onclick="Dialer.undo()">Annuler</button>`);
       if (outcome === 'parle') {
-        document.getElementById('dial-after').innerHTML = `<div class="crm-after-q">Quand le rappeler ?</div><div class="chips">${[[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Dialer.follow(${d})">${l}</button>`).join('')}<button onclick="Dialer.follow(0, true)">Aucun</button></div><label class="crm-cal"><input type="checkbox" id="dial-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
+        document.getElementById('dial-after').innerHTML = `<div class="crm-after-q">Quand le rappeler ?</div><div class="chips">${[[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Dialer.follow(${d})">${l}</button>`).join('')}<button onclick="Dialer.follow(0, true)">Aucun</button></div>${contacts[id].type === 'proprio' && contacts[id].plist ? `<label class="crm-cal"><input type="checkbox" id="dial-suivi"> 📌 Mettre en suivi (sinon reste dans « À appeler »)</label>` : ''}<label class="crm-cal"><input type="checkbox" id="dial-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
         return;
       }
       if (outcome === 'rdv') { const c = contacts[id]; Dialer.pauseFor(c); return; }
@@ -613,6 +618,7 @@
     async follow(days, none) {
       const c = contacts[this.q[this.i]];
       const wantCal = !none && document.getElementById('dial-cal') && document.getElementById('dial-cal').checked;
+      const su = document.getElementById('dial-suivi'); if (su && su.checked) c.suivi = true;
       c.nextFollowUp = none ? '' : addDaysStr(days); save(c);
       if (wantCal && window.VoiceCRM && VoiceCRM.reminder) VoiceCRM.reminder(c, { date: new Date(c.nextFollowUp + 'T12:00:00'), start: callSlot(c.nextFollowUp) }).catch(() => {});
       this.next();

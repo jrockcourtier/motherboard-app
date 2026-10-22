@@ -315,3 +315,8 @@ body.pr-dossier-open .fab, body.pr-dossier-open .fab-mic { display: none !import
 .pr-days input:checked + span { background: #0b8043; border-color: #0b8043; color: #fff; }
 .pr-hours { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 .pr-hours select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border-light); font-size: 15px; }
+
+.pd-move { display: block; width: 100%; margin: 8px 0 4px; padding: 7px 10px; border-radius: 10px; border: 1px dashed var(--border-light); background: transparent; font-weight: 600; cursor: pointer; color: var(--text-secondary); }
+.pd-move:hover { background: var(--light-bg); }
+.pd-notes .crm-outcomes { grid-template-columns: repeat(6, 1fr); }
+@media (max-width: 600px) { .pd-notes .crm-outcomes { grid-template-columns: repeat(3, 1fr); } }
