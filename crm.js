@@ -485,7 +485,7 @@
       const t = TYPES_C[c.type] || TYPES_C.client;
       const note = [t.label + (c.stage ? ' · ' + c.stage : ''), c.budget ? 'Budget : ' + c.budget : '', c.price ? 'Prix : ' + c.price : '', c.neighborhoods ? 'Quartiers : ' + c.neighborhoods : '', c.dpUrl ? 'DuProprio : ' + c.dpUrl : '', c.offer ? 'Proposé : ' + Number(c.offer.amount).toLocaleString('fr-CA') + ' $ (' + String(c.offer.pct).replace('.', ',') + ' %)' : '', 'Fiche Motherboard'].filter(Boolean).join(' — ');
       const lines = ['BEGIN:VCARD', 'VERSION:3.0', `N:${esc2(last)};${esc2(first)};;;`, `FN:${esc2(fn)}`,
-        c.phone ? `TEL;TYPE=CELL:${String(c.phone).replace(/[^\d+]/g, '')}` : '', c.email ? `EMAIL;TYPE=INTERNET:${esc2(c.email)}` : '',
+        c.phone ? `TEL;TYPE=CELL:${String(c.phone).replace(/[^\d+]/g, '')}` : '', c.phone2 ? `TEL;TYPE=VOICE:${String(c.phone2).replace(/[^\d+]/g, '')}` : '', c.email ? `EMAIL;TYPE=INTERNET:${esc2(c.email)}` : '',
         c.address ? `ADR;TYPE=HOME:;;${esc2(c.address)};;;;` : '', `NOTE:${esc2(note)}`, 'END:VCARD'].filter(Boolean);
       const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/vcard;charset=utf-8' });
       const url = URL.createObjectURL(blob);

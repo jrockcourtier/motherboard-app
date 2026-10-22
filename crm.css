@@ -339,3 +339,5 @@ body.pr-dossier-open .fab, body.pr-dossier-open .fab-mic { display: none !import
 .pd-notes .crm-outcomes { grid-template-columns: repeat(7, 1fr); gap: 5px; }
 .pd-notes .crm-outcomes button span { font-size: 10px; line-height: 1.15; }
 @media (max-width: 1250px) { .pd-notes .crm-outcomes { grid-template-columns: repeat(4, 1fr); } }
+
+.pd-call2 { display: block; text-align: center; margin: 6px 0 2px; padding: 8px 10px; border-radius: 12px; border: 1.5px solid #0b8043; color: #0b8043; font-weight: 700; text-decoration: none; }

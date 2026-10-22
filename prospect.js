@@ -66,6 +66,13 @@
     });
     return pdfjs;
   }
+  const PHONE_RX = /(?:^|[^\d])\(?([2-9]\d{2})\)?[\s.-]?(\d{3})[\s.-]?(\d{4})(?!\d)/g;
+  const isPhoneLine = (s) => /^[\d\s().,;\/+\-]*(?:(?:ou|et|cell|tél|tel)\.?\s*:?\s*[\d\s().,;\/+\-]*)*$/i.test(s) && /\d{3}[\s.-]?\d{4}/.test(s);
+  function phonesIn(lines) {
+    const out = [];
+    lines.forEach(l => { let m; PHONE_RX.lastIndex = 0; while ((m = PHONE_RX.exec(l))) { const n = `${m[1]}-${m[2]}-${m[3]}`; if (!out.includes(n)) out.push(n); } });
+    return out;
+  }
   function parseText(items) {
     // colonne de droite (bloc vert) : prix, #numéro, adresse, ville, téléphone
     const right = items.filter(i => i.str.trim() && i.transform[4] > 330 && i.transform[5] > 540).sort((a, b) => b.transform[5] - a.transform[5]).map(i => i.str.trim());
@@ -81,10 +88,14 @@
       const ci = rest.findIndex(s => /[A-Z]\d[A-Z]\s?\d[A-Z]\d/i.test(s) || /Québec|Quebec/.test(s));
       if (ci > 0) { out.street = rest.slice(0, ci).join(' '); out.city = rest[ci]; }
       else if (rest.length) { out.street = rest[0]; out.city = rest[1] || ''; }
-      const ph = rest.find(s => /^\(?\d{3}\)?[\s.-]?\d{3}[\s.-]\d{4}$/.test(s));
-      if (ph) out.phone = ph;
+      // téléphones : seulement les lignes APRÈS la ville, composées uniquement de numéros (« 514-984-7735, 514-449-8697 »)
+      const after = ci >= 0 ? rest.slice(ci + 1) : rest;
+      const phones = phonesIn(after.filter(isPhoneLine));
+      if (phones[0]) out.phone = phones[0];
+      if (phones[1]) out.phone2 = phones[1];
     }
-    if (!out.phone) { const ph = right.join(' ').match(/\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}/); if (ph) out.phone = ph[0]; }
+    // jamais de « numéro » recollé à partir de morceaux d'adresse : on ne garde qu'une ligne qui ne contient que des numéros
+    if (!out.phone) { const phones = phonesIn(right.filter(isPhoneLine)); if (phones[0]) out.phone = phones[0]; if (phones[1]) out.phone2 = phones[1]; }
     const tm = all.match(/Type de propriété\s*\n[\s\n]*([^\n]+)/); if (tm) out.ptype = tm[1].trim();
     const ch = all.match(/Nombre de chambres\s*\n[\s\n]*(\d+)/); if (ch) out.rooms = ch[1];
     out.hood = out.city ? out.city.split(',')[0].trim() : '';
@@ -200,7 +211,9 @@
     const K = knownMaps();
     const now = new Date().toISOString(), up = [], toUpload = [];
     let added = 0, updated = 0, order = Math.max(0, ...all().filter(c => c.plist === name).map(c => c.porder || 0));
+    const seenNo = new Set();
     pendingImport.filter(r => !r.error && r.no).forEach(r => {
+      if (seenNo.has(r.no)) return; seenNo.add(r.no);   // même fiche en double dans le lot
       const old = K.find(r);
       if (old) {
         let newPdf = false;
@@ -216,7 +229,9 @@
           if (b < a) old.priceDropAt = now; else delete old.priceDropAt;
           old.prevPrice = old.price; old.price = r.price; newPdf = true;
         }
-        if (r.phone && !old.phone) old.phone = r.phone;
+        // le numéro de la fiche PDF fait foi
+        if (r.phone && r.phone !== old.phone) { if (old.phone) old.notes.push({ id: CRM.newId(), at: now, text: `📞 Numéro mis à jour d'après la fiche : ${old.phone} → ${r.phone}` }); old.phone = r.phone; }
+        if (r.phone2 && r.phone2 !== old.phone2) old.phone2 = r.phone2;
         if (old.stage === 'A un courtier') {
           // réimportée exprès : on la remet dans la liste, marquée « à revalider »
           old.notes.push({ id: CRM.newId(), at: now, text: `♻️ Réimportée dans « ${name} » — avait déjà un courtier : à revalider` });
@@ -232,7 +247,7 @@
       const id = CRM.newId();
       const c = {
         id, type: 'proprio', stage: 'À appeler', name: r.street || ('DuProprio #' + r.no),
-        address: [r.street, r.city].filter(Boolean).join(', '), phone: r.phone || '', price: r.price || '',
+        address: [r.street, r.city].filter(Boolean).join(', '), phone: r.phone || '', phone2: r.phone2 || '', price: r.price || '',
         ptype: r.ptype || '', rooms: r.rooms || '', hood: r.hood || '', listingNo: r.no, dpUrl: 'https://duproprio.com/' + r.no,
         plist: name, porder: r.order || ++order, importedAt: now, source: 'DuProprio', firstContact: '', notes: [], calls: [], createdAt: now
       };
@@ -383,7 +398,7 @@
       ${offerCalc(c)}
       <div class="pd-addr">${e(c.name)}</div>
       <div class="crm-muted">${e((c.address || '').replace(c.name + ', ', ''))}${c.listingNo ? ' · DuProprio #' + e(c.listingNo) : ''}</div>
-      ${c.dnc ? '<div class="crm-dnc-banner">⛔ Ne pas appeler</div>' : c.phone ? `<a class="dial-call" href="tel:${String(c.phone).replace(/[^\d+]/g, '')}" onclick="CRM.touch && CRM.touch()">📞 Appeler ${e(c.phone)}</a>` : '<div class="pd-nophone">📵 Pas de téléphone sur la fiche — contacte-le via DuProprio</div>'}
+      ${c.dnc ? '<div class="crm-dnc-banner">⛔ Ne pas appeler</div>' : c.phone ? `<a class="dial-call" href="tel:${String(c.phone).replace(/[^\d+]/g, '')}" onclick="CRM.touch && CRM.touch()">📞 Appeler ${e(c.phone)}</a>${c.phone2 ? `<a class="pd-call2" href="tel:${String(c.phone2).replace(/[^\d+]/g, '')}">📞 2ᵉ numéro : ${e(c.phone2)}</a>` : ''}` : '<div class="pd-nophone">📵 Pas de téléphone sur la fiche — contacte-le via DuProprio</div>'}
       ${c.isContact ? `<div class="pd-contact ok">✓ Dans tes contacts <span>POT-${e(c.owner || 'Proprio')} - ${e(c.name)}</span><button onclick="Prospect.toContact(true)">📲 Renvoyer au téléphone</button></div>`
         : `<button class="pd-contact-btn" onclick="Prospect.toContact()">📇 Ajouter à mes contacts <span>POT-${e(c.owner || '…')} - ${e(c.name)}</span></button>`}
       <div class="pd-facts">
@@ -612,7 +627,7 @@
       <div class="pr-body">
         <div class="pr-l1">${isNext ? '<span class="pr-next">▶ Prochain</span>' : ''}<span class="pr-no">#${e(c.porder || '')}</span><b>${e(c.price || '')}</b>${c.priceDropAt ? '<span class="pr-drop" title="Baisse de prix">🔻</span>' : ''}${c.isContact ? '<span class="pr-drop" title="Dans tes contacts">📇</span>' : ''}${c.revalider ? '<span class="pr-reval">🤝 à revalider</span>' : ''}<span class="pr-type">${e(c.ptype || '')}</span></div>
         <div class="pr-addr">${e(c.name)}${c.owner ? ` · <b>${e(c.owner)}</b>` : ''}</div>
-        <div class="pr-meta">${c.hood ? e(c.hood) + ' · ' : ''}${c.dnc ? '⛔ Ne pas appeler' : c.phone ? '📞 ' + e(c.phone) : '📵 pas de tél.'}${!c.dncChecked && c.phone && !c.dnc ? ' · <span class="pr-lnnte">LNNTE ?</span>' : ''}</div>
+        <div class="pr-meta">${c.hood ? e(c.hood) + ' · ' : ''}${c.dnc ? '⛔ Ne pas appeler' : c.phone ? '📞 ' + e(c.phone) + (c.phone2 ? ' · ' + e(c.phone2) : '') : '📵 pas de tél.'}${!c.dncChecked && c.phone && !c.dnc ? ' · <span class="pr-lnnte">LNNTE ?</span>' : ''}</div>
         <div class="pr-meta">${done ? `<span class="pr-done">✓ appelé ${new Date(lc.at).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })}</span> · ` : ''}${lc ? `${OUTL[lc.outcome] || ''} · ${nCalls} essai${nCalls > 1 ? 's' : ''} · ` : ''}${fu ? fu.replace('🔔 ', '🔔 rappel ') : ''}</div>
       </div>
       ${c.phone && !c.dnc ? `<a class="crm-call" href="tel:${String(c.phone).replace(/[^\d+]/g, '')}" onclick="event.stopPropagation()" aria-label="Appeler">📞</a>` : ''}
