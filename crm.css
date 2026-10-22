@@ -336,3 +336,6 @@ body.pr-dossier-open .fab, body.pr-dossier-open .fab-mic { display: none !import
 
 .pr-reval { background: #fef3e0; color: #b06000; font-size: 10.5px; font-weight: 800; padding: 1px 6px; border-radius: 6px; margin-left: 4px; white-space: nowrap; }
 .pd-reval { margin: 4px 0 6px; padding: 7px 10px; border-radius: 10px; background: #fef3e0; color: #b06000; font-weight: 700; font-size: 13px; }
+.pd-notes .crm-outcomes { grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.pd-notes .crm-outcomes button span { font-size: 10px; line-height: 1.15; }
+@media (max-width: 1250px) { .pd-notes .crm-outcomes { grid-template-columns: repeat(4, 1fr); } }
