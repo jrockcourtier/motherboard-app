@@ -187,9 +187,9 @@
     box.innerHTML = `
       <div class="sheet-head"><button type="button" class="sheet-x" onclick="Prospect.closeModal()">✕</button><b>Importer ${ok.length} fiche${ok.length > 1 ? 's' : ''}</b><button class="sheet-save" onclick="Prospect.confirmImport()">Ajouter</button></div>
       <label class="f-block">Nom de la liste<input id="pr-listname" value="${e(listName)}" autocomplete="off"></label>
-      <div class="pr-sum">🆕 <b>${nNew}</b> nouvelle${nNew > 1 ? 's' : ''}${nDup ? ` · ♻️ <b>${nDup}</b> déjà dans tes listes (prix mis à jour)` : ''}${nBroker ? ` · 🤝 <b>${nBroker}</b> ont déjà un courtier (ignorées)` : ''}${noPhone ? ` · 📵 ${noPhone} sans téléphone sur la fiche` : ''}${nBad ? ` · ⚠️ ${nBad} illisible${nBad > 1 ? 's' : ''}` : ''}</div>
+      <div class="pr-sum">🆕 <b>${nNew}</b> nouvelle${nNew > 1 ? 's' : ''}${nDup ? ` · ♻️ <b>${nDup}</b> déjà dans tes listes (prix mis à jour)` : ''}${nBroker ? ` · 🤝 <b>${nBroker}</b> avai${nBroker > 1 ? 'ent' : 't'} un courtier (à revalider)` : ''}${noPhone ? ` · 📵 ${noPhone} sans téléphone sur la fiche` : ''}${nBad ? ` · ⚠️ ${nBad} illisible${nBad > 1 ? 's' : ''}` : ''}</div>
       <div class="pr-rev">${res.map(r => r.error || !r.no ? `<div class="pr-rev-row bad">⚠️ ${e(r.file)} — ${r.error ? 'illisible : ' + e(r.why || 'erreur') : 'pas une fiche DuProprio reconnue'}</div>` :
-        `<div class="pr-rev-row">${r.thumb ? `<img src="${r.thumb}" alt="">` : '<span class="pr-nothumb">🏠</span>'}<div><b>${r.order ? '#' + r.order + ' · ' : ''}${e(r.price || '')}</b> ${e(r.ptype || '')}<br>${e(r.street || '')} <span class="crm-muted">${e(r.hood || '')}</span><br><span class="crm-muted">${r.phone ? '📞 ' + e(r.phone) : '📵 pas de téléphone'} · DuProprio #${e(r.no)}${known[r.no] && known[r.no].stage === 'A un courtier' ? ' · 🤝 a déjà un courtier — ne revient pas dans ta liste' + (known[r.no].price && r.price && known[r.no].price !== r.price ? ' (prix noté)' : '') : known[r.no] ? ' · ♻️ déjà là' + (known[r.no].listingNo && known[r.no].listingNo !== r.no ? ' (même adresse, annonce remise en ligne)' : '') + (known[r.no].price && r.price && priceNum(r.price) < priceNum(known[r.no].price) ? ' · 🔻 baisse de prix' : '') : ''}</span></div></div>`).join('')}</div>
+        `<div class="pr-rev-row">${r.thumb ? `<img src="${r.thumb}" alt="">` : '<span class="pr-nothumb">🏠</span>'}<div><b>${r.order ? '#' + r.order + ' · ' : ''}${e(r.price || '')}</b> ${e(r.ptype || '')}<br>${e(r.street || '')} <span class="crm-muted">${e(r.hood || '')}</span><br><span class="crm-muted">${r.phone ? '📞 ' + e(r.phone) : '📵 pas de téléphone'} · DuProprio #${e(r.no)}${known[r.no] && known[r.no].stage === 'A un courtier' ? ' · 🤝 avait un courtier — revient « à revalider »' : known[r.no] ? ' · ♻️ déjà là' + (known[r.no].listingNo && known[r.no].listingNo !== r.no ? ' (même adresse, annonce remise en ligne)' : '') + (known[r.no].price && r.price && priceNum(r.price) < priceNum(known[r.no].price) ? ' · 🔻 baisse de prix' : '') : ''}</span></div></div>`).join('')}</div>
       ${res.some(r => r.error && /iCloud|vide/.test(r.why || '')) ? `<div class="pr-warn">☁️ Ces PDF sont dans iCloud mais pas encore téléchargés sur ce Mac. Dans le Finder : clic droit sur le dossier <b>Sud-Ouest</b> → <b>Télécharger maintenant</b>, attends que les nuages disparaissent, puis réessaie.</div>` : ''}
       <div class="crm-muted" style="margin-top:8px">Les numéros ne sont pas encore vérifiés à la LNNTE : l'app te le rappellera avant chaque appel.</div>`;
   }
@@ -217,7 +217,13 @@
           old.prevPrice = old.price; old.price = r.price; newPdf = true;
         }
         if (r.phone && !old.phone) old.phone = r.phone;
-        if (!old.plist && old.stage !== 'A un courtier') { old.plist = name; old.porder = r.order || ++order; old.importedAt = now; }
+        if (old.stage === 'A un courtier') {
+          // réimportée exprès : on la remet dans la liste, marquée « à revalider »
+          old.notes.push({ id: CRM.newId(), at: now, text: `♻️ Réimportée dans « ${name} » — avait déjà un courtier : à revalider` });
+          old.stage = 'À appeler'; old.revalider = true; old.suivi = false; old.nextFollowUp = '';
+          old.plist = name; old.porder = r.order || ++order; old.importedAt = now;
+        }
+        if (!old.plist) { old.plist = name; old.porder = r.order || ++order; old.importedAt = now; }
         if (r._f && (!old.hasPdf || newPdf)) toUpload.push([old, r._f]);
         CRM.upsert(old); updated++;
         if (r.thumb && !thumbs[old.id]) { thumbs[old.id] = r.thumb; up.push({ id: old.id, data: { t: r.thumb } }); }
@@ -373,6 +379,7 @@
       ${thumb(c.id) ? `<img class="pd-photo" src="${thumb(c.id)}" alt="">` : '<div class="pd-photo pr-nothumb">🏠</div>'}
       <div class="pd-price">${e(c.price || '')} <span>${e(c.ptype || '')}${c.rooms ? ' · ' + e(c.rooms) + ' ch.' : ''}</span></div>
       ${c.priceDropAt && c.prevPrice ? `<div class="pd-drop">🔻 Baisse de prix le ${new Date(c.priceDropAt).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })} · avant ${e(c.prevPrice)}</div>` : ''}
+      ${c.revalider ? `<div class="pd-reval">🤝 Avait déjà un courtier — demande-lui si c'est toujours le cas.</div>` : ''}
       ${offerCalc(c)}
       <div class="pd-addr">${e(c.name)}</div>
       <div class="crm-muted">${e((c.address || '').replace(c.name + ', ', ''))}${c.listingNo ? ' · DuProprio #' + e(c.listingNo) : ''}</div>
@@ -603,7 +610,7 @@
     return `<div class="pr-card${c.dnc ? ' dnc' : ''}${done ? ' done' : ''}${isNext ? ' next' : ''}" onclick="Prospect.open('${c.id}')">
       ${thumbHtml(c, 'pr-thumb')}
       <div class="pr-body">
-        <div class="pr-l1">${isNext ? '<span class="pr-next">▶ Prochain</span>' : ''}<span class="pr-no">#${e(c.porder || '')}</span><b>${e(c.price || '')}</b>${c.priceDropAt ? '<span class="pr-drop" title="Baisse de prix">🔻</span>' : ''}${c.isContact ? '<span class="pr-drop" title="Dans tes contacts">📇</span>' : ''}<span class="pr-type">${e(c.ptype || '')}</span></div>
+        <div class="pr-l1">${isNext ? '<span class="pr-next">▶ Prochain</span>' : ''}<span class="pr-no">#${e(c.porder || '')}</span><b>${e(c.price || '')}</b>${c.priceDropAt ? '<span class="pr-drop" title="Baisse de prix">🔻</span>' : ''}${c.isContact ? '<span class="pr-drop" title="Dans tes contacts">📇</span>' : ''}${c.revalider ? '<span class="pr-reval">🤝 à revalider</span>' : ''}<span class="pr-type">${e(c.ptype || '')}</span></div>
         <div class="pr-addr">${e(c.name)}${c.owner ? ` · <b>${e(c.owner)}</b>` : ''}</div>
         <div class="pr-meta">${c.hood ? e(c.hood) + ' · ' : ''}${c.dnc ? '⛔ Ne pas appeler' : c.phone ? '📞 ' + e(c.phone) : '📵 pas de tél.'}${!c.dncChecked && c.phone && !c.dnc ? ' · <span class="pr-lnnte">LNNTE ?</span>' : ''}</div>
         <div class="pr-meta">${done ? `<span class="pr-done">✓ appelé ${new Date(lc.at).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })}</span> · ` : ''}${lc ? `${OUTL[lc.outcome] || ''} · ${nCalls} essai${nCalls > 1 ? 's' : ''} · ` : ''}${fu ? fu.replace('🔔 ', '🔔 rappel ') : ''}</div>

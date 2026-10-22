@@ -333,3 +333,6 @@ body.pr-dossier-open .fab, body.pr-dossier-open .fab-mic { display: none !import
 
 .pd-notes .crm-outcomes { grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); }
 .crm-outcomes { grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); }
+
+.pr-reval { background: #fef3e0; color: #b06000; font-size: 10.5px; font-weight: 800; padding: 1px 6px; border-radius: 6px; margin-left: 4px; white-space: nowrap; }
+.pd-reval { margin: 4px 0 6px; padding: 7px 10px; border-radius: 10px; background: #fef3e0; color: #b06000; font-weight: 700; font-size: 13px; }

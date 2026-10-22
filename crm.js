@@ -415,6 +415,7 @@
       const dur = window.Prospect && Prospect.takeCallDur ? Prospect.takeCallDur() : 0;
       c.calls.push(Object.assign({ id: uuid(), at: new Date().toISOString(), outcome, note, prevFu: c.nextFollowUp || '', prevStage: c.stage || '' }, dur ? { dur } : {}));
       c.lastContact = todayStr();
+      if (c.revalider) delete c.revalider;
       const o = OUT[outcome];
       if (o.days) c.nextFollowUp = addDaysStr(o.days);
       if (outcome === 'rdv') c.nextFollowUp = '';
