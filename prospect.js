@@ -556,7 +556,7 @@
   function card(c) {
     const lc = lastCall(c);
     const nCalls = (c.calls || []).length;
-    const done = col === 'appeler' && nCalls > 0 && !isDue(c);   // déjà essayé, pas encore le moment de rappeler
+    const done = col === 'appeler' && nCalls > 0 && !!c.nextFollowUp && !isDue(c);   // déjà essayé, pas encore le moment de rappeler
     const isNext = c.id === nextId;
     const fu = c.nextFollowUp ? `<span class="${isDue(c) ? 'crm-due-txt' : ''}">🔔 ${c.nextFollowUp === today() ? "aujourd'hui" : fmtD(c.nextFollowUp)}</span>` : '';
     return `<div class="pr-card${c.dnc ? ' dnc' : ''}${done ? ' done' : ''}${isNext ? ' next' : ''}" onclick="Prospect.open('${c.id}')">
