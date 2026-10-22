@@ -317,6 +317,7 @@
             <h4>📝 Notes de l'appel <span class="pd-saved" id="pd-saved">enregistré automatiquement</span></h4>
             <textarea id="pd-note" placeholder="Écris tes notes pendant l'appel, comme dans OneNote…&#10;&#10;Ex. : Mathieu — minimum 750 k — 3 % — veut attendre 2 semaines" oninput="Prospect.typed()">${e(c.pnotes || '')}</textarea>
             <div class="pd-quick">${QUICK.map(([l, t]) => `<button onclick="Prospect.quick('${t}')">+ ${l}</button>`).join('')}</div>
+            <button id="pd-callt" class="pd-callt" onclick="Prospect.callT()"></button>
             <h4>Résultat de l'appel</h4>
             <div class="crm-outcomes">${OUTS.map(([k, ic, l]) => `<button onclick="Prospect.out('${k}')">${ic}<span>${l}</span></button>`).join('')}</div>
             <div id="pd-after" class="crm-after"></div>
@@ -328,6 +329,7 @@
     }
     renderProp(c);
     const h = document.getElementById('pd-hist'); if (h) h.innerHTML = CRM._timeline(c.id);
+    tick();
   }
   function money(n) { return Math.round(n).toLocaleString('fr-CA') + ' $'; }
   function offerCalc(c) {
@@ -375,7 +377,6 @@
       <div class="pd-addr">${e(c.name)}</div>
       <div class="crm-muted">${e((c.address || '').replace(c.name + ', ', ''))}${c.listingNo ? ' · DuProprio #' + e(c.listingNo) : ''}</div>
       ${c.dnc ? '<div class="crm-dnc-banner">⛔ Ne pas appeler</div>' : c.phone ? `<a class="dial-call" href="tel:${String(c.phone).replace(/[^\d+]/g, '')}" onclick="CRM.touch && CRM.touch()">📞 Appeler ${e(c.phone)}</a>` : '<div class="pd-nophone">📵 Pas de téléphone sur la fiche — contacte-le via DuProprio</div>'}
-      <button id="pd-callt" class="pd-callt${callT0 ? ' on' : ''}" onclick="Prospect.callT()"></button>
       ${c.isContact ? `<div class="pd-contact ok">✓ Dans tes contacts <span>POT-${e(c.owner || 'Proprio')} - ${e(c.name)}</span><button onclick="Prospect.toContact(true)">📲 Renvoyer au téléphone</button></div>`
         : `<button class="pd-contact-btn" onclick="Prospect.toContact()">📇 Ajouter à mes contacts <span>POT-${e(c.owner || '…')} - ${e(c.name)}</span></button>`}
       <div class="pd-facts">
@@ -479,13 +480,17 @@
   function weekStart() { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
   function sessToggle() {
     const r = sessRun();
-    if (r) { const lg = sessLog(); lg.push({ s: r.t0, e: new Date().toISOString() }); ls.set('mb_sess_log', lg.slice(-300)); ls.set('mb_sess', null); toastMsg(`⏱ Session terminée : ${fmtH((Date.now() - new Date(r.t0)) / 1000)} · aujourd'hui ${fmtH(sessTotal(today()))}`); }
+    if (r) { const lg = sessLog(); lg.push({ s: r.t0, e: new Date().toISOString() }); ls.set('mb_sess_log', lg.slice(-300)); ls.set('mb_sess', null); toastMsg(`⏱ Session ${hhmm(r.t0)} → ${hhmm(new Date().toISOString())} (${fmtH((Date.now() - new Date(r.t0)) / 1000)}) · total aujourd'hui ${fmtH(sessTotal(today()))}`); }
     else { ls.set('mb_sess', { t0: new Date().toISOString() }); toastMsg('⏱ Session de prospection démarrée'); }
     render();
   }
+  const hhmm = (iso) => { const d = new Date(iso); return d.getHours() + ' h ' + String(d.getMinutes()).padStart(2, '0'); };
   function sessChip() {
-    const r = sessRun();
-    return `<button class="pr-sess${r ? ' on' : ''}" onclick="Prospect.sess()" title="${r ? 'Arrêter' : 'Démarrer'} ta session de prospection">${r ? '⏹' : '▶'} ⏱ <b id="pr-sess-t">${r ? fmtT((Date.now() - new Date(r.t0)) / 1000) : 'Prospection'}</b><span>auj. ${fmtH(sessTotal(today()))} · sem. ${fmtH(sessTotal(weekStart()))}</span></button>`;
+    const r = sessRun(), t = today();
+    const todays = sessLog().filter(x => ymdL(x.s) === t);
+    const first = todays.length ? todays[0].s : r ? r.t0 : null, last = todays.length ? todays[todays.length - 1].e : null;
+    const span = r ? `commencé à ${hhmm(first)}` : first ? `auj. ${hhmm(first)} → ${hhmm(last)}` : '';
+    return `<button class="pr-sess${r ? ' on' : ''}" onclick="Prospect.sess()" title="${r ? 'Arrêter' : 'Démarrer'} ta session de prospection">${r ? '⏹' : '▶'} ⏱ <b id="pr-sess-t">${r ? fmtT((Date.now() - new Date(r.t0)) / 1000) : 'Démarrer la prospection'}</b><span>${span ? span + ' · ' : ''}total auj. ${fmtH(sessTotal(t))} · sem. ${fmtH(sessTotal(weekStart()))}</span></button>`;
   }
   let callT0 = ls.get('mb_callT0', null);
   function callStart() { callT0 = Date.now(); ls.set('mb_callT0', callT0); tick(); }
@@ -498,8 +503,6 @@
     if (b) { b.classList.toggle('on', !!callT0); b.innerHTML = callT0 ? `⏹ ⏱ <b>${fmtT((Date.now() - callT0) / 1000)}</b> <span>en appel</span>` : '▶ ⏱ Chrono d\'appel'; }
   }
   setInterval(tick, 1000);
-  // cliquer un numéro (Appeler) démarre le chrono d'appel
-  document.addEventListener('click', ev => { const a = ev.target.closest && ev.target.closest('a[href^="tel:"]'); if (a && !callT0) callStart(); }, true);
 
   // ---------- horaire d'appels ----------
   const JOURS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
