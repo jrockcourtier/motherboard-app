@@ -330,3 +330,6 @@ body.pr-dossier-open .fab, body.pr-dossier-open .fab-mic { display: none !import
 .pd-callt { display: block; width: 100%; margin: 6px 0 2px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--border-light); background: transparent; font-weight: 600; font-size: 13px; cursor: pointer; color: var(--text-secondary); }
 .pd-callt.on { border-color: #d93025; color: #d93025; background: rgba(217,48,37,.06); }
 .pd-callt b { font-variant-numeric: tabular-nums; font-size: 15px; }
+
+.pd-notes .crm-outcomes { grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); }
+.crm-outcomes { grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); }

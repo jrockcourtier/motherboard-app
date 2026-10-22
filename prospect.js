@@ -15,7 +15,7 @@
   function colOf(c) {
     const s = c.stage || 'À appeler';
     if (s === 'Signé' || s === 'Converti en vendeur') return 'signe';
-    if (s === 'Pas intéressé' || s === 'Injoignable') return 'archive';
+    if (s === 'Pas intéressé' || s === 'Injoignable' || s === 'A un courtier') return 'archive';
     // Suivi = seulement quand Julien le décide (📌 Suivi) ou qu'il y a de l'intérêt / un RDV
     if (c.suivi || s === 'Intéressé' || s === 'Rendez-vous') return 'suivi';
     return 'appeler';
@@ -27,7 +27,7 @@
     return Object.values(m).sort((a, b) => b.at.localeCompare(a.at));
   }
   const lastCall = (c) => (c.calls || []).slice(-1)[0];
-  const OUTL = { pas_reponse: '📵 Pas de réponse', message: '📨 Message laissé', parle: '💬 Parlé', rdv: '📅 RDV fixé', pas_interesse: '🙅 Pas intéressé' };
+  const OUTL = { pas_reponse: '📵 Pas de réponse', message: '📨 Message laissé', parle: '💬 Parlé', rdv: '📅 RDV fixé', pas_interesse: '🙅 Pas intéressé', courtier: '🤝 A déjà un courtier' };
   const fmtD = (s) => { const d = new Date(s + 'T12:00:00'); return d.toLocaleDateString('fr-CA', { weekday: 'short', day: 'numeric', month: 'short' }); };
 
   // ---------- photos (miniatures) : gardées sur l'appareil + Supabase (table prospects) ----------
@@ -181,15 +181,15 @@
     const ok = res.filter(r => !r.error && r.no);
     const K = knownMaps(); const known = {}; ok.forEach(r => { const o = K.find(r); if (o) known[r.no] = o; });
     const listName = mode(ok.map(r => r.list).filter(Boolean)) || defaultListName();
-    const nNew = ok.filter(r => !known[r.no]).length, nDup = ok.length - nNew, nBad = res.length - ok.length;
+    const nNew = ok.filter(r => !known[r.no]).length, nBroker = ok.filter(r => known[r.no] && known[r.no].stage === 'A un courtier').length, nDup = ok.length - nNew - nBroker, nBad = res.length - ok.length;
     const noPhone = ok.filter(r => !r.phone).length;
     const box = modal().querySelector('.sheet');
     box.innerHTML = `
       <div class="sheet-head"><button type="button" class="sheet-x" onclick="Prospect.closeModal()">✕</button><b>Importer ${ok.length} fiche${ok.length > 1 ? 's' : ''}</b><button class="sheet-save" onclick="Prospect.confirmImport()">Ajouter</button></div>
       <label class="f-block">Nom de la liste<input id="pr-listname" value="${e(listName)}" autocomplete="off"></label>
-      <div class="pr-sum">🆕 <b>${nNew}</b> nouvelle${nNew > 1 ? 's' : ''}${nDup ? ` · ♻️ <b>${nDup}</b> déjà dans tes listes (prix mis à jour)` : ''}${noPhone ? ` · 📵 ${noPhone} sans téléphone sur la fiche` : ''}${nBad ? ` · ⚠️ ${nBad} illisible${nBad > 1 ? 's' : ''}` : ''}</div>
+      <div class="pr-sum">🆕 <b>${nNew}</b> nouvelle${nNew > 1 ? 's' : ''}${nDup ? ` · ♻️ <b>${nDup}</b> déjà dans tes listes (prix mis à jour)` : ''}${nBroker ? ` · 🤝 <b>${nBroker}</b> ont déjà un courtier (ignorées)` : ''}${noPhone ? ` · 📵 ${noPhone} sans téléphone sur la fiche` : ''}${nBad ? ` · ⚠️ ${nBad} illisible${nBad > 1 ? 's' : ''}` : ''}</div>
       <div class="pr-rev">${res.map(r => r.error || !r.no ? `<div class="pr-rev-row bad">⚠️ ${e(r.file)} — ${r.error ? 'illisible : ' + e(r.why || 'erreur') : 'pas une fiche DuProprio reconnue'}</div>` :
-        `<div class="pr-rev-row">${r.thumb ? `<img src="${r.thumb}" alt="">` : '<span class="pr-nothumb">🏠</span>'}<div><b>${r.order ? '#' + r.order + ' · ' : ''}${e(r.price || '')}</b> ${e(r.ptype || '')}<br>${e(r.street || '')} <span class="crm-muted">${e(r.hood || '')}</span><br><span class="crm-muted">${r.phone ? '📞 ' + e(r.phone) : '📵 pas de téléphone'} · DuProprio #${e(r.no)}${known[r.no] ? ' · ♻️ déjà là' + (known[r.no].listingNo && known[r.no].listingNo !== r.no ? ' (même adresse, annonce remise en ligne)' : '') + (known[r.no].price && r.price && priceNum(r.price) < priceNum(known[r.no].price) ? ' · 🔻 baisse de prix' : '') : ''}</span></div></div>`).join('')}</div>
+        `<div class="pr-rev-row">${r.thumb ? `<img src="${r.thumb}" alt="">` : '<span class="pr-nothumb">🏠</span>'}<div><b>${r.order ? '#' + r.order + ' · ' : ''}${e(r.price || '')}</b> ${e(r.ptype || '')}<br>${e(r.street || '')} <span class="crm-muted">${e(r.hood || '')}</span><br><span class="crm-muted">${r.phone ? '📞 ' + e(r.phone) : '📵 pas de téléphone'} · DuProprio #${e(r.no)}${known[r.no] && known[r.no].stage === 'A un courtier' ? ' · 🤝 a déjà un courtier — ne revient pas dans ta liste' + (known[r.no].price && r.price && known[r.no].price !== r.price ? ' (prix noté)' : '') : known[r.no] ? ' · ♻️ déjà là' + (known[r.no].listingNo && known[r.no].listingNo !== r.no ? ' (même adresse, annonce remise en ligne)' : '') + (known[r.no].price && r.price && priceNum(r.price) < priceNum(known[r.no].price) ? ' · 🔻 baisse de prix' : '') : ''}</span></div></div>`).join('')}</div>
       ${res.some(r => r.error && /iCloud|vide/.test(r.why || '')) ? `<div class="pr-warn">☁️ Ces PDF sont dans iCloud mais pas encore téléchargés sur ce Mac. Dans le Finder : clic droit sur le dossier <b>Sud-Ouest</b> → <b>Télécharger maintenant</b>, attends que les nuages disparaissent, puis réessaie.</div>` : ''}
       <div class="crm-muted" style="margin-top:8px">Les numéros ne sont pas encore vérifiés à la LNNTE : l'app te le rappellera avant chaque appel.</div>`;
   }
@@ -217,7 +217,7 @@
           old.prevPrice = old.price; old.price = r.price; newPdf = true;
         }
         if (r.phone && !old.phone) old.phone = r.phone;
-        if (!old.plist) { old.plist = name; old.porder = r.order || ++order; old.importedAt = now; }
+        if (!old.plist && old.stage !== 'A un courtier') { old.plist = name; old.porder = r.order || ++order; old.importedAt = now; }
         if (r._f && (!old.hasPdf || newPdf)) toUpload.push([old, r._f]);
         CRM.upsert(old); updated++;
         if (r.thumb && !thumbs[old.id]) { thumbs[old.id] = r.thumb; up.push({ id: old.id, data: { t: r.thumb } }); }
@@ -282,7 +282,7 @@
 
   // ---------- le dossier : PDF à gauche · propriété au centre · notes à droite ----------
   let cur = null, order = [], pane = window.innerWidth < 900 ? 'prop' : 'notes', saveT = null;
-  const OUTS = [['pas_reponse', '📵', 'Pas de réponse'], ['message', '📨', 'Message'], ['parle', '💬', 'Parlé (reste)'], ['suivi', '📌', 'Suivi'], ['rdv', '📅', 'RDV'], ['pas_interesse', '🙅', 'Pas intéressé']];
+  const OUTS = [['pas_reponse', '📵', 'Pas de réponse'], ['message', '📨', 'Message'], ['parle', '💬', 'Parlé (reste)'], ['suivi', '📌', 'Suivi'], ['rdv', '📅', 'RDV'], ['pas_interesse', '🙅', 'Pas intéressé'], ['courtier', '🤝', 'A déjà un courtier']];
   const QUICK = [['Nom du proprio', 'Nom du proprio : '], ['Prix minimum', 'Prix minimum : '], ['Commission', 'Commission : '], ['Délai', 'Délai : '], ['Motivation', 'Motivation : '], ['Courtier ?', 'A déjà un courtier : ']];
   function openFiche(id) {
     const c = CRM._all()[id]; if (!c) return;
@@ -453,6 +453,7 @@
       return;
     }
     if (k === 'rdv') { CRM.focus(c.id); CRM.meeting(); return; }
+    if (k === 'courtier') { toastMsg(`🤝 A déjà un courtier — retirée de tes listes d'appels (gardée dans Archivés) <button onclick="CRM.undoCall('${c.id}')">Annuler</button>`); return; }
     toastMsg(`${OUTL[k]} — ${c.nextFollowUp ? 'rappel le ' + fmtD(c.nextFollowUp) : 'archivé'} <button onclick="CRM.undoCall('${c.id}')">Annuler</button>`);
   }
   function out2suivi() {

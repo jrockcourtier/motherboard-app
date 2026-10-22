@@ -7,7 +7,7 @@
   const TYPES_C = {
     acheteur: { label: 'Acheteur', color: '#1976D2', stages: ['Nouveau lead', 'Qualifié (financement)', 'En recherche (Matrix)', 'En visites', "Offre d'achat", 'Conditions', 'Notaire', 'Client passé'] },
     vendeur:  { label: 'Vendeur',  color: '#9C27B0', stages: ['Lead', 'Évaluation', 'CCV signé', 'En vigueur', 'Offre acceptée', 'Conditions', 'Vendu / Notaire', 'Client passé'] },
-    proprio:  { label: 'Proprio',  color: '#00796B', stages: ['À appeler', 'Appelé – rappeler', 'Intéressé', 'Rendez-vous', 'Signé', 'Pas intéressé', 'Injoignable'] },
+    proprio:  { label: 'Proprio',  color: '#00796B', stages: ['À appeler', 'Appelé – rappeler', 'Intéressé', 'Rendez-vous', 'Signé', 'Pas intéressé', 'Injoignable', 'A un courtier'] },
     client:   { label: 'Client',   color: '#D4AF37', stages: ['Actif', 'Client passé'] }
   };
   // catégorie affichée : un proprio DuProprio devient « Vendeur potentiel » dès qu'on lui a parlé, puis « Vendeur » une fois signé
@@ -16,7 +16,7 @@
     if (c.type !== 'proprio') return c.type;
     const st = c.stage || 'À appeler';
     if (st === 'Signé' || st === 'Converti en vendeur') return 'vendeur';
-    if (st === 'Pas intéressé' || st === 'Injoignable') return 'proprio';
+    if (st === 'Pas intéressé' || st === 'Injoignable' || st === 'A un courtier') return 'proprio';
     if (c.isContact || c.suivi || st === 'Intéressé' || st === 'Rendez-vous') return 'vpot';
     return 'proprio';
   }
@@ -32,10 +32,11 @@
     message:       { l: 'Message laissé', i: '📨', conv: false, days: 3 },
     parle:         { l: 'Parlé',          i: '💬', conv: true },
     rdv:           { l: 'RDV fixé',       i: '📅', conv: true },
-    pas_interesse: { l: 'Pas intéressé',  i: '🙅', conv: true, days: 90 }
+    pas_interesse: { l: 'Pas intéressé',  i: '🙅', conv: true, days: 90 },
+    courtier:      { l: 'A déjà un courtier', i: '🤝', conv: true }
   };
   const HOT = ['En visites', "Offre d'achat", 'Conditions', 'Notaire', 'Évaluation', 'CCV signé', 'En vigueur', 'Offre acceptée', 'Intéressé', 'Rendez-vous'];
-  const CLOSED = ['Client passé', 'Pas intéressé', 'Vendu / Notaire', 'Converti en vendeur', 'Signé', 'Injoignable'];
+  const CLOSED = ['A un courtier', 'Client passé', 'Pas intéressé', 'Vendu / Notaire', 'Converti en vendeur', 'Signé', 'Injoignable'];
   const SMART = [
     ['tous', 'Tous', () => true],
     ['appeler', '📞 À appeler', c => !c.dnc && isDue(c)],
@@ -418,6 +419,7 @@
       if (o.days) c.nextFollowUp = addDaysStr(o.days);
       if (outcome === 'rdv') c.nextFollowUp = '';
       if (outcome === 'pas_interesse' && c.type === 'proprio') c.stage = 'Pas intéressé';
+      if (outcome === 'courtier') { c.stage = c.type === 'proprio' ? 'A un courtier' : c.stage; c.nextFollowUp = ''; c.suivi = false; c.hasBroker = true; }
       if (outcome === 'rdv' && c.type === 'proprio') c.stage = 'Rendez-vous';
       if (outcome === 'parle' && c.type === 'proprio' && (!c.stage || c.stage === 'À appeler')) c.stage = 'Appelé – rappeler';
       // 6 essais sans jamais parler à la personne → « Injoignable » (on arrête de l'appeler)
@@ -448,7 +450,7 @@
     },
     undoCall(id) {
       const c = contacts[id]; if (!c || !(c.calls || []).length) return;
-      const k = c.calls.pop(); if (k && 'prevFu' in k) { c.nextFollowUp = k.prevFu; c.stage = k.prevStage || c.stage; } save(c); document.querySelectorAll('.mb-toast').forEach(x => x.remove());
+      const k = c.calls.pop(); if (k && 'prevFu' in k) { c.nextFollowUp = k.prevFu; c.stage = k.prevStage || c.stage; if (k.outcome === 'courtier') delete c.hasBroker; } save(c); document.querySelectorAll('.mb-toast').forEach(x => x.remove());
     },
     delCall(callId) { const c = contacts[openId]; c.calls = (c.calls || []).filter(k => k.id !== callId); save(c); },
     dial(ids) { Dialer.start(ids || (() => { const sm = (SMART.find(x => x[0] === smart) || SMART[0])[2]; return list().filter(c => sm(c) && (filter === 'tous' || cat(c) === filter) && c.phone && !c.dnc).sort((a, b) => (a.nextFollowUp || '9').localeCompare(b.nextFollowUp || '9')).map(c => c.id); })()); },
