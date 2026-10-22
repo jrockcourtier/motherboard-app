@@ -270,7 +270,7 @@
   function timeline(c, evs) {
     const items = [];
     (c.notes || []).forEach(n => items.push({ at: n.at, html: `${e(n.text).replace(/\n/g, '<br>')}`, icon: '📝', del: `CRM.delNote('${n.id}')` }));
-    (c.calls || []).forEach(k => items.push({ at: k.at, html: `<b>${OUT[k.outcome].l}</b>${k.note ? ' — ' + e(k.note) : ''}`, icon: OUT[k.outcome].i, del: `CRM.delCall('${k.id}')` }));
+    (c.calls || []).forEach(k => items.push({ at: k.at, html: `<b>${OUT[k.outcome].l}</b>${k.dur ? ` · ⏱ ${Math.floor(k.dur / 60)} min ${String(k.dur % 60).padStart(2, '0')}` : ''}${k.note ? ' — ' + e(k.note) : ''}`, icon: OUT[k.outcome].i, del: `CRM.delCall('${k.id}')` }));
     (evs || []).forEach(x => items.push({ at: x.start.toISOString(), html: `${e(x.title)}${x.allDay ? '' : ' · ' + hhmm(x.start)}`, icon: x.start > new Date() ? '🗓' : '📅', future: x.start > new Date() }));
     if (!items.length) return '<div class="crm-muted">Rien pour l\'instant.</div>';
     return items.sort((a, b) => b.at.localeCompare(a.at)).map(it => `
@@ -411,7 +411,8 @@
       const ta = document.getElementById(opts.noteId || 'crm-note');
       const note = ta && ta.value.trim() ? ta.value.trim() : '';
       c.calls = c.calls || [];
-      c.calls.push({ id: uuid(), at: new Date().toISOString(), outcome, note, prevFu: c.nextFollowUp || '', prevStage: c.stage || '' });
+      const dur = window.Prospect && Prospect.takeCallDur ? Prospect.takeCallDur() : 0;
+      c.calls.push(Object.assign({ id: uuid(), at: new Date().toISOString(), outcome, note, prevFu: c.nextFollowUp || '', prevStage: c.stage || '' }, dur ? { dur } : {}));
       c.lastContact = todayStr();
       const o = OUT[outcome];
       if (o.days) c.nextFollowUp = addDaysStr(o.days);

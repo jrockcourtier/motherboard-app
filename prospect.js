@@ -375,6 +375,7 @@
       <div class="pd-addr">${e(c.name)}</div>
       <div class="crm-muted">${e((c.address || '').replace(c.name + ', ', ''))}${c.listingNo ? ' · DuProprio #' + e(c.listingNo) : ''}</div>
       ${c.dnc ? '<div class="crm-dnc-banner">⛔ Ne pas appeler</div>' : c.phone ? `<a class="dial-call" href="tel:${String(c.phone).replace(/[^\d+]/g, '')}" onclick="CRM.touch && CRM.touch()">📞 Appeler ${e(c.phone)}</a>` : '<div class="pd-nophone">📵 Pas de téléphone sur la fiche — contacte-le via DuProprio</div>'}
+      <button id="pd-callt" class="pd-callt${callT0 ? ' on' : ''}" onclick="Prospect.callT()"></button>
       ${c.isContact ? `<div class="pd-contact ok">✓ Dans tes contacts <span>POT-${e(c.owner || 'Proprio')} - ${e(c.name)}</span><button onclick="Prospect.toContact(true)">📲 Renvoyer au téléphone</button></div>`
         : `<button class="pd-contact-btn" onclick="Prospect.toContact()">📇 Ajouter à mes contacts <span>POT-${e(c.owner || '…')} - ${e(c.name)}</span></button>`}
       <div class="pd-facts">
@@ -464,6 +465,42 @@
     toastMsg(on ? '📌 Mis en suivi' : '↩ Remis dans « À appeler »');
   }
   const addDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  // ---------- chronos : session de prospection + durée de chaque appel ----------
+  const fmtT = (sec) => { sec = Math.max(0, Math.round(sec)); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), x = sec % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
+  const fmtH = (sec) => { const m = Math.round(sec / 60); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0'); };
+  const ymdL = (iso) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  function sessLog() { return ls.get('mb_sess_log', []); }
+  function sessRun() { return ls.get('mb_sess', null); }
+  function sessTotal(fromYmd) {
+    let t = 0; sessLog().forEach(x => { if (ymdL(x.s) >= fromYmd) t += (new Date(x.e) - new Date(x.s)) / 1000; });
+    const r = sessRun(); if (r && ymdL(r.t0) >= fromYmd) t += (Date.now() - new Date(r.t0)) / 1000;
+    return t;
+  }
+  function weekStart() { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+  function sessToggle() {
+    const r = sessRun();
+    if (r) { const lg = sessLog(); lg.push({ s: r.t0, e: new Date().toISOString() }); ls.set('mb_sess_log', lg.slice(-300)); ls.set('mb_sess', null); toastMsg(`⏱ Session terminée : ${fmtH((Date.now() - new Date(r.t0)) / 1000)} · aujourd'hui ${fmtH(sessTotal(today()))}`); }
+    else { ls.set('mb_sess', { t0: new Date().toISOString() }); toastMsg('⏱ Session de prospection démarrée'); }
+    render();
+  }
+  function sessChip() {
+    const r = sessRun();
+    return `<button class="pr-sess${r ? ' on' : ''}" onclick="Prospect.sess()" title="${r ? 'Arrêter' : 'Démarrer'} ta session de prospection">${r ? '⏹' : '▶'} ⏱ <b id="pr-sess-t">${r ? fmtT((Date.now() - new Date(r.t0)) / 1000) : 'Prospection'}</b><span>auj. ${fmtH(sessTotal(today()))} · sem. ${fmtH(sessTotal(weekStart()))}</span></button>`;
+  }
+  let callT0 = ls.get('mb_callT0', null);
+  function callStart() { callT0 = Date.now(); ls.set('mb_callT0', callT0); tick(); }
+  function callStop() { callT0 = null; ls.set('mb_callT0', null); tick(); }
+  function takeCallDur() { if (!callT0) return 0; const d = Math.round((Date.now() - callT0) / 1000); callStop(); return d > 3 && d < 4 * 3600 ? d : 0; }
+  function talkToday() { let t = 0; const d = today(); Object.values(CRM._all()).forEach(c => (c.calls || []).forEach(k => { if (k.dur && ymdL(k.at) === d) t += k.dur; })); return t; }
+  function tick() {
+    const a = document.getElementById('pr-sess-t'), r = sessRun(); if (a && r) a.textContent = fmtT((Date.now() - new Date(r.t0)) / 1000);
+    const b = document.getElementById('pd-callt');
+    if (b) { b.classList.toggle('on', !!callT0); b.innerHTML = callT0 ? `⏹ ⏱ <b>${fmtT((Date.now() - callT0) / 1000)}</b> <span>en appel</span>` : '▶ ⏱ Chrono d\'appel'; }
+  }
+  setInterval(tick, 1000);
+  // cliquer un numéro (Appeler) démarre le chrono d'appel
+  document.addEventListener('click', ev => { const a = ev.target.closest && ev.target.closest('a[href^="tel:"]'); if (a && !callT0) callStart(); }, true);
+
   // ---------- horaire d'appels ----------
   const JOURS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
   const hm = (m) => `${Math.floor(m / 60)} h${m % 60 ? String(m % 60).padStart(2, '0') : ''}`;
@@ -544,7 +581,7 @@
           <b>Glisse ici tes PDF DuProprio</b> (ou touche « Importer des PDF »)<br>
           <span class="crm-muted">Sur l'ordi : ouvre ton dossier <i>Fiche prospection › Sud-Ouest</i>, sélectionne tout (⌘A) et glisse les fichiers ici. L'app lit le prix, l'adresse, le téléphone et la photo de chaque fiche, et crée ta liste dans l'ordre de tes numéros.</span>
         </div>` : `
-      ${st ? `<div class="pr-stats"><span><b>${st.d.calls}</b> appels aujourd'hui</span><span><b>${st.d.conv}</b> conversations</span><span><b>${st.d.rdv}</b> RDV</span>${planChip()}</div>` : ''}
+      ${st ? `<div class="pr-stats"><span><b>${st.d.calls}</b> appels aujourd'hui</span><span><b>${st.d.conv}</b> conversations</span><span><b>${st.d.rdv}</b> RDV</span>${talkToday() ? `<span><b>${fmtH(talkToday())}</b> au téléphone</span>` : ''}${sessChip()}${planChip()}</div>` : ''}
       <div class="crm-filters pr-cols">${COLS.map(([k, l]) => `<button class="${col === k && !q ? 'on' : ''}" onclick="Prospect.col('${k}')">${l} ${by[k].length}${k === 'suivi' && due ? ` <span class="pr-due">${due} à rappeler</span>` : ''}</button>`).join('')}</div>
       <div class="pr-searchrow"><input class="crm-search" type="search" placeholder="🔍 Adresse, numéro, nom…" value="${e(q)}" oninput="Prospect.search(this.value)"></div>
       ${callable.length ? `<button class="crm-dial" onclick="Prospect.dial()">▶ Appeler ${col === 'suivi' ? 'les rappels dus' : 'la liste'} (${callable.length})</button>` : ''}
@@ -587,6 +624,7 @@
   function changed() { clearTimeout(rt); rt = setTimeout(() => { if (cur) { renderFiche(false); return; } const r = document.getElementById('prospection'); if (r && r.classList.contains('active')) render(); }, 150); }
 
   window.Prospect = {
+    sess: sessToggle, callT: () => (callT0 ? callStop() : callStart()), takeCallDur,
     out2suivi, toSuivi, offer, toContact, plan, savePlan,
     render, changed, thumb, thumbHtml, importFiles, confirmImport, closeModal, pick, dial, _parse: parseText,
     open: openFiche, close: closeFiche, step, typed, quick, set, out, follow, followDate, big,
