@@ -494,9 +494,9 @@
         <ol class="sc-steps">
           <li>Ouvre l'app <b>Raccourcis</b> → <b>+</b> (nouveau raccourci). Nomme-le <b>Envoyer à Motherboard</b>.</li>
           <li>Touche <b>ⓘ</b> (en bas) → active <b>Afficher dans la feuille de partage</b>. En haut du raccourci, règle « Reçoit » sur <b>Contacts</b> seulement.</li>
-          <li>Ajoute l'action <b>Obtenir le contenu de l'URL</b>. URL :${k ? cp(k.url) : ''}</li>
+          <li>Ajoute l'action <b>Obtenir le contenu de l'URL</b>. URL :${k ? cp(k.url + '?ouvrir=1') : ''}</li>
           <li>Dans cette action, touche <b>Afficher plus</b> : Méthode <b>POST</b> · En-têtes → <b>Ajouter</b> : clé <code>x-mb-key</code>, valeur :${k ? cp(k.key) : ''}Corps de requête : <b>Fichier</b> → choisis <b>Entrée du raccourci</b>.</li>
-          <li>Ajoute l'action <b>Afficher la notification</b> avec le texte <b>Contenu de l'URL</b> (ça t'affiche « ✅ Marie Tremblay ajoutée »).</li>
+          <li>Ajoute l'action <b>Ouvrir les URL</b> avec <b>Contenu de l'URL</b> : Motherboard s'ouvre directement sur la fiche pour que tu la complètes (type, notes…).<br><span class="crm-muted">Pour que ça marche, l'URL de l'étape 3 doit finir par <b>?ouvrir=1</b> (déjà inclus ci-dessus). Si tu préfères juste une confirmation sans ouvrir l'app : retire <b>?ouvrir=1</b> et utilise plutôt l'action <b>Afficher la notification</b>.</span></li>
           <li>Teste : Contacts → une fiche → <b>Partager le contact</b> → <b>Envoyer à Motherboard</b>.</li>
         </ol>
         <div class="f-label">Saisie éclair (dictée → fiche → contact iPhone)</div>
@@ -556,7 +556,7 @@
     saveForm(ev) {
       ev.preventDefault(); collectForm();
       if (!editing.name) { $('#crm-msg').textContent = 'Le nom est obligatoire.'; return; }
-      const c = editing; const note = c.firstNote; delete c.firstNote;
+      const c = editing; const note = c.firstNote; delete c.firstNote; delete c.inbox;
       if (note) { c.notes = c.notes || []; c.notes.push({ id: uuid(), at: new Date().toISOString(), text: note }); c.lastContact = todayStr(); }
       editing = null; openId = c.id; save(c); renderSheet();
     },
@@ -704,7 +704,17 @@
   window.renderContactsView = renderList;
   const origRenderJour = window.renderJour;
   if (typeof origRenderJour === 'function') window.renderJour = function () { origRenderJour.apply(this, arguments); refreshJour(); };
-  window.addEventListener('load', () => { renderList(); refreshJour(); setTimeout(pull, 800); });
+  window.addEventListener('load', () => { renderList(); refreshJour(); setTimeout(pull, 800); openFromLink(); });
+  // lien du raccourci iPhone : https://…/?fiche=<id> → onglet Contacts, fiche ouverte en modification
+  async function openFromLink() {
+    const id = new URLSearchParams(location.search).get('fiche'); if (!id) return;
+    try { history.replaceState(null, '', location.pathname); } catch (x) {}
+    const b = document.querySelector('.tab-btn[onclick*="contacts"]'); if (b && typeof showTab === 'function') showTab({ target: b }, 'contacts');
+    for (let i = 0; i < 12 && !contacts[id]; i++) { await pull(); if (!contacts[id]) await new Promise(r => setTimeout(r, 800)); }
+    if (!contacts[id]) { if (typeof toast === 'function') toast("Le contact n'est pas encore arrivé : regarde dans « 📥 À classer » dans un instant."); return; }
+    CRM.edit(id);
+    if (contacts[id].inbox && typeof toast === 'function') toast('📲 Reçu de ton iPhone — choisis le type, complète et enregistre.');
+  }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) pull(); });
   window.addEventListener('online', flush);
   setInterval(() => { if (pending.size) flush(); }, 30000);

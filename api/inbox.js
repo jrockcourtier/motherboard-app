@@ -57,14 +57,14 @@ module.exports = async (req, res) => {
     if (!cards.length) { res.statusCode = 400; res.setHeader('Content-Type', 'text/plain; charset=utf-8'); return res.end('⚠️ Aucune fiche contact reçue.'); }
     const ex = await L.sb('contacts?select=id,data&limit=5000');
     const known = {};
-    (ex.body || []).forEach(r => { const d = r.data || {}; if (d.deleted) return; [d.phone, d.phone2].forEach(p => { const x = digits(p); if (x.length >= 10) known[x] = d.name || 'contact'; }); });
-    const now = new Date().toISOString(), rows = [], msgs = [];
+    (ex.body || []).forEach(r => { const d = r.data || {}; if (d.deleted) return; [d.phone, d.phone2].forEach(p => { const x = digits(p); if (x.length >= 10) known[x] = { name: d.name || 'contact', id: r.id }; }); });
+    const now = new Date().toISOString(), rows = [], msgs = []; let firstId = null;
     cards.slice(0, 20).forEach(c => {
       const name = (c.fn || c.n || '').trim() || fmtPhone(c.phones[0]) || 'Contact sans nom';
       const ph = c.phones.map(fmtPhone);
       const dup = ph.map(digits).find(x => known[x]);
-      if (dup) { msgs.push(`ℹ️ ${name} est déjà dans Motherboard (${known[dup]})`); return; }
-      const id = crypto.randomUUID();
+      if (dup) { msgs.push(`ℹ️ ${name} est déjà dans Motherboard (${known[dup].name})`); firstId = firstId || known[dup].id; return; }
+      const id = crypto.randomUUID(); firstId = firstId || id;
       rows.push({ id, updated_at: now, data: { id, inbox: true, type: 'acheteur', name, phone: ph[0] || '', phone2: ph[1] || '', email: c.emails[0] || '', address: c.adr || '', source: 'iPhone', firstContact: now.slice(0, 10), lastContact: now.slice(0, 10),
         notes: [{ id: crypto.randomUUID(), at: now, text: '📲 Reçu de l\'iPhone' + (c.note ? ' — ' + c.note : '') + (c.org ? ' · ' + c.org : '') }], calls: [], createdAt: now, updatedAt: now } });
       msgs.push(`✅ ${name} ajouté à Motherboard (À classer)`);
@@ -74,6 +74,8 @@ module.exports = async (req, res) => {
       if (!r.ok) { res.statusCode = 502; res.setHeader('Content-Type', 'text/plain; charset=utf-8'); return res.end('⚠️ Motherboard n\'a pas pu enregistrer le contact. Réessaie dans un instant.'); }
     }
     res.statusCode = 200; res.setHeader('Content-Type', 'text/plain; charset=utf-8'); res.setHeader('Cache-Control', 'no-store');
+    // ?ouvrir=1 : on répond seulement le lien de la fiche, que le raccourci ouvre (« Ouvrir les URL ») pour la modifier tout de suite
+    if (new URL(req.url, 'http://x').searchParams.get('ouvrir') && firstId) return res.end(`${L.origin(req)}/?fiche=${firstId}`);
     res.end(msgs.join('\n'));
   } catch (e) {
     res.statusCode = 502; res.setHeader('Content-Type', 'text/plain; charset=utf-8'); res.end('⚠️ Erreur : ' + e.message);
