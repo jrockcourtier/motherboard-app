@@ -503,7 +503,14 @@
     .tg-ev.lifting { box-shadow: 0 0 0 3px var(--primary-gold); }
     .auth-link { display: block; text-align: center; text-decoration: none; width: 100%; padding: 14px; margin-top: 12px; position: relative; z-index: 2; }
     /* ===== v6 : grille horaire semaine ===== */
-    .tg-toggle { display: flex; justify-content: flex-end; gap: 4px; padding: 6px 10px; background: var(--light-bg); }
+    .tg-toggle { display: flex; justify-content: flex-end; gap: 4px; }
+    .tg-nav { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--light-bg); }
+    .tg-nav > button { border: 1px solid var(--border-light); background: var(--white); border-radius: 8px; min-width: 36px; height: 32px; font-size: 20px; line-height: 1; cursor: pointer; font-weight: 700; }
+    .tg-nav > button:hover { background: var(--primary-dark); color: var(--primary-gold); }
+    .tg-nav > b { font-size: 14px; min-width: 150px; text-align: center; }
+    .tg-nav > .tg-today { font-size: 12px; padding: 0 10px; min-width: 0; white-space: nowrap; }
+    .tg-toggle button { white-space: nowrap; }
+    @media (max-width: 500px) { .tg-nav { gap: 5px; padding: 6px; } .tg-nav > b { min-width: 0; font-size: 13px; } }
     .tg-toggle button { border: 1px solid var(--border-light); background: var(--white); border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 700; cursor: pointer; }
     .tg-toggle button.on { background: var(--primary-dark); color: var(--primary-gold); border-color: var(--primary-dark); }
     @media (max-width: 899px) { .tg-ev-title { font-size: 9px; } .tg-ev { padding: 2px 2px 2px 3px; } }
@@ -674,7 +681,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span id="app-ver" style="opacity:.6">v16.2</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span id="app-ver" style="opacity:.6">v16.3</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -709,7 +716,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v16.2';
+    const APP_VERSION = 'v16.3';
     try { const av = document.getElementById('app-ver'); if (av) av.textContent = APP_VERSION; } catch (x) {}
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
@@ -1123,7 +1130,8 @@
       const oldWrap = document.querySelector('#semaine .tg-wrap');
       const keep = oldWrap && typeof Drag !== 'undefined' && Drag.justDropped() ? { t: oldWrap.scrollTop, l: oldWrap.scrollLeft } : null;
       document.getElementById('semaine').innerHTML =
-        (wrapW < 900 ? `<div class="tg-toggle"><button class="${nDays === 7 ? 'on' : ''}" onclick="setWeekDays(7)">7 j</button><button class="${nDays === 4 ? 'on' : ''}" onclick="setWeekDays(4)">4 j</button></div>` : '') +
+        `<div class="tg-nav"><button onclick="shiftWeek(-1)" title="Semaine précédente (←)" aria-label="Semaine précédente">‹</button><b>${weekLabel(ws)}</b><button onclick="shiftWeek(1)" title="Semaine suivante (→)" aria-label="Semaine suivante">›</button>${sameDay(startOfWeek(new Date()), ws) ? '' : `<button class="tg-today" onclick="selectDate(new Date())">Cette semaine</button>`}<span style="flex:1"></span>` +
+        (wrapW < 900 ? `<span class="tg-toggle"><button class="${nDays === 7 ? 'on' : ''}" onclick="setWeekDays(7)">7 j</button><button class="${nDays === 4 ? 'on' : ''}" onclick="setWeekDays(4)">4 j</button></span>` : '') + `</div>` +
         `<div class="tg-wrap"><div class="tg-sticky">${head}${hasAllDay ? allday : ''}</div>${body}</div>${stats}`;
       sizeWeek();
       const nw = document.querySelector('#semaine .tg-wrap');
@@ -1132,6 +1140,16 @@
     }
 
     function goJour(t) { const b = document.querySelector('.tab-btn[onclick*="\'jour\'"]'); if (b) showTab({ target: b }, 'jour'); selectDate(new Date(t)); }
+    function weekLabel(ws) {
+      const we = addDays(ws, 6), o = { day: 'numeric', month: 'short' };
+      return `${ws.toLocaleDateString('fr-CA', o)} – ${we.toLocaleDateString('fr-CA', o)} ${we.getFullYear()}`;
+    }
+    // flèches du clavier ← → en vue Semaine (ordinateur)
+    document.addEventListener('keydown', ev => {
+      if (document.body.dataset.tab !== 'semaine' || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+      if (/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '') || document.querySelector('.modal.open')) return;
+      if (ev.key === 'ArrowLeft') { ev.preventDefault(); shiftWeek(-1); } else if (ev.key === 'ArrowRight') { ev.preventDefault(); shiftWeek(1); }
+    });
     function setWeekDays(n) { store('mb_wdays', n); renderSemaine(); }
     function sizeWeek() {
       const wrap = document.querySelector('#semaine .tg-wrap');
