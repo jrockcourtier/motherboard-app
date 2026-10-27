@@ -285,7 +285,7 @@
   function close() { const m = document.getElementById('tx-modal'); if (m) m.classList.remove('open'); }
   function upcoming(limitDays) {
     const out = [];
-    list().filter(t => t.status !== 'fermee').forEach(t => milestones(t).forEach(m => { if (!m.closed && (limitDays == null || diffD(today(), m.date) <= limitDays)) out.push(Object.assign({ t }, m)); }));
+    list().filter(t => !['fermee', 'annulee', 'conclue'].includes(t.status)).forEach(t => milestones(t).forEach(m => { if (!m.closed && (limitDays == null || diffD(today(), m.date) <= limitDays)) out.push(Object.assign({ t }, m)); }));
     return out.sort((a, b) => (a.date + (a.hour || '')).localeCompare(b.date + (b.hour || '')));
   }
   function msRow(m, withAddr) {
@@ -326,7 +326,7 @@
     const ms = milestones(t);
     box.innerHTML = `
       <div class="sheet-head"><button type="button" class="sheet-x" onclick="TX.close()">✕</button><b>${t.kind === 'vente' ? 'Vente' : 'Achat'} · ${e(t.address || '')}</b><span class="sheet-acts"><button class="sheet-trash" onclick="TX.del('${t.id}')" title="Supprimer">🗑</button><button class="sheet-save" onclick="TX.edit('${t.id}')">Modifier</button></span></div>
-      <div class="tx-sum">${money(t.price)}${t.clients ? ' · 👤 ' + e(t.clients) : ''}${t.otherParty ? ` · ${t.kind === 'vente' ? 'Acheteur' : 'Vendeur'} : ${e(t.otherParty)}` : ''}<br>Acceptée le <b>${fmtD(t.acceptedAt, true)}</b> · jour 1 = ${fmtD(addD(t.acceptedAt, 1))}${t.commissionPct && t.price ? `<br>💰 Commission : <b>${String(t.commissionPct).replace('.', ',')} %</b> × ${money(t.price)} = <b>${money(t.price * t.commissionPct / 100)}</b> <span class="crm-muted">(+ taxes)</span>` : ''}${t.listingId && window.LST ? `<br><button class="tx-link" onclick="TX.close();LST.open('${t.listingId}')">🏷️ Voir l'inscription</button>` : ''}</div>
+      <div class="tx-sum">${money(t.price)}${t.clients ? ' · 👤 ' + e(t.clients) : ''}${t.otherParty ? ` · ${t.kind === 'vente' ? 'Acheteur' : 'Vendeur'} : ${e(t.otherParty)}` : ''}<br>Acceptée le <b>${fmtD(t.acceptedAt, true)}</b> · jour 1 = ${fmtD(addD(t.acceptedAt, 1))}${t.commissionPct && t.price ? `<br>💰 Ta part : <b>${String(t.commissionPct).replace('.', ',')} %</b> × ${money(t.price)} = <b>${money(t.price * t.commissionPct / 100)}</b> <span class="crm-muted">(+ taxes)</span>` : ''}${t.listingId && window.LST ? `<br><button class="tx-link" onclick="TX.close();LST.open('${t.listingId}')">🏷️ Voir l'inscription</button>` : ''}</div>
       <div class="f-label">Conditions</div>
       ${(t.conditions || []).map(c => { const ty = CTYPES[c.type] || CTYPES.autre; return `<div class="tx-crow"><div>${ty.icon} <b>${e(c.type === 'autre' && c.label ? c.label : ty.label)}</b> · ${c.days} jours${c.extra ? ' + ' + c.extra : ''}${c.type === 'documents' && c.label ? `<div class="crm-muted">${e(c.label)}</div>` : ''}</div>
         <div class="chips">${[['', 'En cours'], ['levee', '✓ Levée / réalisée'], ['nulle', '✗ Promesse nulle']].map(([k, l]) => `<button class="${(c.status || '') === k ? 'on' : ''}" onclick="TX.cstatus('${t.id}','${c.id}','${k}')">${l}</button>`).join('')}</div></div>`; }).join('') || '<div class="crm-muted">Aucune condition.</div>'}
@@ -361,6 +361,8 @@
       <label class="f-block">Adresse de l'immeuble<input value="${e(d.address || '')}" oninput="TX.f('address',this.value,1)"></label>
       <div class="f-row"><label style="flex:1">Prix<input inputmode="numeric" value="${d.price ? Math.round(d.price).toLocaleString('fr-CA') : ''}" oninput="TX.f('price',+this.value.replace(/[^\\d]/g,''),1)"></label>
         <label style="flex:1">${d.kind === 'vente' ? 'Acheteur' : 'Vendeur'}<input value="${e(d.otherParty || '')}" oninput="TX.f('otherParty',this.value,1)"></label></div>
+      <div class="f-row"><label style="flex:1">Ma commission (%)<input inputmode="decimal" value="${d.commissionPct != null && d.commissionPct !== '' ? String(d.commissionPct).replace('.', ',') : ''}" placeholder="ex. 3,5" oninput="TX.f('commissionPct',this.value?+this.value.replace(',','.'):null,1)">${d.commTotalPct && d.collabPct ? `<span class="f-hint">Contrat : ${String(d.commTotalPct).replace('.', ',')} % − ${String(d.collabPct).replace('.', ',')} % au collaborateur. <a onclick="TX.f('commissionPct',${d.commTotalPct})">Pas de collaborateur → ${String(d.commTotalPct).replace('.', ',')} %</a></span>` : '<span class="f-hint">Ta part seulement (sans la part du collaborateur)</span>'}</label>
+        <label style="flex:1">Statut<select onchange="TX.f('status',this.value,1)">${[['active', 'En cours'], ['conclue', 'Conclue (notaire signé)'], ['annulee', 'Annulée']].map(([k, l]) => `<option value="${k}" ${(d.status || 'active') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
       <label class="f-block">Mes clients<input value="${e(d.clients || '')}" placeholder="ex. Dany Bouchard et Tamar Alexanian" oninput="TX.f('clients',this.value,1)"></label>
       <label class="f-block">Lier à la fiche contact<select onchange="TX.f('contactId',this.value,1)"><option value="">—</option>${contactOpts()}</select></label>
       <div class="f-row"><label style="flex:1.4">Date d'acceptation<input type="date" value="${d.acceptedAt || ''}" onchange="TX.f('acceptedAt',this.value)"></label>

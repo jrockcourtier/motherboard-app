@@ -105,7 +105,7 @@
       [[30, '⏳', 'Contrat de courtage expire dans 30 jours'], [7, '⚠️', 'Contrat de courtage expire dans 7 jours'], [0, '🚨', "Contrat de courtage expire AUJOURD'HUI (23 h 59)"]].forEach(([n, ic, l]) => {
         const d = addD(x.expiresAt, -n); out.push({ key: 'exp' + n, icon: ic, label: l, date: d, hour: '23:59', urgent: n <= 7 });
       });
-      if (x.marketingDate) out.push({ key: 'mkt', icon: '📸', label: `Mise en marché demain (${fmtD(x.marketingDate)}) — Centris, photos, pancarte`, date: addD(x.marketingDate, -1), hour: '10:00', task: true });
+      if (x.marketingDate && addD(x.marketingDate, -1) >= today()) out.push({ key: 'mkt', icon: '📸', label: `Mise en marché demain (${fmtD(x.marketingDate)}) — Centris, photos, pancarte`, date: addD(x.marketingDate, -1), hour: '10:00', task: true });
     }
     out.forEach(m => { m.closed = !!(x.done || {})[m.key]; });
     return out.sort((a, b) => a.date.localeCompare(b.date));
@@ -151,7 +151,12 @@
   function close() { const m = document.getElementById('lst-modal'); if (m) m.classList.remove('open'); }
   function commLine(x, price) {
     const p = price || curPrice(x);
-    if (x.commissionPct && p) return `💰 ${pctTxt(x.commissionPct)} × ${money(p)} = <b>${money(p * x.commissionPct / 100)}</b> <span class="crm-muted">(+ taxes)</span>`;
+    if (x.commissionPct && p) {
+      const tot = p * x.commissionPct / 100;
+      if (!x.collabPct) return `💰 ${pctTxt(x.commissionPct)} × ${money(p)} = <b>${money(tot)}</b> <span class="crm-muted">(+ taxes)</span>`;
+      const mine = Math.max(0, x.commissionPct - x.collabPct);
+      return `<div class="lst-split"><div><span>Total</span><b>${pctTxt(x.commissionPct)} · ${money(tot)}</b></div><div><span>Courtier collaborateur</span><b>${pctTxt(x.collabPct)} · ${money(p * x.collabPct / 100)}</b></div><div class="mine"><span>💰 Ma part</span><b>${pctTxt(+mine.toFixed(3))} · ${money(p * mine / 100)}</b></div></div><div class="crm-muted" style="font-size:12px">Sur ${money(p)}, + taxes. Si l'acheteur n'a pas de courtier, ta part est le total.</div>`;
+    }
     if (x.commissionFlat) return `💰 Forfait <b>${money(x.commissionFlat)}</b> <span class="crm-muted">(+ taxes)</span>`;
     return '';
   }
@@ -187,7 +192,7 @@
     return `<div class="tx-card" onclick="LST.open('${x.id}')">
       <div class="tx-l1">${badge(x)}<b>${e(x.address || 'Inscription sans adresse')}</b><span class="tx-price">${dropped ? '🔻 ' : ''}${money(p)}</span></div>
       <div class="crm-muted">${(x.sellers || []).length ? '👤 ' + e(x.sellers.map(s => s.name).join(' et ')) + ' · ' : ''}${x.expiresAt ? `fin du contrat ${fmtD(x.expiresAt)}${isLive(x) && days != null ? ` (${days < 0 ? 'expiré' : days === 0 ? "aujourd'hui" : 'dans ' + days + ' j'})` : ''}` : ''}</div>
-      <div class="lst-comm">${commLine(x)}</div>
+      <div class="lst-comm">${x.commissionPct && x.collabPct ? `💰 Ma part <b>${pctTxt(+(x.commissionPct - x.collabPct).toFixed(3))} · ${money(curPrice(x) * (x.commissionPct - x.collabPct) / 100)}</b> <span class="crm-muted">(total ${pctTxt(x.commissionPct)} · ${money(curPrice(x) * x.commissionPct / 100)}, collaborateur ${pctTxt(x.collabPct)})</span>` : commLine(x)}</div>
       ${x.txId && window.TX && TX._all()[x.txId] ? `<div class="tx-next">🤝 Offre acceptée le ${fmtD(TX._all()[x.txId].acceptedAt)} — ${money(TX._all()[x.txId].price)}</div>` : ''}
     </div>`;
   }
@@ -207,11 +212,11 @@
         ${x.deedDelay ? `<div>Acte de vente<b>${x.deedDelay} jours</b></div>` : ''}
       </div>
       <div class="lst-comm big">${commLine(x)}</div>
-      ${tx ? `<div class="tx-info">🤝 Offre acceptée le <b>${fmtD(tx.acceptedAt, true)}</b> à <b>${money(tx.price)}</b>${x.commissionPct ? ` · commission ${money(tx.price * x.commissionPct / 100)} (+ taxes)` : ''}<br><button class="tx-link" onclick="LST.close();showTab({target:document.querySelector('.tab-btn[onclick*=transactions]')},'transactions');TX.open('${tx.id}')">Voir la transaction et ses dates limites →</button></div>` : ''}
+      ${tx ? `<div class="tx-info">🤝 Offre acceptée le <b>${fmtD(tx.acceptedAt, true)}</b> à <b>${money(tx.price)}</b>${tx.commissionPct ? ` · ta part ${String(tx.commissionPct).replace('.', ',')} % = ${money(tx.price * tx.commissionPct / 100)} (+ taxes)` : ''}<br><button class="tx-link" onclick="LST.close();showTab({target:document.querySelector('.tab-btn[onclick*=transactions]')},'transactions');TX.open('${tx.id}')">Voir la transaction et ses dates limites →</button></div>` : ''}
       <div class="tx-actions">
         ${isLive(x) || s === 'expiree' ? `<button onclick="LST.drop('${x.id}')">🔻 Baisse de prix</button><button class="lst-offer" onclick="LST.offer('${x.id}')">🤝 Offre d'achat acceptée</button><button onclick="LST.extend('${x.id}')">🔄 Prolonger le contrat</button>` : ''}
         ${x.hasPdf ? `<button onclick="TX.pdf('${x.id}')">📄 Voir le contrat</button>` : ''}
-        ${x.contactId && window.CRM ? `<button onclick="LST.close();CRM.open('${x.contactId}')">👤 Fiche du vendeur</button>` : ''}
+        ${window.CRM ? sellerIds(x).map(cid => { const c = CRM._all()[cid]; return c && !c.deleted ? `<button onclick="LST.close();CRM.open('${cid}')">👤 ${e(c.name)}</button>` : ''; }).join('') : ''}
         <button onclick="LST.resync('${x.id}')">📅 Rappels dans l'agenda</button>
       </div>
       <div id="lst-inline"></div>
@@ -271,27 +276,47 @@
     d.sellers = (d.sellers || []).filter(v => v.name || v.phone);
     const wantCal = document.getElementById('lst-cal') && document.getElementById('lst-cal').checked;
     const file = d._file, mkContact = d._newContact !== false && !d.contactId; ['_file', '_warn', '_imp', '_newContact'].forEach(k => delete d[k]);
-    // fiche du vendeur
-    if (window.CRM && CRM._all) {
-      if (!d.contactId && d.sellers[0]) {
-        const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
-        const dig = (s) => String(s || '').replace(/\D/g, '').slice(-10);
-        const hit = Object.values(CRM._all()).find(c => !c.deleted && d.sellers.some(v => (v.phone && dig(c.phone) === dig(v.phone)) || (norm(v.name).length > 4 && norm(c.name) === norm(v.name))));
-        if (hit) d.contactId = hit.id;
-        else if (mkContact) {
-          const now = new Date().toISOString(), v = d.sellers[0];
-          const c = { id: H.uuid(), type: 'vendeur', stage: d.marketingDate && d.marketingDate > today() ? 'CCV signé' : 'En vigueur', name: d.sellers.map(s => s.name).filter(Boolean).join(' et ') || v.name, phone: v.phone || '', phone2: (d.sellers[1] || {}).phone || '', email: v.email || '', address: d.address, price: money(d.price), commission: d.commissionPct != null ? String(d.commissionPct) : '', source: 'Contrat de courtage', firstContact: (d.signedAt || now).slice(0, 10), lastContact: now.slice(0, 10), notes: [{ id: H.uuid(), at: now, text: `🏷️ Contrat de courtage signé — ${d.address}${d.expiresAt ? ', fin le ' + fmtD(d.expiresAt, true) : ''}` }], calls: [], createdAt: now };
-          CRM.upsert(c); d.contactId = c.id;
-        }
-      }
-      if (d.contactId) { const c = CRM._all()[d.contactId]; if (c && c.type === 'vendeur' && ['Lead', 'Évaluation'].includes(c.stage)) { c.stage = 'CCV signé'; CRM.upsert(c); } }
-    }
+    // une fiche contact par vendeur (Catherine et Marco = deux personnes)
+    linkSellers(d, mkContact);
     save(d);
     if (file) H.uploadPdf(d.id, file).then(ok => { if (ok) { d.hasPdf = true; save(d); } });
     close();
     if (wantCal) { toastMsg('📅 Création des rappels…'); const r = await syncCalendar(d); toastMsg(r.bad ? `⚠️ ${r.ok} rappel(s) créé(s), ${r.bad} en erreur — connecte Google` : `✅ Inscription enregistrée · ${r.ok} rappel(s) dans ton agenda`, 7000); }
     else toastMsg('✅ Inscription enregistrée');
     render();
+  }
+
+  // ---------- fiches des vendeurs ----------
+  const normN = (v) => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+  const dig = (v) => String(v || '').replace(/\D/g, '').slice(-10);
+  function sellerContact(d, v, create) {
+    const all = Object.values(CRM._all()).filter(c => !c.deleted);
+    let c = all.find(k => (v.phone && dig(k.phone) && dig(k.phone) === dig(v.phone)) || (normN(v.name).length > 4 && normN(k.name) === normN(v.name)));
+    if (c || !create) return c || null;
+    const now = new Date().toISOString();
+    c = { id: H.uuid(), type: 'vendeur', stage: d.marketingDate && d.marketingDate > today() ? 'CCV signé' : 'En vigueur', name: v.name, phone: v.phone || '', email: v.email || '', address: d.address, price: money(curPrice(d)), commission: d.commissionPct != null ? String(d.commissionPct) : '', source: 'Contrat de courtage', firstContact: (d.signedAt || now).slice(0, 10), lastContact: now.slice(0, 10), notes: [{ id: H.uuid(), at: now, text: `🏷️ Contrat de courtage signé — ${d.address}${d.expiresAt ? ', fin le ' + fmtD(d.expiresAt, true) : ''}` }], calls: [], createdAt: now };
+    CRM.upsert(c); return c;
+  }
+  function linkSellers(d, create) {
+    if (!window.CRM || !CRM._all) return;
+    const ids = [];
+    (d.sellers || []).filter(v => v.name || v.phone).forEach(v => { const c = sellerContact(d, v, create); if (c && !ids.includes(c.id)) ids.push(c.id); });
+    if (!ids.length && d.contactId) ids.push(d.contactId);
+    d.contactIds = ids; d.contactId = ids[0] || d.contactId || '';
+    ids.forEach(id => { const c = CRM._all()[id]; if (c && c.type === 'vendeur' && ['Lead', 'Évaluation'].includes(c.stage)) { c.stage = 'CCV signé'; CRM.upsert(c); } });
+  }
+  const sellerIds = (x) => (x.contactIds && x.contactIds.length ? x.contactIds : x.contactId ? [x.contactId] : []);
+  // correction (v17.1) : une ancienne fiche « Catherine Mongeau et Marco Savard » devient deux fiches
+  function splitOld() {
+    if (!window.CRM || !CRM._all) return;
+    list().forEach(x => {
+      if (x.splitV171 || (x.sellers || []).length < 2 || !x.contactId) return;
+      const c = CRM._all()[x.contactId];
+      if (c && !c.deleted && / et /.test(c.name || '') && (x.sellers || []).every(v => (c.name || '').includes(v.name))) {
+        const v = x.sellers[0]; c.name = v.name; c.phone = v.phone || c.phone; c.phone2 = ''; c.email = v.email || c.email; CRM.upsert(c);
+      }
+      linkSellers(x, true); x.splitV171 = true; save(x);
+    });
   }
 
   // ---------- actions ----------
@@ -314,7 +339,7 @@
     if (!n) { toastMsg('Entre le nouveau prix.'); return; }
     const old = curPrice(x); x.priceHist = (x.priceHist || []).concat([{ at: d, price: n, note: old ? `${n < old ? 'baisse' : 'hausse'} de ${money(Math.abs(old - n))}` : '' }]);
     save(x);
-    if (x.contactId && window.CRM) { const c = CRM._all()[x.contactId]; if (c) { c.notes = c.notes || []; c.notes.push({ id: H.uuid(), at: new Date().toISOString(), text: `🔻 Prix ajusté : ${money(old)} → ${money(n)} (${x.address})` }); c.price = money(n); CRM.upsert(c); } }
+    if (window.CRM) sellerIds(x).forEach(cid => { const c = CRM._all()[cid]; if (c) { c.notes = c.notes || []; c.notes.push({ id: H.uuid(), at: new Date().toISOString(), text: `🔻 Prix ajusté : ${money(old)} → ${money(n)} (${x.address})` }); c.price = money(n); CRM.upsert(c); } });
     open(id); toastMsg(`🔻 Nouveau prix : ${money(n)}${x.commissionPct ? ' · commission ' + money(n * x.commissionPct / 100) : ''}`);
   }
   function extend(id) {
@@ -333,7 +358,8 @@
       <div class="chips"><button onclick="window.__lstOffer='${id}';document.getElementById('lst-pa').click()">📥 Importer la promesse d'achat (PDF)</button><button onclick="LST.offerManual('${id}')">✍️ Entrer à la main</button></div></div>`);
   }
   function txPrefill(x) {
-    return { kind: 'vente', listingId: x.id, address: x.address, contactId: x.contactId || '', clients: (x.sellers || []).map(s => s.name).filter(Boolean).join(' et '), commissionPct: x.commissionPct || null };
+    const mine = x.commissionPct ? (x.collabPct ? +(x.commissionPct - x.collabPct).toFixed(3) : x.commissionPct) : null;
+    return { kind: 'vente', listingId: x.id, address: x.address, contactId: x.contactId || '', clients: (x.sellers || []).map(s => s.name).filter(Boolean).join(' et '), commissionPct: mine, commTotalPct: x.commissionPct || null, collabPct: x.collabPct || null };
   }
   function paFile(file) {
     const id = window.__lstOffer; window.__lstOffer = null; const x = L[id]; if (!x || !file) return;
@@ -347,6 +373,7 @@
   function linkTx(lid, t) {
     const x = L[lid]; if (!x) return;
     x.txId = t.id; if (isLive(x) || statusOf(x) === 'expiree') x.status = 'sous_condition';
+    if (window.CRM) sellerIds(x).slice(1).forEach(cid => { const c = CRM._all()[cid]; if (c && !['Vendu / Notaire', 'Client passé'].includes(c.stage)) { c.stage = 'Offre acceptée'; CRM.upsert(c); } });
     save(x); syncCalendar(x).catch(() => {});
   }
   async function setStatus(id, st) { const x = L[id]; x.status = st; save(x); open(id); await syncCalendar(x); open(id); }
@@ -359,7 +386,7 @@
     toastMsg('🗑 Inscription supprimée');
   }
 
-  window.LST = { render, open, close, edit, f, sf, sadd, sdel, saveForm, importFile, drop, saveDrop, extend, saveExtend, offer, paFile, offerManual, linkTx, setStatus, done, resync, del, doDel, _parse: parseCC, _milestones: milestones, _all: () => L };
-  render(); pull();
+  window.LST = { _list: list, _cur: curPrice, _status: statusOf, render, open, close, edit, f, sf, sadd, sdel, saveForm, importFile, drop, saveDrop, extend, saveExtend, offer, paFile, offerManual, linkTx, setStatus, done, resync, del, doDel, _parse: parseCC, _milestones: milestones, _all: () => L };
+  render(); pull().then(() => setTimeout(splitOld, 1500));
   window.addEventListener('online', flush);
 })();
