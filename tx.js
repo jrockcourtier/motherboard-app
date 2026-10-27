@@ -61,6 +61,10 @@
         out.push({ key: c.id + ':a', cid: c.id, icon: ty.icon, label: `${name} — à faire (fin des ${n} jours)`, date: addD(acc, n), hour });
         const x = c.extra != null ? +c.extra : 4;
         out.push({ key: c.id + ':b', cid: c.id, icon: '⚠️', label: `${name} — DATE LIMITE avis au vendeur (${n} + ${x} jours)`, date: addD(acc, n + x), hour, legal: c.legalHour ? `avant ${hh(c.legalHour)} selon le formulaire` : '', main: true });
+        // rendez-vous d'inspection (3 h) ou, tant qu'il n'est pas entré, rappel chaque jour de l'entrer
+        if (c.inspAt) out.push({ key: c.id + ':appt', cid: c.id, icon: '🔍', label: 'Inspection' + (c.inspWho ? ' — ' + c.inspWho : ''), date: c.inspAt, hour: c.inspHour || '09:00', info: true, appt: true, dur: 180, keepOpen: true });
+        else if (t.status !== 'conclue') { const first = addD(acc, 1), last = addD(acc, n), d0 = today() < first ? first : today() > last ? last : today();
+          out.push({ key: c.id + ':ask', cid: c.id, icon: '📅', label: "Entrer la date de l'inspection dans Motherboard (rappel chaque jour tant qu'elle n'est pas entrée)", date: d0, hour: '10:00', task: true, daily: true, until: last, ask: true }); }
       } else if (c.type === 'documents') {
         const x = c.extra != null ? +c.extra : 7;
         out.push({ key: c.id + ':a', cid: c.id, icon: ty.icon, label: `${name} — documents à recevoir du vendeur (${n} jours)`, date: addD(acc, n), hour });
@@ -74,7 +78,7 @@
     out.push({ key: 'task:ezmax', icon: '🗂️', label: 'Créer la transaction dans EzSign / EzMax — au plus tard aujourd\'hui', date: addD(acc, 2), hour: '10:00', task: true });
     if (t.deedAt) out.push({ key: 'deed', icon: '🖋️', label: 'Acte de vente chez le notaire (le ou avant)', date: t.deedAt, hour: t.deedHour || '', info: true });
     if (t.occupationAt) out.push({ key: 'occ', icon: '🔑', label: 'Occupation des lieux', date: t.occupationAt, hour: t.occupationHour || '', info: true });
-    out.forEach(m => { const ev = (t.events || {})[m.key]; if (ev && ev.slot != null) m.placed = ev.slot; const c = (t.conditions || []).find(k => k.id === m.cid); m.closed = !!(c && (c.status === 'levee' || c.status === 'nulle')) || !!(t.done || {})[m.key]; const wd = new Date(m.date + 'T12:00:00').getDay(); m.weekend = wd === 0 || wd === 6; });
+    out.forEach(m => { const ev = (t.events || {})[m.key]; if (ev && ev.slot != null) m.placed = ev.slot; const c = (t.conditions || []).find(k => k.id === m.cid); m.closed = m.keepOpen ? (!!(c && c.status === 'nulle') || !!(t.done || {})[m.key]) : !!(c && (c.status === 'levee' || c.status === 'nulle')) || !!(t.done || {})[m.key]; const wd = new Date(m.date + 'T12:00:00').getDay(); m.weekend = wd === 0 || wd === 6; });
     return out.sort((a, b) => (a.date + (a.hour || '')).localeCompare(b.date + (b.hour || '')));
   }
   const KIND_L = { vente: 'Vente', achat: 'Achat', double: 'Vente + achat', location: 'Location', revenu: 'Autre revenu' };
@@ -205,6 +209,12 @@
     const where = t.address || 'dossier';
     const desc = [`${t.kind === 'vente' ? 'Dossier de vente' : "Dossier d'achat"} — ${where}`, t.clients ? 'Clients : ' + t.clients : '', `Acceptée le ${fmtD(t.acceptedAt, true)}`, m.legal ? 'Limite légale : ' + m.legal : '', 'Créé par Motherboard'].filter(Boolean).join('\n');
     const priv = { mbType: m.info ? 'reunion' : 'urgent', mbTx: t.id, mbKey: m.key };
+    if (m.appt) {
+      const [ah, am] = (m.hour || '09:00').split(':').map(Number); const st = new Date(m.date + 'T00:00:00'); st.setHours(ah, am || 0, 0, 0);
+      return { summary: `🔍 Inspection — ${where}`, description: desc + (m.label !== 'Inspection' ? '\n' + m.label : ''), location: t.address || '', colorId: '10',
+        start: { dateTime: st.toISOString(), timeZone: tz }, end: { dateTime: new Date(st.getTime() + (m.dur || 180) * 60000).toISOString(), timeZone: tz },
+        extendedProperties: { private: Object.assign({}, priv, { mbType: 'reunion' }) }, reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 24 * 60 }, { method: 'popup', minutes: 60 }] } };
+    }
     if (m.info && !m.hour) return { summary: `${m.icon} ${m.label} — ${where}`, description: desc, start: { date: m.date }, end: { date: addD(m.date, 1) }, extendedProperties: { private: priv }, reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 15 * 60 }] } };
     // dates limites : placées le matin (9 h 30 – 10 h) du jour limite, avec l'heure limite dans le titre ; alertes la veille 9 h 30 et le matin même 9 h 30
     // tâches : 10 h, alerte à l'heure · info (occupation) : à son heure, alerte la veille
@@ -216,7 +226,8 @@
     return {
       summary: `${m.info || m.task ? m.icon : '⚠️'} ${m.label.replace(/^⚠️\s*/, '')}${deadline ? ` (limite ${hh(m.hour)})` : ''} — ${where}`, description: desc, colorId: m.info ? '9' : m.task ? '6' : '11',
       start: { dateTime: st.toISOString(), timeZone: tz }, end: { dateTime: en.toISOString(), timeZone: tz },
-      extendedProperties: { private: priv }, reminders: { useDefault: false, overrides: rem }
+      extendedProperties: { private: priv }, reminders: { useDefault: false, overrides: rem },
+      ...(m.daily && m.until && m.until > m.date ? { recurrence: [`RRULE:FREQ=DAILY;UNTIL=${m.until.replace(/-/g, '')}T235959Z`] } : {})
     };
   }
   // ---------- placement des tâches : entre 9 h et 17 h, sans chevaucher un rendez-vous déjà pris ----------
@@ -239,7 +250,7 @@
         ((r && r.items) || []).forEach(ev => {
           if (!ev.start || !ev.start.dateTime || ev.status === 'cancelled' || ev.transparency === 'transparent') return;
           const p = (ev.extendedProperties && ev.extendedProperties.private) || {};
-          if (p.mbTx) return;                                   // nos propres rappels de transaction : on les replace
+          if (p.mbTx && !/:appt$/.test(p.mbKey || '')) return;   // nos propres rappels de transaction : on les replace (sauf les inspections, qui bloquent 3 h)
           if ((ev.attendees || []).some(a => a.self && a.responseStatus === 'declined')) return;
           out.push([toMin(new Date(ev.start.dateTime)), toMin(new Date(ev.end.dateTime))]);
         });
@@ -325,6 +336,27 @@
       ${next ? `<div class="tx-next ${countdown(next.date).cls}">⏰ Prochaine : ${e(next.label)} — <b>${fmtD(next.date)} ${hh(next.hour)}</b> (${countdown(next.date).t})</div>` : ms.length ? '<div class="tx-next ok">✅ Toutes les conditions sont réglées</div>' : ''}
     </div>`;
   }
+  function inspBox(t, c) {
+    const lim = t.acceptedAt && c.days != null ? addD(t.acceptedAt, +c.days) : '';
+    return `<div class="tx-insp${c.inspAt ? ' set' : ''}"><div class="f-hint">${c.inspAt ? `🔍 Inspection le <b>${fmtD(c.inspAt, true)} à ${hh(c.inspHour || '09:00')}</b> — 3 h réservées dans ton agenda` : "📅 Date de l'inspection pas encore entrée — rappel chaque jour à 10 h"}</div>
+      <div class="guest-row"><input type="date" id="insp-d-${c.id}" value="${c.inspAt || ''}" ${lim ? `max="${lim}"` : ''}><input type="time" id="insp-h-${c.id}" value="${c.inspHour || '09:00'}" step="900"><input id="insp-w-${c.id}" placeholder="Inspecteur (optionnel)" value="${e(c.inspWho || '')}"><button onclick="event.stopPropagation();TX.setInsp('${t.id}','${c.id}')">${c.inspAt ? 'Modifier' : 'Enregistrer'}</button>${c.inspAt ? `<button class="tx-cdel" onclick="event.stopPropagation();TX.setInsp('${t.id}','${c.id}',1)">✕</button>` : ''}</div></div>`;
+  }
+  async function setInsp(id, cid, clear) {
+    const t = txs[id]; const c = t && (t.conditions || []).find(k => k.id === cid); if (!c) return;
+    if (clear) { delete c.inspAt; delete c.inspHour; delete c.inspWho; }
+    else {
+      const d = (document.getElementById('insp-d-' + cid) || {}).value, h = (document.getElementById('insp-h-' + cid) || {}).value || '09:00', w = ((document.getElementById('insp-w-' + cid) || {}).value || '').trim();
+      if (!d) { toastMsg("Choisis la date de l'inspection."); return; }
+      c.inspAt = d; c.inspHour = h; c.inspWho = w;
+      const lim = t.acceptedAt && c.days != null ? addD(t.acceptedAt, +c.days) : '';
+      if (lim && d > lim) toastMsg(`⚠️ Après la fin du délai d'inspection (${fmtD(lim)}) — vérifie`, 6000);
+    }
+    save(t); open(id);
+    toastMsg('📅 Mise à jour de l\'agenda…');
+    const r = await syncCalendar(t); open(id);
+    toastMsg(r.bad ? `⚠️ ${r.bad} rappel(s) en erreur — connecte Google` : clear ? "Date d'inspection retirée — le rappel quotidien revient" : `✅ Inspection réservée ${fmtD(c.inspAt)} à ${hh(c.inspHour)} (3 h) · rappel quotidien arrêté`, 6000);
+    jourBox();
+  }
   function open(id) {
     const t = txs[id]; if (!t) return;
     const box = modal().querySelector('.sheet');
@@ -333,7 +365,7 @@
       <div class="sheet-head"><button type="button" class="sheet-x" onclick="TX.close()">✕</button><b>${kindL(t)} · ${e(t.address || '')}</b><span class="sheet-acts"><button class="sheet-trash" onclick="TX.del('${t.id}')" title="Supprimer">🗑</button><button class="sheet-save" onclick="TX.edit('${t.id}')">Modifier</button></span></div>
       <div class="tx-sum">${t.price ? money(t.price) : ''}${t.centris ? ' · Centris ' + e(t.centris) : ''}${t.clients ? ' · 👤 ' + e(t.clients) : ''}${t.otherParty ? ` · ${t.kind === 'vente' ? 'Acheteur' : 'Vendeur'} : ${e(t.otherParty)}` : ''}${t.acceptedAt ? `<br>Acceptée le <b>${fmtD(t.acceptedAt, true)}</b> · jour 1 = ${fmtD(addD(t.acceptedAt, 1))}` : ''}${t.deedAt && (t.status === 'conclue' || !t.acceptedAt) ? `<br>${t.kind === 'revenu' ? 'Reçu le' : 'Notarié le'} <b>${fmtD(t.deedAt, true)}</b>` : ''}${commLine(t)}${t.memo ? `<br><span class="crm-muted">${e(t.memo)}</span>` : ''}${t.listingId && window.LST ? `<br><button class="tx-link" onclick="TX.close();LST.open('${t.listingId}')">🏷️ Voir l'inscription</button>` : ''}</div>
       <div class="f-label">Conditions</div>
-      ${(t.conditions || []).map(c => { const ty = CTYPES[c.type] || CTYPES.autre; return `<div class="tx-crow"><div>${ty.icon} <b>${e(c.type === 'autre' && c.label ? c.label : ty.label)}</b> · ${c.days} jours${c.extra ? ' + ' + c.extra : ''}${c.type === 'documents' && c.label ? `<div class="crm-muted">${e(c.label)}</div>` : ''}</div>
+      ${(t.conditions || []).map(c => { const ty = CTYPES[c.type] || CTYPES.autre; return `<div class="tx-crow"><div>${ty.icon} <b>${e(c.type === 'autre' && c.label ? c.label : ty.label)}</b> · ${c.days} jours${c.extra ? ' + ' + c.extra : ''}${c.type === 'documents' && c.label ? `<div class="crm-muted">${e(c.label)}</div>` : ''}${c.type === 'inspection' && c.status !== 'nulle' ? inspBox(t, c) : ''}</div>
         <div class="chips">${[['', 'En cours'], ['levee', '✓ Levée / réalisée'], ['nulle', '✗ Promesse nulle']].map(([k, l]) => `<button class="${(c.status || '') === k ? 'on' : ''}" onclick="TX.cstatus('${t.id}','${c.id}','${k}')">${l}</button>`).join('')}</div></div>`; }).join('') || '<div class="crm-muted">Aucune condition.</div>'}
       <div class="f-label">Dates limites</div>
       <div class="tx-list">${ms.map(m => msRow(Object.assign({ t }, m), false)).join('')}</div>
@@ -402,7 +434,7 @@
     if ((d.conditions || []).some(c => c.days == null || c.days === '')) { toastMsg('Il manque le nombre de jours pour une condition.'); return; }
     const wantCal = document.getElementById('tx-cal') && document.getElementById('tx-cal').checked;
     const file = d._file; delete d._file; delete d._warn; delete d._imp;
-    d.status = d.status || 'active'; d.evv = 3;
+    d.status = d.status || 'active'; d.evv = 4;
     save(d);
     if (file) uploadPdf(d, file);
     if (d.listingId && window.LST && LST.linkTx) LST.linkTx(d.listingId, d);
@@ -466,7 +498,7 @@
         if (hit) t.contactId = hit.id;
       }
       if (t.contactId && t.deedAt && conclue && window.CRM && CRM.setClosing) CRM.setClosing(t.contactId, t.deedAt);
-      t.evv = 3; save(t); uploadPdf(t, file);
+      t.evv = 4; save(t); uploadPdf(t, file);
       if (conclue) { open(t.id); toastMsg('✅ Promesse d\'achat ajoutée — infos complétées (dossier conclu : aucune échéance créée)', 6000); }
       else { open(t.id); toastMsg('✅ Promesse d\'achat ajoutée — vérifie les conditions puis « 📅 Remettre les rappels »', 7000); }
     } catch (x) { toastMsg("⚠️ Impossible de lire ce PDF (" + (x.message || 'erreur') + ").", 7000); }
@@ -514,7 +546,7 @@
   function jourBox() {
     const box = document.getElementById('jour'); if (!box) return;
     const old = box.querySelector('.tx-jour'); if (old) old.remove();
-    const ms = upcoming(2).filter(m => !m.info);
+    const ms = upcoming(2).filter(m => !m.info || m.appt);
     if (!ms.length) return;
     const el = document.createElement('div'); el.className = 'tx-jour';
     el.innerHTML = `<div class="section-title">🚨 Dates limites de transactions</div>` + ms.map(m => `<div onclick="showTab({target:document.querySelector('.tab-btn[onclick*=transactions]')},'transactions');TX.open('${m.t.id}')">${msRow(m, true)}</div>`).join('');
@@ -528,7 +560,7 @@
     window.renderTransactionsView = render;
   } catch (x) {}
 
-  window.TX = { render, open, close, edit, attach, attachFile, f, cf, cadd, cdel, saveForm, importFile, pdf, cstatus, done, resync, del, doDel, jourBox, _parse: parsePA, _milestones: milestones, _all: () => txs,
+  window.TX = { render, open, close, edit, attach, attachFile, setInsp, f, cf, cadd, cdel, saveForm, importFile, pdf, cstatus, done, resync, del, doDel, jourBox, _parse: parsePA, _milestones: milestones, _all: () => txs,
     _h: { readLines, frDate, gReq, busyOn, freeSlot, calId, countdown, fmtD, hh, money, addD, diffD, today, uuid, uploadPdf: async (id, file) => { try { const r = await fetch('/api/pdf?id=' + id, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/pdf' }, body: file }); return r.ok; } catch (x) { return false; } } } };
   render(); pull(); setTimeout(jourBox, 1500);
   // v16.1 : remettre à jour une fois les rappels déjà créés (heure du matin + nouvelles tâches)
@@ -538,9 +570,9 @@
     if (typeof accessToken === 'undefined' || !accessToken) return;
     clearInterval(mig);
     list().forEach(t => { if (t.contactId && t.deedAt && window.CRM && CRM.setClosing) CRM.setClosing(t.contactId, t.deedAt); });
-    const todo = list().filter(t => t.status !== 'fermee' && (t.evv || 0) < 3 && t.events && Object.keys(t.events).length);
-    for (const t of todo) { t.evv = 3; try { await syncCalendar(t); } catch (x) {} }
-    if (todo.length) toastMsg(`📅 Rappels de ${todo.length} dossier(s) replacés entre 9 h et 17 h, sans chevaucher tes rendez-vous`, 7000);
+    const todo = list().filter(t => t.status !== 'fermee' && (t.evv || 0) < 4 && !["conclue", "annulee"].includes(t.status) && t.events && Object.keys(t.events).length);
+    for (const t of todo) { t.evv = 4; try { await syncCalendar(t); } catch (x) {} }
+    if (todo.length) toastMsg(`📅 Rappels de ${todo.length} dossier(s) mis à jour (rappel quotidien : date d'inspection)`, 7000);
   }, 3000);
   window.addEventListener('online', flush);
 })();
