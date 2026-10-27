@@ -272,6 +272,7 @@
   function sdel(i) { draft.sellers.splice(i, 1); renderForm(); }
   async function saveForm() {
     const d = draft; if (!d.address) { toastMsg("Entre l'adresse de l'immeuble."); return; }
+    if (!L[d.id]) { const same = findSame(d); if (same) { const keep = d; d.id = same.id; d.events = same.events || {}; d.priceHist = d.priceHist || same.priceHist; d.createdAt = same.createdAt || d.createdAt; if (!sellerIds(d).length && sellerIds(same).length) { d.contactId = same.contactId; d.contactIds = same.contactIds; } toastMsg('🔗 Même adresse qu\'une inscription existante : elle est mise à jour (pas de doublon)', 5000); } }
     if (!d.expiresAt) { toastMsg('Entre la date de fin du contrat.'); return; }
     d.sellers = (d.sellers || []).filter(v => v.name || v.phone);
     const wantCal = document.getElementById('lst-cal') && document.getElementById('lst-cal').checked;
@@ -322,7 +323,29 @@
   // ---------- actions ----------
   // même immeuble ? numéro civique + premier mot de la rue (ex. « 2168|3e »)
   const addrKey = (a) => { const m = String(a || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').match(/^\s*(\d+[a-z]?)[\s,-]+(?:(?:rue|av|ave|avenue|ch|chemin|boul|boulevard|route|rte|rang|montee|place|terrasse|de|du|des|la|le|l)[\s.'’-]+)*([a-z0-9]+)/); return m ? m[1] + '|' + m[2] : ''; };
-  const findSame = (r) => { const k = addrKey(r.address); return k ? list().find(x => addrKey(x.address) === k) : null; };
+  // comparaison souple : même numéro civique (n'importe où : « 8-2292 », « 2292, app. 8 ») + même nom de rue
+  const STOP = new Set(['rue', 'av', 'ave', 'avenue', 'ch', 'chemin', 'boul', 'boulevard', 'route', 'rte', 'rang', 'montee', 'place', 'terrasse', 'de', 'du', 'des', 'la', 'le', 'l', 'app', 'apt', 'appartement', 'unite', 'suite', 'qc', 'quebec', 'canada', 'montreal', 'laval', 'est', 'ouest', 'nord', 'sud', 'e', 'o']);
+  const addrParts = (a) => { const t = String(a || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\b[a-z]\d[a-z]\s?\d[a-z]\d\b/g, ' ').split(/[^a-z0-9]+/).filter(Boolean);
+    return { nums: t.filter(w => /^\d{2,}[a-z]?$/.test(w)), words: t.filter(w => !/^\d+$/.test(w) && !STOP.has(w) && w.length >= 2) }; };
+  const sameAddr = (a, b) => { const A = addrParts(a), B = addrParts(b); if (!A.nums.length || !B.nums.length || !A.words.length || !B.words.length) return false;
+    return A.nums.some(n => B.nums.includes(n)) && (B.words.includes(A.words[0]) || A.words.includes(B.words[0])); };
+  const findSame = (r, exceptId) => list().find(x => x.id !== exceptId && sameAddr(x.address, r.address)) || null;
+  // doublons déjà créés (ex. inscription ajoutée du rapport + même contrat importé ensuite) : on garde celle qui a le contrat
+  async function dedupe() {
+    const xs = list(), gone = new Set();
+    for (const a of xs) for (const b of xs) {
+      if (a.id >= b.id || gone.has(a.id) || gone.has(b.id) || !sameAddr(a.address, b.address)) continue;
+      const score = (x) => (x.hasPdf ? 4 : 0) + ((x.sellers || []).some(v => v.name) ? 2 : 0) + (/^Importé du rapport/.test(x.otherText || '') ? -3 : 0);
+      const [keep, drop] = score(a) >= score(b) ? [a, b] : [b, a];
+      if (score(drop) >= 0) continue;   // on ne supprime automatiquement que la copie venue du rapport
+      if (!(keep.priceHist || []).length && (drop.priceHist || []).length) keep.priceHist = drop.priceHist;
+      if (!keep.centris && drop.centris) keep.centris = drop.centris;
+      save(keep); gone.add(drop.id);
+      const evs = drop.events || {}; drop.deleted = true; drop.events = {}; save(drop);
+      for (const k of Object.keys(evs)) { try { await H.gReq('DELETE', `calendars/${encodeURIComponent(evs[k].cal)}/events/${encodeURIComponent(evs[k].id)}`); } catch (z) {} }
+    }
+    if (gone.size) toastMsg(`🧹 ${gone.size} inscription(s) en double fusionnée(s)`, 5000);
+  }
   // complète une inscription existante avec le contrat lu (ne remplace pas ce qui est déjà rempli)
   function mergeCC(x, r, file) {
     const d = JSON.parse(JSON.stringify(x));
@@ -410,11 +433,11 @@
     toastMsg('🗑 Inscription supprimée');
   }
 
-  window.LST = { attach, attachFile, _key: addrKey, _merge: mergeCC, _list: list, _cur: curPrice, _status: statusOf, render, open, close, edit, f, sf, sadd, sdel, saveForm, importFile, drop, saveDrop, extend, saveExtend, offer, paFile, offerManual, linkTx, setStatus, done, resync, del, doDel, _parse: parseCC, _milestones: milestones, _all: () => L };
+  window.LST = { attach, attachFile, _key: addrKey, _same: sameAddr, _merge: mergeCC, _list: list, _cur: curPrice, _status: statusOf, render, open, close, edit, f, sf, sadd, sdel, saveForm, importFile, drop, saveDrop, extend, saveExtend, offer, paFile, offerManual, linkTx, setStatus, done, resync, del, doDel, _parse: parseCC, _milestones: milestones, _all: () => L };
   // inscriptions ajoutées hors de l'app (ex. import du rapport) : créer leurs rappels dans l'agenda une fois Google connecté
   async function autoSync() {
     for (const x of list().filter(x => x.needSync)) { try { const r = await syncCalendar(x); if (r.ok && !r.bad) { delete x.needSync; save(x); } else if (!r.bad) { delete x.needSync; save(x); } } catch (z) {} }
   }
-  render(); pull().then(() => setTimeout(() => { splitOld(); setTimeout(autoSync, 2500); }, 1500));
+  render(); pull().then(() => setTimeout(async () => { splitOld(); await dedupe(); setTimeout(autoSync, 2500); }, 1500));
   window.addEventListener('online', flush);
 })();
