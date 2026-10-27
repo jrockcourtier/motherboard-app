@@ -215,7 +215,7 @@
       ${tx ? `<div class="tx-info">🤝 Offre acceptée le <b>${fmtD(tx.acceptedAt, true)}</b> à <b>${money(tx.price)}</b>${tx.commissionPct ? ` · ta part ${String(tx.commissionPct).replace('.', ',')} % = ${money(tx.price * tx.commissionPct / 100)} (+ taxes)` : ''}<br><button class="tx-link" onclick="LST.close();showTab({target:document.querySelector('.tab-btn[onclick*=transactions]')},'transactions');TX.open('${tx.id}')">Voir la transaction et ses dates limites →</button></div>` : ''}
       <div class="tx-actions">
         ${isLive(x) || s === 'expiree' ? `<button onclick="LST.drop('${x.id}')">🔻 Baisse de prix</button><button class="lst-offer" onclick="LST.offer('${x.id}')">🤝 Offre d'achat acceptée</button><button onclick="LST.extend('${x.id}')">🔄 Prolonger le contrat</button>` : ''}
-        ${x.hasPdf ? `<button onclick="TX.pdf('${x.id}')">📄 Voir le contrat</button>` : ''}
+        ${x.hasPdf ? `<button onclick="TX.pdf('${x.id}')">📄 Voir le contrat</button>` : `<button onclick="LST.attach('${x.id}')">📎 Ajouter le contrat (PDF)</button>`}
         ${window.CRM ? sellerIds(x).map(cid => { const c = CRM._all()[cid]; return c && !c.deleted ? `<button onclick="LST.close();CRM.open('${cid}')">👤 ${e(c.name)}</button>` : ''; }).join('') : ''}
         <button onclick="LST.resync('${x.id}')">📅 Rappels dans l'agenda</button>
       </div>
@@ -320,11 +320,35 @@
   }
 
   // ---------- actions ----------
+  // même immeuble ? numéro civique + premier mot de la rue (ex. « 2168|3e »)
+  const addrKey = (a) => { const m = String(a || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').match(/^\s*(\d+[a-z]?)[\s,-]+(?:(?:rue|av|ave|avenue|ch|chemin|boul|boulevard|route|rte|rang|montee|place|terrasse|de|du|des|la|le|l)[\s.'’-]+)*([a-z0-9]+)/); return m ? m[1] + '|' + m[2] : ''; };
+  const findSame = (r) => { const k = addrKey(r.address); return k ? list().find(x => addrKey(x.address) === k) : null; };
+  // complète une inscription existante avec le contrat lu (ne remplace pas ce qui est déjà rempli)
+  function mergeCC(x, r, file) {
+    const d = JSON.parse(JSON.stringify(x));
+    const empty = (v) => v == null || v === '' || v === 0;
+    if (!(d.sellers || []).some(v => v.name || v.phone) && r.sellers.length) d.sellers = r.sellers;
+    [['commissionPct', r.commissionPct], ['collabPct', r.collabPct], ['commissionFlat', r.commissionFlat], ['signedAt', r.signedAt], ['expiresAt', r.expiresAt], ['marketingDate', r.marketingDate], ['deedDelay', r.deedDelay]].forEach(([k, v]) => { if (empty(d[k]) && !empty(v)) d[k] = v; });
+    if (r.price && r.price !== d.price && !(d.priceHist || []).length) { const cur = d.price; d.price = r.price; if (cur && cur < r.price) d.priceHist = [{ at: today(), price: cur, note: `baisse de ${money(r.price - cur)} (prix actuel avant l'ajout du contrat)` }]; }
+    if (!d.otherText || /^Importé du rapport/.test(d.otherText)) d.otherText = r.otherText || '';
+    if (!sellerIds(d).length) d._newContact = true;
+    return Object.assign(d, { _warn: r.warnings, _imp: true, _file: file, fileName: file.name });
+  }
+  let attachId = null;
+  function attach(id) { attachId = id; let i = document.getElementById('lst-file-att'); if (!i) { i = document.createElement('input'); i.type = 'file'; i.id = 'lst-file-att'; i.accept = 'application/pdf,.pdf'; i.style.display = 'none'; i.onchange = () => { attachFile(i.files[0]); i.value = ''; }; document.body.appendChild(i); } i.click(); }
+  async function attachFile(file) {
+    const x = L[attachId]; if (!file || !x) return;
+    toastMsg('📄 Lecture du contrat de courtage…');
+    try { const r = parseCC(await H.readLines(file)); edit(null, mergeCC(x, r, file)); toastMsg('✅ Contrat lu — vérifie puis Enregistrer', 5000); }
+    catch (z) { toastMsg("⚠️ Impossible de lire ce PDF (" + (z.message || 'erreur') + ").", 7000); }
+  }
   async function importFile(file) {
     if (!file) return;
     toastMsg('📄 Lecture du contrat de courtage…');
     try {
       const r = parseCC(await H.readLines(file));
+      const same = findSame(r);
+      if (same) { edit(null, mergeCC(same, r, file)); toastMsg(`🔗 Cette inscription existe déjà (${same.address}) : le contrat la complète`, 7000); return; }
       edit(null, { id: uuid(), status: 'active', address: r.address || '', sellers: r.sellers.length ? r.sellers : [{ name: '', phone: '', email: '' }], price: r.price || 0, commissionPct: r.commissionPct != null ? r.commissionPct : null, commissionFlat: r.commissionFlat || null, collabPct: r.collabPct != null ? r.collabPct : null,
         signedAt: r.signedAt || '', expiresAt: r.expiresAt || '', marketingDate: r.marketingDate || '', deedDelay: r.deedDelay || null, otherText: r.otherText || '', createdAt: new Date().toISOString(), _warn: r.warnings, _imp: true, _file: file, _newContact: true, fileName: file.name });
     } catch (x) { toastMsg("⚠️ Impossible de lire ce PDF (" + (x.message || 'erreur') + "). Crée l'inscription à la main avec « + Inscription ».", 8000); }
@@ -386,7 +410,7 @@
     toastMsg('🗑 Inscription supprimée');
   }
 
-  window.LST = { _list: list, _cur: curPrice, _status: statusOf, render, open, close, edit, f, sf, sadd, sdel, saveForm, importFile, drop, saveDrop, extend, saveExtend, offer, paFile, offerManual, linkTx, setStatus, done, resync, del, doDel, _parse: parseCC, _milestones: milestones, _all: () => L };
+  window.LST = { attach, attachFile, _key: addrKey, _merge: mergeCC, _list: list, _cur: curPrice, _status: statusOf, render, open, close, edit, f, sf, sadd, sdel, saveForm, importFile, drop, saveDrop, extend, saveExtend, offer, paFile, offerManual, linkTx, setStatus, done, resync, del, doDel, _parse: parseCC, _milestones: milestones, _all: () => L };
   // inscriptions ajoutées hors de l'app (ex. import du rapport) : créer leurs rappels dans l'agenda une fois Google connecté
   async function autoSync() {
     for (const x of list().filter(x => x.needSync)) { try { const r = await syncCalendar(x); if (r.ok && !r.bad) { delete x.needSync; save(x); } else if (!r.bad) { delete x.needSync; save(x); } } catch (z) {} }

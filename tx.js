@@ -306,6 +306,7 @@
     const up = upcoming(null).filter(m => !m.info || diffD(today(), m.date) <= 14).filter(m => m.date >= addD(today(), -3));
     root.innerHTML = `
       <input type="file" id="tx-file" accept="application/pdf,.pdf" style="display:none" onchange="TX.importFile(this.files[0]);this.value=''">
+      <input type="file" id="tx-file-att" accept="application/pdf,.pdf" style="display:none" onchange="TX.attachFile(this.files[0]);this.value=''">
       <div class="tx-top"><b class="pr-title">Transactions</b><span style="flex:1"></span>
         <button class="crm-add" onclick="document.getElementById('tx-file').click()">📥 Importer une promesse d'achat (PDF)</button>
         <button class="crm-add tx-new" onclick="TX.edit()">+ Dossier</button></div>
@@ -338,7 +339,7 @@
       <div class="tx-list">${ms.map(m => msRow(Object.assign({ t }, m), false)).join('')}</div>
       ${t.otherText ? `<div class="f-label">Autres déclarations et conditions (12)</div><div class="tx-note">${e(t.otherText)}</div>` : ''}
       ${t.notes ? `<div class="f-label">Notes</div><div class="tx-note">${e(t.notes)}</div>` : ''}
-      <div class="tx-actions">${t.hasPdf ? `<button onclick="TX.pdf('${t.id}')">📄 Voir la promesse d'achat</button>` : ''}<button onclick="TX.resync('${t.id}')">📅 Remettre les rappels dans l'agenda</button>${t.contactId && window.CRM ? `<button onclick="TX.close();CRM.open('${t.contactId}')">👤 Fiche du client</button>` : ''}</div>
+      <div class="tx-actions">${t.hasPdf ? `<button onclick="TX.pdf('${t.id}')">📄 Voir la promesse d'achat</button>` : t.kind !== 'revenu' ? `<button onclick="TX.attach('${t.id}')">📎 Ajouter la promesse d'achat (PDF)</button>` : ''}${t.status === 'conclue' ? '' : `<button onclick="TX.resync('${t.id}')">📅 Remettre les rappels dans l'agenda</button>`}${t.contactId && window.CRM ? `<button onclick="TX.close();CRM.open('${t.contactId}')">👤 Fiche du client</button>` : ''}</div>
       <div class="crm-muted" style="margin-top:10px">${Object.keys(t.events || {}).length ? `📅 ${Object.keys(t.events).length} rappel(s) dans ton agenda Google (en rouge, alertes la veille 9 h et le matin 9 h).` : 'Aucun rappel dans ton agenda pour ce dossier.'}</div>`;
     modal().classList.add('open'); box.scrollTop = 0;
   }
@@ -440,6 +441,36 @@
       toastMsg("⚠️ Impossible de lire ce PDF (" + (x.message || 'erreur') + "). Tu peux créer le dossier à la main avec « + Dossier ».", 8000);
     }
   }
+  // ajouter la promesse d'achat (PDF) à un dossier existant : complète ce qui manque, garde statut et commission
+  let attachId = null;
+  function attach(id) { attachId = id; let i = document.getElementById('tx-file-att'); if (!i) { i = document.createElement('input'); i.type = 'file'; i.id = 'tx-file-att'; i.accept = 'application/pdf,.pdf'; i.style.display = 'none'; i.onchange = () => { attachFile(i.files[0]); i.value = ''; }; document.body.appendChild(i); } i.click(); }
+  async function attachFile(file) {
+    const t = txs[attachId]; if (!file || !t) return;
+    toastMsg("📄 Lecture de la promesse d'achat…");
+    try {
+      const r = await readPdf(file), conclue = t.status === 'conclue';
+      const fill = (k, v) => { if (v && (t[k] == null || t[k] === '' || t[k] === 0)) t[k] = v; };
+      const buyers = [r.buyer1, r.buyer2].filter(Boolean).join(' et ');
+      const mine = t.kind === 'vente' ? r.seller1 || '' : buyers, other = t.kind === 'vente' ? buyers : r.seller1 || '';
+      fill('clients', mine); fill('otherParty', other); fill('price', r.price); fill('address', r.address);
+      fill('acceptedAt', r.acceptedAt); fill('occupationAt', r.occupationAt); fill('occupationHour', r.occupationHour); fill('otherText', r.otherText);
+      if (!t.deedAt && r.deedAt) t.deedAt = r.deedAt;
+      if (!(t.conditions || []).length && r.conditions.length) t.conditions = r.conditions.map(c => Object.assign({ id: uuid() }, c, conclue ? { status: 'levee', statusAt: new Date().toISOString() } : {}));
+      if (conclue) { t.done = Object.assign({}, t.done, { 'task:bank': t.done && t.done['task:bank'] || 'import', 'task:ezmax': t.done && t.done['task:ezmax'] || 'import' }); }
+      if (!t.hour) t.hour = '19:00';
+      t.fileName = file.name;
+      if (!t.contactId && window.CRM && CRM._all) {
+        const norm = (v) => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '');
+        const names = (t.kind === 'vente' ? [r.seller1] : [r.buyer1, r.buyer2]).filter(Boolean).map(norm);
+        const hit = Object.values(CRM._all()).find(c => !c.deleted && names.some(n => n && (norm(c.name) === n || (norm(c.name).length > 5 && n.includes(norm(c.name))) || (n.length > 5 && norm(c.name).includes(n)))));
+        if (hit) t.contactId = hit.id;
+      }
+      if (t.contactId && t.deedAt && conclue && window.CRM && CRM.setClosing) CRM.setClosing(t.contactId, t.deedAt);
+      t.evv = 3; save(t); uploadPdf(t, file);
+      if (conclue) { open(t.id); toastMsg('✅ Promesse d\'achat ajoutée — infos complétées (dossier conclu : aucune échéance créée)', 6000); }
+      else { open(t.id); toastMsg('✅ Promesse d\'achat ajoutée — vérifie les conditions puis « 📅 Remettre les rappels »', 7000); }
+    } catch (x) { toastMsg("⚠️ Impossible de lire ce PDF (" + (x.message || 'erreur') + ").", 7000); }
+  }
   async function uploadPdf(t, file) {
     try {
       const r = await fetch('/api/pdf?id=' + t.id, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/pdf' }, body: file });
@@ -497,7 +528,7 @@
     window.renderTransactionsView = render;
   } catch (x) {}
 
-  window.TX = { render, open, close, edit, f, cf, cadd, cdel, saveForm, importFile, pdf, cstatus, done, resync, del, doDel, jourBox, _parse: parsePA, _milestones: milestones, _all: () => txs,
+  window.TX = { render, open, close, edit, attach, attachFile, f, cf, cadd, cdel, saveForm, importFile, pdf, cstatus, done, resync, del, doDel, jourBox, _parse: parsePA, _milestones: milestones, _all: () => txs,
     _h: { readLines, frDate, gReq, busyOn, freeSlot, calId, countdown, fmtD, hh, money, addD, diffD, today, uuid, uploadPdf: async (id, file) => { try { const r = await fetch('/api/pdf?id=' + id, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/pdf' }, body: file }); return r.ok; } catch (x) { return false; } } } };
   render(); pull(); setTimeout(jourBox, 1500);
   // v16.1 : remettre à jour une fois les rappels déjà créés (heure du matin + nouvelles tâches)
