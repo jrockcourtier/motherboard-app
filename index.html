@@ -608,7 +608,7 @@
     .legend .lg-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
     .lg-dot.visite { background: #8E24AA; } .lg-dot.travail { background: #E4D4F7; border: 1px solid #9C6ADE; } .lg-dot.suivi { background: #FFB74D; }
     .lg-dot.personnel { background: #81C784; } .lg-dot.urgent { background: #E53935; }
-    body[data-tab="contacts"] .legend, body[data-tab="transactions"] .legend { display: none; }
+    body[data-tab="contacts"] .legend, body[data-tab="transactions"] .legend, body[data-tab="inscriptions"] .legend { display: none; }
     .ev-title { font-size: 16px; font-weight: 700; cursor: default; }
     .ev-meta { font-size: 13px; line-height: 1.6; margin-bottom: 6px; }
     #ev-types button.on { outline: 3px solid var(--primary-dark); outline-offset: 1px; }
@@ -689,7 +689,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span id="app-ver" style="opacity:.6">v16.9</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span id="app-ver" style="opacity:.6">v17.0</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -704,6 +704,7 @@
     <button class="tab-btn" onclick="showTab(event, 'semaine')">Semaine</button>
     <button class="tab-btn" onclick="showTab(event, 'mois')">Mois</button>
     <button class="tab-btn" onclick="showTab(event, 'transactions')">Transactions</button>
+    <button class="tab-btn" onclick="showTab(event, 'inscriptions')">Inscriptions</button>
     <button class="tab-btn" onclick="showTab(event, 'contacts')">Contacts</button>
     <button class="tab-btn" onclick="showTab(event, 'prospection')">Prospection</button>
   </div>
@@ -716,6 +717,7 @@
     <div class="tab-content" id="semaine"></div>
     <div class="tab-content" id="mois" style="overflow-y: auto;"></div>
     <div class="tab-content" id="transactions"></div>
+    <div class="tab-content" id="inscriptions"></div>
     <div class="tab-content" id="contacts"></div>
     <div class="tab-content" id="prospection"></div>
   </div>
@@ -724,7 +726,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v16.9';
+    const APP_VERSION = 'v17.0';
     try { const av = document.getElementById('app-ver'); if (av) av.textContent = APP_VERSION; } catch (x) {}
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
@@ -969,6 +971,7 @@
       if (name === 'semaine') renderSemaine();
       if (name === 'prospection' && window.Prospect) Prospect.render();
       if (name === 'transactions' && window.TX) TX.render();
+      if (name === 'inscriptions' && window.LST) LST.render();
     }
 
     // ================== RENDU ==================
@@ -1861,6 +1864,7 @@
   <script src="crm.js"></script>
   <script src="prospect.js"></script>
   <script src="tx.js"></script>
+  <script src="lst.js"></script>
   <script src="voice.js"></script>
   <script src="voicecrm.js"></script>
 </body>

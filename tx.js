@@ -98,7 +98,8 @@
     });
     return pdfjs;
   }
-  async function readPdf(file) {
+  async function readPdf(file) { return parsePA(await readLines(file)); }
+  async function readLines(file) {
     const p = await lib();
     const doc = await p.getDocument({ data: new Uint8Array(await file.arrayBuffer()), verbosity: 0, isEvalSupported: false }).promise;
     const lines = [];
@@ -108,7 +109,7 @@
       Object.keys(L).sort((a, b) => b - a).forEach(k => { const it = L[k].sort((a, b) => a.x - b.x); lines.push({ t: it.map(i => i.s).join(' | '), it }); });
     }
     try { doc.destroy(); } catch (x) {}
-    return parsePA(lines);
+    return lines;
   }
   const MOIS = { janvier: 1, février: 2, fevrier: 2, mars: 3, avril: 4, mai: 5, juin: 6, juillet: 7, août: 8, aout: 8, septembre: 9, octobre: 10, novembre: 11, décembre: 12, decembre: 12 };
   function frDate(s) {
@@ -325,7 +326,7 @@
     const ms = milestones(t);
     box.innerHTML = `
       <div class="sheet-head"><button type="button" class="sheet-x" onclick="TX.close()">✕</button><b>${t.kind === 'vente' ? 'Vente' : 'Achat'} · ${e(t.address || '')}</b><span class="sheet-acts"><button class="sheet-trash" onclick="TX.del('${t.id}')" title="Supprimer">🗑</button><button class="sheet-save" onclick="TX.edit('${t.id}')">Modifier</button></span></div>
-      <div class="tx-sum">${money(t.price)}${t.clients ? ' · 👤 ' + e(t.clients) : ''}${t.otherParty ? ` · ${t.kind === 'vente' ? 'Acheteur' : 'Vendeur'} : ${e(t.otherParty)}` : ''}<br>Acceptée le <b>${fmtD(t.acceptedAt, true)}</b> · jour 1 = ${fmtD(addD(t.acceptedAt, 1))}</div>
+      <div class="tx-sum">${money(t.price)}${t.clients ? ' · 👤 ' + e(t.clients) : ''}${t.otherParty ? ` · ${t.kind === 'vente' ? 'Acheteur' : 'Vendeur'} : ${e(t.otherParty)}` : ''}<br>Acceptée le <b>${fmtD(t.acceptedAt, true)}</b> · jour 1 = ${fmtD(addD(t.acceptedAt, 1))}${t.commissionPct && t.price ? `<br>💰 Commission : <b>${String(t.commissionPct).replace('.', ',')} %</b> × ${money(t.price)} = <b>${money(t.price * t.commissionPct / 100)}</b> <span class="crm-muted">(+ taxes)</span>` : ''}${t.listingId && window.LST ? `<br><button class="tx-link" onclick="TX.close();LST.open('${t.listingId}')">🏷️ Voir l'inscription</button>` : ''}</div>
       <div class="f-label">Conditions</div>
       ${(t.conditions || []).map(c => { const ty = CTYPES[c.type] || CTYPES.autre; return `<div class="tx-crow"><div>${ty.icon} <b>${e(c.type === 'autre' && c.label ? c.label : ty.label)}</b> · ${c.days} jours${c.extra ? ' + ' + c.extra : ''}${c.type === 'documents' && c.label ? `<div class="crm-muted">${e(c.label)}</div>` : ''}</div>
         <div class="chips">${[['', 'En cours'], ['levee', '✓ Levée / réalisée'], ['nulle', '✗ Promesse nulle']].map(([k, l]) => `<button class="${(c.status || '') === k ? 'on' : ''}" onclick="TX.cstatus('${t.id}','${c.id}','${k}')">${l}</button>`).join('')}</div></div>`; }).join('') || '<div class="crm-muted">Aucune condition.</div>'}
@@ -396,6 +397,7 @@
     d.status = d.status || 'active'; d.evv = 3;
     save(d);
     if (file) uploadPdf(d, file);
+    if (d.listingId && window.LST && LST.linkTx) LST.linkTx(d.listingId, d);
     if (d.contactId && d.deedAt && window.CRM && CRM.setClosing) CRM.setClosing(d.contactId, d.deedAt);
     // fiche client : passe à l'étape « Conditions »
     if (d.contactId && window.CRM) { const c = CRM._all()[d.contactId]; if (c && !c.deleted) { const st = d.kind === 'vente' ? 'Offre acceptée' : 'Conditions'; if (c.stage !== st && !['Notaire', 'Client passé', 'Vendu / Notaire'].includes(c.stage)) { c.stage = st; } c.notes = c.notes || []; c.notes.push({ id: uuid(), at: new Date().toISOString(), text: `🤝 Promesse d'achat acceptée le ${fmtD(d.acceptedAt, true)} — ${d.address || ''}` }); CRM.upsert(c); } }
@@ -409,7 +411,7 @@
   }
 
   // ---------- actions ----------
-  async function importFile(file) {
+  async function importFile(file, extra) {
     if (!file) return;
     toastMsg("📄 Lecture de la promesse d'achat…");
     try {
@@ -418,8 +420,9 @@
         clients: r.kind === 'achat' ? [r.buyer1, r.buyer2].filter(Boolean).join(' et ') : r.seller1 || '', otherParty: r.kind === 'achat' ? r.seller1 || '' : [r.buyer1, r.buyer2].filter(Boolean).join(' et '),
         conditions: r.conditions.map(c => Object.assign({ id: uuid() }, c)), deedAt: r.deedAt || '', occupationAt: r.occupationAt || '', occupationHour: r.occupationHour || '',
         otherText: r.otherText || '', createdAt: new Date().toISOString(), _warn: r.warnings, _imp: true, _file: file, fileName: file.name };
+      if (extra) { Object.assign(d, extra); if (extra.kind === 'vente' && !r.found.kindSure) { d.kind = 'vente'; d.clients = extra.clients || d.clients; d.otherParty = [r.buyer1, r.buyer2].filter(Boolean).join(' et ') || d.otherParty; } }
       // lien automatique avec la fiche contact
-      if (window.CRM && CRM._all) {
+      if (!d.contactId && window.CRM && CRM._all) {
         const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z]/g, '');
         const names = (r.kind === 'achat' ? [r.buyer1, r.buyer2] : [r.seller1]).filter(Boolean).map(norm);
         const hit = Object.values(CRM._all()).find(c => !c.deleted && names.some(n => n && (norm(c.name) === n || (norm(c.name).length > 5 && n.includes(norm(c.name))) || (n.length > 5 && norm(c.name).includes(n)))));
@@ -487,7 +490,8 @@
     window.renderTransactionsView = render;
   } catch (x) {}
 
-  window.TX = { render, open, close, edit, f, cf, cadd, cdel, saveForm, importFile, pdf, cstatus, done, resync, del, doDel, jourBox, _parse: parsePA, _milestones: milestones, _all: () => txs };
+  window.TX = { render, open, close, edit, f, cf, cadd, cdel, saveForm, importFile, pdf, cstatus, done, resync, del, doDel, jourBox, _parse: parsePA, _milestones: milestones, _all: () => txs,
+    _h: { readLines, frDate, gReq, busyOn, freeSlot, calId, countdown, fmtD, hh, money, addD, diffD, today, uuid, uploadPdf: async (id, file) => { try { const r = await fetch('/api/pdf?id=' + id, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/pdf' }, body: file }); return r.ok; } catch (x) { return false; } } } };
   render(); pull(); setTimeout(jourBox, 1500);
   // v16.1 : remettre à jour une fois les rappels déjà créés (heure du matin + nouvelles tâches)
   let migTries = 0;
