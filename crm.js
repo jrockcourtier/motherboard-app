@@ -488,7 +488,7 @@
       let k = null; try { const r = await fetch('/api/inbox', { credentials: 'same-origin' }); if (r.ok) k = await r.json(); } catch (x) {}
       const cp = (v) => `<div class="sc-copy"><code>${e(v)}</code><button onclick="navigator.clipboard.writeText(${JSON.stringify(v).replace(/"/g, '&quot;')});this.textContent='✓ Copié'">Copier</button></div>`;
       box.innerHTML = `<div class="sheet-head"><button class="sheet-x" onclick="document.getElementById('sc-modal').classList.remove('open')">✕</button><b>📲 Raccourci « Envoyer à Motherboard »</b><span></span></div>
-        ${!k ? '<div class="tx-warn">Connecte-toi à Google (en haut à droite) pour obtenir ta clé.</div>' : ''}
+        ${!k ? '<div class="tx-warn">Connecte-toi à Google (bouton en haut à droite de l\'app), puis rouvre cette fenêtre pour voir ta clé.</div>' : `<div class="sc-key"><div class="f-label" style="margin-top:4px">🔑 Ta clé</div>${cp(k.key)}<div class="f-label">🔗 Ou ton lien complet (clé incluse) — à coller dans la carte « Texte » du raccourci</div>${cp(k.url + '?ouvrir=1&k=' + k.key)}<div class="crm-muted">Avec ce lien complet, l'en-tête x-mb-key n'est plus nécessaire.</div></div>`}
         <div class="sc-intro">Une fois créé, ouvre n'importe quelle fiche dans Contacts (ou touche le nom en haut d'un texto) → <b>Partager le contact</b> → <b>Envoyer à Motherboard</b>. Le contact arrive dans « 📥 À classer ».</div>
         <div class="f-label">À faire une seule fois, sur ton iPhone (2 minutes)</div>
         <ol class="sc-steps">
@@ -707,6 +707,7 @@
   window.addEventListener('load', () => { renderList(); refreshJour(); setTimeout(pull, 800); openFromLink(); });
   // lien du raccourci iPhone : https://…/?fiche=<id> → onglet Contacts, fiche ouverte en modification
   async function openFromLink() {
+    if (new URLSearchParams(location.search).get('raccourci')) { try { history.replaceState(null, '', location.pathname); } catch (x) {} const b = document.querySelector('.tab-btn[onclick*="contacts"]'); if (b && typeof showTab === 'function') showTab({ target: b }, 'contacts'); setTimeout(() => CRM.shortcutSetup(), 600); return; }
     const id = new URLSearchParams(location.search).get('fiche'); if (!id) return;
     try { history.replaceState(null, '', location.pathname); } catch (x) {}
     const b = document.querySelector('.tab-btn[onclick*="contacts"]'); if (b && typeof showTab === 'function') showTab({ target: b }, 'contacts');

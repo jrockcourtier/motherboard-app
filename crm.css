@@ -409,3 +409,5 @@ body.pr-dossier-open .fab, body.pr-dossier-open .fab-mic { display: none !import
 .sc-copy code { flex: 1; font-size: 12px; background: var(--light-bg, #f4f4f4); padding: 6px 8px; border-radius: 6px; word-break: break-all; }
 .sc-copy button { border: 1px solid var(--border-light); background: var(--white); border-radius: 6px; padding: 6px 10px; cursor: pointer; font-weight: 700; white-space: nowrap; }
 .tg-su { display: block; font-style: normal; font-size: 10.5px; font-weight: 800; color: #f4511e; cursor: pointer; margin-top: 1px; }
+
+.sc-key { border: 2px solid #0b8043; border-radius: 12px; padding: 4px 10px 10px; margin: 8px 0; background: rgba(11,128,67,.05); }
