@@ -485,6 +485,14 @@
     .guest-row { display: flex; gap: 6px; margin-bottom: 10px; }
     .guest-row input { flex: 1; min-width: 0; font-size: 16px; padding: 10px; border: 1px solid var(--border-light); border-radius: 8px; }
     .guest-row button { border: 0; background: var(--primary-dark); color: var(--primary-gold); border-radius: 8px; padding: 0 12px; font-weight: 700; cursor: pointer; }
+    .guest-live { display: flex; flex-direction: column; gap: 4px; margin: -4px 0 8px; }
+    .guest-live button { text-align: left; border: 1px solid var(--border-light); background: var(--white); border-radius: 8px; padding: 8px 10px; cursor: pointer; font-size: 14px; }
+    .guest-live button span { color: var(--text-secondary); font-size: 12px; margin-left: 4px; }
+    .guest-live button.noemail span { color: #b06000; }
+    .guest-chip.unknown { border-style: dashed; }
+    .guest-chip .guest-addc { color: var(--primary-dark); font-weight: 700; background: #FFFBEA; border-radius: 10px; padding: 2px 6px; }
+    .guest-panel { border: 1px solid var(--primary-gold); background: #FFFBEA; border-radius: 10px; padding: 10px; margin: 0 0 10px; font-size: 13px; }
+    .guest-panel .guest-row { margin: 8px 0 0; }
     .tg-jour { height: 62vh; min-height: 320px; margin-top: 6px; border-radius: 8px; border: 1px solid var(--border-light); }
     .tg-jour .tg-ev-title { font-size: 12px; }
     .tg-ev { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: pan-x pan-y; }
@@ -681,7 +689,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span id="app-ver" style="opacity:.6">v16.4</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span id="app-ver" style="opacity:.6">v16.5</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -716,7 +724,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v16.4';
+    const APP_VERSION = 'v16.5';
     try { const av = document.getElementById('app-ver'); if (av) av.textContent = APP_VERSION; } catch (x) {}
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
@@ -1566,7 +1574,7 @@
       const cals = writableCals.length ? writableCals : [{ id: 'primary', name: 'jrockcourtier@gmail.com', primary: true }];
       sel.innerHTML = cals.map(c => `<option value="${esc(c.id)}">${esc(c.primary ? c.name + ' (principal)' : c.name)}</option>`).join('');
       const last = load('mb_lastcal'); if (last && cals.some(c => c.id === last)) sel.value = last;
-      formGuests = []; f.guest.value = ''; f.repeat.value = ''; f.remind.value = '';
+      formGuests = []; f.guest.value = ''; ['guest-live', 'guest-new'].forEach(id => { const x = document.getElementById(id); if (x) x.innerHTML = ''; }); f.repeat.value = ''; f.remind.value = '';
       setFormType('reunion'); setFormDur(60); setFormColor(null); toggleAllDay();
       setTimeout(renderGuests, 0);
       document.getElementById('add-msg').textContent = !canWrite ? 'Pour ajouter des rendez-vous, Google doit vous donner une permission de plus. Touchez « Autoriser ».' : '';
@@ -1622,13 +1630,13 @@
       email = email.toLowerCase();
       if (!formGuests.includes(email)) formGuests.push(email);
       inp.value = ''; msg.textContent = '';
-      renderGuests();
+      renderGuests(); guestSugg('');
     }
     function removeGuest(i) { formGuests.splice(i, 1); renderGuests(); }
     function renderGuests() {
       const box = document.getElementById('add-guests'); if (!box) return;
       const byMail = {}; crmWithEmail().forEach(c => byMail[c.email.toLowerCase()] = c.name);
-      box.innerHTML = formGuests.map((g, i) => `<span class="guest-chip">👤 ${esc(byMail[g] ? byMail[g] + ' · ' + g : g)}<button type="button" onclick="removeGuest(${i})" aria-label="Retirer">✕</button></span>`).join('');
+      box.innerHTML = formGuests.map((g, i) => `<span class="guest-chip${byMail[g] ? '' : ' unknown'}">👤 ${esc(byMail[g] ? byMail[g] + ' · ' + g : g)}${byMail[g] ? '' : `<button type="button" class="guest-addc" onclick="guestNew('${esc(g)}')" title="Ajouter à mes contacts">➕ Contacts</button>`}<button type="button" onclick="removeGuest(${i})" aria-label="Retirer">✕</button></span>`).join('');
       // suggestion : le client lié au rendez-vous
       const sug = document.getElementById('add-guest-sugg');
       const c = window.pendingContactId && window.CRM && CRM._all ? CRM._all()[window.pendingContactId] : null;
@@ -1636,6 +1644,50 @@
         ? `<button type="button" onclick="addGuest('${esc(c.email)}')">+ Inviter ${esc(c.name)} (${esc(c.email)})</button>` : '';
       const dl = document.getElementById('guest-list');
       if (dl) dl.innerHTML = crmWithEmail().map(k => `<option value="${esc(k.name)} <${esc(k.email)}>"></option>`).join('');
+    }
+    // suggestions en direct : tous les contacts (avec ou sans courriel)
+    const GTYPES = [['acheteur', 'Acheteur'], ['vendeur', 'Vendeur'], ['hypothecaire', 'Courtier hypothécaire'], ['courtier', 'Courtier immobilier'], ['inspecteur', 'Inspecteur'], ['autre', 'Autre']];
+    const normG = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    function guestSugg(q) {
+      const box = document.getElementById('guest-live'); if (!box) return;
+      q = normG(q).trim(); if (q.length < 2 || !window.CRM || !CRM._all) { box.innerHTML = ''; return; }
+      const hits = Object.values(CRM._all()).filter(c => !c.deleted && (normG(c.name).includes(q) || normG(c.email).includes(q) || normG(c.owner).includes(q) || normG(c.company).includes(q)))
+        .filter(c => !(c.email && formGuests.includes(c.email.toLowerCase()))).slice(0, 6);
+      const label = (c) => (CRM.types[c.type] || {}).label || '';
+      box.innerHTML = hits.map(c => c.email && EMAIL_RX.test(c.email)
+        ? `<button type="button" onclick="addGuest('${esc(c.email)}');guestSugg('')"><b>${esc(c.name)}</b> <span>${esc(c.email)} · ${esc(label(c))}</span></button>`
+        : `<button type="button" class="noemail" onclick="guestNeedMail('${c.id}')"><b>${esc(c.name)}</b> <span>pas de courriel — ajoute-le</span></button>`).join('');
+    }
+    function guestNeedMail(id) {
+      const c = CRM._all()[id]; const box = document.getElementById('guest-new'); if (!c || !box) return;
+      document.getElementById('guest-live').innerHTML = '';
+      box.innerHTML = `<div class="guest-panel"><b>Courriel de ${esc(c.name)}</b><div class="guest-row"><input id="gn-mail" type="email" inputmode="email" autocapitalize="off" placeholder="nom@exemple.com"><button type="button" onclick="guestSaveMail('${id}')">Enregistrer et inviter</button></div><div class="f-hint">Le courriel sera aussi ajouté à sa fiche contact.</div></div>`;
+      setTimeout(() => { const i = document.getElementById('gn-mail'); if (i) i.focus(); }, 50);
+    }
+    function guestSaveMail(id) {
+      const c = CRM._all()[id]; const v = (document.getElementById('gn-mail').value || '').trim().toLowerCase();
+      if (!EMAIL_RX.test(v)) { document.getElementById('add-msg').textContent = 'Courriel invalide.'; return; }
+      c.email = v; CRM.upsert(c); document.getElementById('guest-new').innerHTML = '';
+      document.querySelector('#add-form [name=guest]').value = ''; addGuest(v);
+      if (typeof toast === 'function') toast(`✓ Courriel ajouté à la fiche de ${esc(c.name)}`);
+    }
+    // un courriel inconnu : l'ajouter aux contacts en 2 touches
+    function guestNew(email) {
+      const box = document.getElementById('guest-new'); if (!box) return;
+      const guess = email.split('@')[0].replace(/[._-]+/g, ' ').replace(/\d+/g, '').trim().replace(/\b\w/g, m => m.toUpperCase());
+      box.innerHTML = `<div class="guest-panel"><b>Ajouter ${esc(email)} à mes contacts</b>
+        <div class="guest-row"><input id="gn-name" placeholder="Nom complet" value="${esc(guess)}"></div>
+        <div class="guest-row"><input id="gn-phone" inputmode="tel" placeholder="Téléphone (optionnel)"><input id="gn-co" placeholder="Entreprise (optionnel)"></div>
+        <div class="chips">${GTYPES.map(([k, l]) => `<button type="button" onclick="guestCreate('${esc(email)}','${k}')">${l}</button>`).join('')}</div>
+        <div class="f-hint" style="margin-top:6px">Touche le type pour créer la fiche.</div></div>`;
+    }
+    function guestCreate(email, type) {
+      const name = (document.getElementById('gn-name').value || '').trim() || email;
+      const now = new Date().toISOString(), t = CRM.types[type] || CRM.types.acheteur;
+      CRM.upsert({ id: CRM.newId(), type, stage: t.stages[0], name, email, phone: (document.getElementById('gn-phone').value || '').trim(), company: (document.getElementById('gn-co').value || '').trim(),
+        firstContact: now.slice(0, 10), lastContact: now.slice(0, 10), notes: [{ id: CRM.newId(), at: now, text: '📅 Ajouté depuis une invitation Google Agenda' }], calls: [], createdAt: now, source: 'Invitation agenda' });
+      document.getElementById('guest-new').innerHTML = ''; renderGuests();
+      if (typeof toast === 'function') toast(`✓ ${esc(name)} ajouté à tes contacts (${t.label})`);
     }
     function toggleAllDay() {
       const ad = document.querySelector('#add-form [name=allday]').checked;
@@ -1692,6 +1744,8 @@
         const cal = { id: calId, summary: (writableCals.find(c => c.id === calId) || {}).name || '' };
         events.push(normalize(created, cal));
         if (window.pendingContactId && window.CRM && CRM.logMeeting) CRM.logMeeting(window.pendingContactId, title, allDay ? date : `${date} ${f.time.value}`);
+        // historique sur la fiche de chaque invité qui est dans mes contacts
+        if (formGuests.length && window.CRM && CRM._all) crmWithEmail().forEach(c => { if (c.id !== window.pendingContactId && formGuests.includes(c.email.toLowerCase())) { c.notes = c.notes || []; c.notes.push({ id: CRM.newId(), at: new Date().toISOString(), text: `📅 Invité à « ${title} » — ${new Date(date + 'T12:00:00').toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' })}${allDay ? '' : ' à ' + f.time.value}` }); CRM.upsert(c); } });
         window.pendingContactId = null;
         closeAddForm();
         selectDate(new Date(date + 'T00:00:00'));
@@ -1791,8 +1845,9 @@
       <div class="f-label">Invités <span class="f-hint">(Google leur envoie l'invitation)</span></div>
       <div id="add-guests" class="guest-chips"></div>
       <div id="add-guest-sugg" class="guest-sugg"></div>
-      <div class="guest-row"><input name="guest" list="guest-list" placeholder="Courriel ou nom d'un contact" autocomplete="off" autocapitalize="off" inputmode="email" onkeydown="if(event.key==='Enter'||event.key===','){event.preventDefault();addGuest(this.value)}" onchange="if(/@|\S\s\S/.test(this.value))addGuest(this.value)"><button type="button" onclick="addGuest(document.querySelector('#add-form [name=guest]').value)">+ Inviter</button></div>
-      <datalist id="guest-list"></datalist>
+      <div class="guest-row"><input name="guest" placeholder="Nom d'un contact ou courriel" autocomplete="off" autocapitalize="off" oninput="guestSugg(this.value)" onkeydown="if(event.key==='Enter'||event.key===','){event.preventDefault();addGuest(this.value)}" onchange="if(/@|\S\s\S/.test(this.value))addGuest(this.value)"><button type="button" onclick="addGuest(document.querySelector('#add-form [name=guest]').value)">+ Inviter</button></div>
+      <div id="guest-live" class="guest-live"></div>
+      <div id="guest-new" class="guest-new"></div>
       <div class="f-row"><label>Répéter<select name="repeat"><option value="">Jamais</option><option value="daily">Chaque jour</option><option value="weekdays">En semaine (lun–ven)</option><option value="weekly">Chaque semaine</option><option value="monthly">Chaque mois</option></select></label>
         <label>Rappel<select name="remind"><option value="">Par défaut</option><option value="0">À l'heure</option><option value="10">10 min avant</option><option value="30">30 min avant</option><option value="60">1 h avant</option><option value="1440">1 jour avant</option></select></label></div>
       <label class="f-block">Adresse / lieu<input name="location" placeholder="Optionnel" autocomplete="off"></label>
