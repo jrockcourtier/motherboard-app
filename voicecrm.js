@@ -85,6 +85,10 @@
 
     if (/\b(acheteu[rs]e?|acheteurs|achete|acheter|cherche (?:une|un|a acheter)|premier achat|preapprouv)/.test(t)) out.type = 'acheteur';
     if (/\b(vendeu[rs]e?|vendre|vend sa|mettre en vente|inscription|evaluation de sa)/.test(t)) out.type = out.type && /vendre .* acheter|acheter .* vendre/.test(t) ? out.type : 'vendeur';
+    // partenaires : priorité sur acheteur/vendeur (« courtier hypothécaire chez Desjardins… »)
+    if (/\b(courtier|courtiere|conseill[eè]re?) (hypothecaire|en prets?)|\bhypothecaire\b|\bmortgage\b/.test(t)) out.type = 'hypothecaire';
+    else if (/\binspect(eur|rice)\b/.test(t)) out.type = 'inspecteur';
+    else if (/\b(courtier|courtiere|agent) (immobilier|immobiliere|remax|re\/max|collaborateur)|\bcourtier collaborateur\b/.test(t)) out.type = 'courtier';
     if (/\b(proprio|proprietaire)\b/.test(t) && !out.type) out.type = 'proprio';
 
     let m = txt.match(/(?:\+?1[\s.-]?)?\(?\b(\d{3})\)?[\s.-]?(\d{3})[\s.-]?(\d{4})\b/);
@@ -126,7 +130,7 @@
   function questions(p) {
     const q = [];
     if (!p.name) q.push({ key: 'name', ask: 'Quel est le nom du client ?', ph: 'Prénom et nom' });
-    if (!p.type) q.push({ key: 'type', ask: 'Est-ce un acheteur, un vendeur ou un proprio ?', chips: [['acheteur', 'Acheteur'], ['vendeur', 'Vendeur'], ['proprio', 'Proprio'], ['client', 'Client']] });
+    if (!p.type) q.push({ key: 'type', ask: 'Quel type de contact ?', chips: [['acheteur', 'Acheteur'], ['vendeur', 'Vendeur'], ['proprio', 'Proprio'], ['hypothecaire', 'Courtier hypothécaire'], ['courtier', 'Courtier'], ['inspecteur', 'Inspecteur'], ['autre', 'Autre']] });
     const ex = p.existing || {};
     if (!p.phone && !ex.phone) q.push({ key: 'phone', ask: 'Quel est son numéro de téléphone ?', ph: '514 555-1234', inputmode: 'tel' });
     if ((p.type === 'acheteur') && !p.budget && !ex.budget) q.push({ key: 'budget', ask: 'Quel est son budget ?', ph: 'ex. 450 000 $' });

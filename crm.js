@@ -8,8 +8,13 @@
     acheteur: { label: 'Acheteur', color: '#1976D2', stages: ['Nouveau lead', 'Qualifié (financement)', 'En recherche (Matrix)', 'En visites', "Offre d'achat", 'Conditions', 'Notaire', 'Client passé'] },
     vendeur:  { label: 'Vendeur',  color: '#9C27B0', stages: ['Lead', 'Évaluation', 'CCV signé', 'En vigueur', 'Offre acceptée', 'Conditions', 'Vendu / Notaire', 'Client passé'] },
     proprio:  { label: 'Proprio',  color: '#00796B', stages: ['À appeler', 'Appelé – rappeler', 'Intéressé', 'Rendez-vous', 'Signé', 'Pas intéressé', 'Injoignable', 'A un courtier'] },
-    client:   { label: 'Client',   color: '#D4AF37', stages: ['Actif', 'Client passé'] }
+    client:   { label: 'Client',   color: '#D4AF37', stages: ['Actif', 'Client passé'] },
+    hypothecaire: { label: 'Courtier hypothécaire', color: '#0097A7', pro: true, stages: ['Partenaire actif', 'À connaître', 'Inactif'] },
+    courtier: { label: 'Courtier immobilier', color: '#5D4037', pro: true, stages: ['Partenaire actif', 'À connaître', 'Inactif'] },
+    inspecteur: { label: 'Inspecteur', color: '#689F38', pro: true, stages: ['Partenaire actif', 'À connaître', 'Inactif'] },
+    autre:    { label: 'Autre', color: '#757575', pro: true, stages: ['Actif', 'Inactif'] }
   };
+  const isPro = (c) => !!(TYPES_C[c.type] && TYPES_C[c.type].pro);
   // catégorie affichée : un proprio DuProprio devient « Vendeur potentiel » dès qu'on lui a parlé, puis « Vendeur » une fois signé
   const CATS = { vpot: { label: 'Vendeur potentiel', color: '#C2185B' } };
   function cat(c) {
@@ -41,8 +46,8 @@
     ['tous', 'Tous', () => true],
     ['appeler', '📞 À appeler', c => !c.dnc && isDue(c)],
     ['retard', '⏰ En retard', c => !c.dnc && c.nextFollowUp && c.nextFollowUp < todayStr()],
-    ['nouveaux', '🆕 Nouveaux', c => !(c.calls || []).length && (!c.firstContact || daysSince(c.firstContact) <= 14)],
-    ['sanscontact', '💤 30 j sans contact', c => !c.dnc && !CLOSED.includes(c.stage) && (!c.lastContact || daysSince(c.lastContact) > 30)],
+    ['nouveaux', '🆕 Nouveaux', c => !isPro(c) && !(c.calls || []).length && (!c.firstContact || daysSince(c.firstContact) <= 14)],
+    ['sanscontact', '💤 30 j sans contact', c => !isPro(c) && !c.dnc && !CLOSED.includes(c.stage) && (!c.lastContact || daysSince(c.lastContact) > 30)],
     ['chauds', '🔥 Chauds', c => HOT.includes(c.stage)],
     ['dnc', '⛔ Ne pas appeler', c => !!c.dnc]
   ];
@@ -60,7 +65,7 @@
     }));
     return s;
   }
-  const FILTERS = [['tous', 'Tous'], ['acheteur', 'Acheteurs'], ['vpot', 'Vendeurs potentiels'], ['vendeur', 'Vendeurs'], ['proprio', 'Proprios']];
+  const FILTERS = [['tous', 'Tous'], ['acheteur', 'Acheteurs'], ['vpot', 'Vendeurs potentiels'], ['vendeur', 'Vendeurs'], ['proprio', 'Proprios'], ['hypothecaire', 'Courtiers hypothécaires'], ['courtier', 'Courtiers'], ['inspecteur', 'Inspecteurs'], ['autre', 'Autres']];
 
   let contacts = {};                 // id -> contact
   let pending = new Set();           // ids à envoyer au serveur
@@ -237,7 +242,7 @@
       ${inbox.length ? `<div class="crm-section crm-inbox-h">📥 À classer (${inbox.length}) <span>reçus de ton iPhone</span></div>${inbox.map(c => `<div class="crm-card crm-inbox" onclick="CRM.open('${c.id}')">
         <div class="crm-av" style="background:#607d8b">${e(initials(c.name))}</div>
         <div class="crm-main"><div class="crm-name">${e(c.name)}</div><div class="crm-sub2">${c.phone ? '📞 ' + e(c.phone) : ''}${c.email ? ' · ' + e(c.email) : ''}</div>
-          <div class="chips crm-inbox-b">${[['acheteur', '🛒 Acheteur'], ['vendeur', '🏷️ Vendeur'], ['proprio', '🏠 Proprio']].map(([k, l]) => `<button onclick="event.stopPropagation();CRM.classify('${c.id}','${k}')">${l}</button>`).join('')}<button class="crm-inbox-x" onclick="event.stopPropagation();CRM.classify('${c.id}','')">Ignorer</button></div></div></div>`).join('')}` : ''}
+          <div class="chips crm-inbox-b">${[['acheteur', '🛒 Acheteur'], ['vendeur', '🏷️ Vendeur'], ['proprio', '🏠 Proprio'], ['hypothecaire', '🏦 Hypothécaire'], ['courtier', '🤝 Courtier'], ['inspecteur', '🔍 Inspecteur'], ['autre', '👤 Autre']].map(([k, l]) => `<button onclick="event.stopPropagation();CRM.classify('${c.id}','${k}')">${l}</button>`).join('')}<button class="crm-inbox-x" onclick="event.stopPropagation();CRM.classify('${c.id}','')">Ignorer</button></div></div></div>`).join('')}` : ''}
       ${!all.length ? `<div class="crm-empty"><b>Aucun contact pour l'instant.</b><br>Ajoutez votre premier client avec « + Contact ».<br><button class="cta-btn" onclick="CRM.edit()">+ Ajouter un contact</button></div>` : ''}
       ${due.length ? `<div class="crm-section">À relancer (${due.length})</div>${due.map(card).join('')}` : ''}
       ${rest.length ? `<div class="crm-section">${due.length ? 'Autres contacts' : 'Contacts'} (${rest.length})</div>${rest.map(card).join('')}` : ''}
@@ -288,6 +293,7 @@
     if (!c || !sh) return;
     const t = catInfo(c);
     const info = [
+      ['Entreprise', c.company ? e(c.company) : ''],
       ['Courriel', c.email ? `<a href="mailto:${e(c.email)}">${e(c.email)}</a>` : ''],
       ['Propriétaire', c.owner ? e(c.owner) : ''],
       ['Adresse', c.address ? e(c.address) : ''],
@@ -360,11 +366,12 @@
         <label class="f-block">Étape<select name="stage">${t.stages.map(s => `<option ${c.stage === s ? 'selected' : ''}>${e(s)}</option>`).join('')}</select></label>
         ${fld('phone', 'Téléphone', '514 555-1234', 'tel', 'inputmode="tel"')}
         ${fld('email', 'Courriel', 'nom@exemple.com', 'email', 'inputmode="email"')}
-        ${fld('address', c.type === 'acheteur' ? 'Adresse actuelle' : 'Adresse de la propriété', 'Optionnel')}
+        ${isPro(c) ? fld('company', 'Entreprise', c.type === 'hypothecaire' ? 'ex. Desjardins, Multi-Prêts' : c.type === 'courtier' ? 'ex. RE/MAX, Via Capitale' : 'Optionnel') : ''}
+        ${fld('address', c.type === 'acheteur' ? 'Adresse actuelle' : isPro(c) ? 'Adresse' : 'Adresse de la propriété', 'Optionnel')}
         ${c.type === 'acheteur' ? fld('budget', 'Budget', 'ex. 450 000 $ – 550 000 $') + fld('neighborhoods', 'Quartiers recherchés', 'ex. Plateau, Rosemont, Villeray') : ''}
         ${c.type === 'vendeur' ? fld('price', 'Prix espéré / minimum', 'ex. 625 000 $') : ''}
         ${c.type === 'proprio' ? fld('owner', 'Nom du propriétaire', 'ex. Mathieu') + fld('price', 'Prix demandé (DuProprio)', 'ex. 625 000 $') + fld('dpUrl', 'Lien DuProprio', 'https://duproprio.com/…', 'url', 'inputmode="url"') + fld('oneNote', 'Lien de la page OneNote', 'OneNote → clic droit sur la page → Copier le lien', 'url', 'inputmode="url"') : ''}
-        ${fld('commission', 'Commission (%)', 'ex. 4', 'text', 'inputmode="decimal"')}
+        ${isPro(c) ? '' : fld('commission', 'Commission (%)', 'ex. 4', 'text', 'inputmode="decimal"')}
         ${fld('source', 'Source', 'ex. Centris, référence, appel proprio, Instagram')}
         <div class="f-row"><label>Premier contact<input type="date" name="firstContact" value="${e(c.firstContact || '')}"></label><label>Prochain suivi<input type="date" name="nextFollowUp" value="${e(c.nextFollowUp || '')}"></label></div>
         ${contacts[c.id] ? '' : `<label class="f-block">Première note<textarea name="firstNote" rows="3" placeholder="Ce qu'il cherche, sa situation… (🎤 dictée du clavier)"></textarea></label>`}
@@ -374,7 +381,7 @@
   }
   function collectForm() {
     const f = $('#crm-form'); if (!f) return;
-    ['name', 'stage', 'phone', 'email', 'address', 'budget', 'neighborhoods', 'price', 'owner', 'dpUrl', 'oneNote', 'commission', 'source', 'firstContact', 'nextFollowUp', 'firstNote'].forEach(k => {
+    ['name', 'company', 'stage', 'phone', 'email', 'address', 'budget', 'neighborhoods', 'price', 'owner', 'dpUrl', 'oneNote', 'commission', 'source', 'firstContact', 'nextFollowUp', 'firstNote'].forEach(k => {
       if (f[k]) editing[k] = f[k].value.trim();
     });
   }
