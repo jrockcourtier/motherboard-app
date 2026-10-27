@@ -46,7 +46,7 @@ module.exports = async (req, res) => {
     }
     if (req.method !== 'POST') { res.setHeader('Allow', 'GET, POST'); return L.json(res, 405, { error: 'method_not_allowed' }); }
     const k = req.headers['x-mb-key'] || new URL(req.url, 'http://x').searchParams.get('k') || '';
-    if (!sameKey(String(k))) { res.statusCode = 401; res.setHeader('Content-Type', 'text/plain; charset=utf-8'); return res.end('⛔ Clé invalide : recopie la clé du raccourci depuis Motherboard (Contacts → ⚙️ Raccourci iPhone).'); }
+    if (!sameKey(String(k))) { res.statusCode = 401; res.setHeader('Content-Type', 'text/plain; charset=utf-8'); return res.end('⛔ Clé invalide : recopie la clé du raccourci depuis Motherboard (Contacts → bouton 📲).'); }
     let txt = (await raw(req)).slice(0, 200000);
     let cards = parseVcards(txt);
     if (!cards.length) {   // texte libre : « Marie Tremblay 514 555-1234 »

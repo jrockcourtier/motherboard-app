@@ -74,7 +74,7 @@
     out.push({ key: 'task:ezmax', icon: '🗂️', label: 'Créer la transaction dans EzSign / EzMax — au plus tard aujourd\'hui', date: addD(acc, 2), hour: '10:00', task: true });
     if (t.deedAt) out.push({ key: 'deed', icon: '🖋️', label: 'Acte de vente chez le notaire (le ou avant)', date: t.deedAt, hour: t.deedHour || '', info: true });
     if (t.occupationAt) out.push({ key: 'occ', icon: '🔑', label: 'Occupation des lieux', date: t.occupationAt, hour: t.occupationHour || '', info: true });
-    out.forEach(m => { const c = (t.conditions || []).find(k => k.id === m.cid); m.closed = !!(c && (c.status === 'levee' || c.status === 'nulle')) || !!(t.done || {})[m.key]; const wd = new Date(m.date + 'T12:00:00').getDay(); m.weekend = wd === 0 || wd === 6; });
+    out.forEach(m => { const ev = (t.events || {})[m.key]; if (ev && ev.slot != null) m.placed = ev.slot; const c = (t.conditions || []).find(k => k.id === m.cid); m.closed = !!(c && (c.status === 'levee' || c.status === 'nulle')) || !!(t.done || {})[m.key]; const wd = new Date(m.date + 'T12:00:00').getDay(); m.weekend = wd === 0 || wd === 6; });
     return out.sort((a, b) => (a.date + (a.hour || '')).localeCompare(b.date + (b.hour || '')));
   }
   function countdown(date) {
@@ -204,7 +204,7 @@
     // dates limites : placées le matin (9 h 30 – 10 h) du jour limite, avec l'heure limite dans le titre ; alertes la veille 9 h 30 et le matin même 9 h 30
     // tâches : 10 h, alerte à l'heure · info (occupation) : à son heure, alerte la veille
     const deadline = !m.info && !m.task;
-    const [h, mi] = deadline ? [9, 30] : (m.hour || '10:00').split(':').map(Number);
+    const [h, mi] = m.slot != null ? [Math.floor(m.slot / 60), m.slot % 60] : deadline ? [9, 30] : (m.hour || '10:00').split(':').map(Number);
     const st = new Date(m.date + 'T00:00:00'); st.setHours(h, mi || 0, 0, 0);
     const en = new Date(st.getTime() + 30 * 60000);
     const rem = deadline ? [{ method: 'popup', minutes: 24 * 60 }, { method: 'popup', minutes: 0 }] : m.task ? [{ method: 'popup', minutes: 0 }] : [{ method: 'popup', minutes: 24 * 60 }];
@@ -214,16 +214,59 @@
       extendedProperties: { private: priv }, reminders: { useDefault: false, overrides: rem }
     };
   }
+  // ---------- placement des tâches : entre 9 h et 17 h, sans chevaucher un rendez-vous déjà pris ----------
+  const WIN = [9 * 60, 17 * 60], DUR = 30;
+  let calsCache = null;
+  async function readCals() {
+    if (calsCache) return calsCache;
+    try { const r = await gReq('GET', 'users/me/calendarList?minAccessRole=reader'); calsCache = ((r && r.items) || []).filter(c => !/#(holiday|contacts)@group\.v\.calendar\.google\.com$/.test(c.id) && c.selected !== false).map(c => c.id); }
+    catch (x) { calsCache = []; }
+    if (!calsCache.length) calsCache = ['primary'];
+    setTimeout(() => { calsCache = null; }, 60000);
+    return calsCache;
+  }
+  async function busyOn(day) {
+    const t0 = new Date(day + 'T00:00:00'), t1 = new Date(day + 'T23:59:59'), out = [];
+    const toMin = (d) => Math.max(0, Math.min(24 * 60, Math.round((d - t0) / 60000)));
+    for (const id of await readCals()) {
+      try {
+        const r = await gReq('GET', `calendars/${encodeURIComponent(id)}/events?singleEvents=true&maxResults=100&timeMin=${encodeURIComponent(t0.toISOString())}&timeMax=${encodeURIComponent(t1.toISOString())}`);
+        ((r && r.items) || []).forEach(ev => {
+          if (!ev.start || !ev.start.dateTime || ev.status === 'cancelled' || ev.transparency === 'transparent') return;
+          const p = (ev.extendedProperties && ev.extendedProperties.private) || {};
+          if (p.mbTx) return;                                   // nos propres rappels de transaction : on les replace
+          if ((ev.attendees || []).some(a => a.self && a.responseStatus === 'declined')) return;
+          out.push([toMin(new Date(ev.start.dateTime)), toMin(new Date(ev.end.dateTime))]);
+        });
+      } catch (x) {}
+    }
+    return out;
+  }
+  function freeSlot(busy, pref) {
+    const free = (st) => busy.every(([a, b]) => st + DUR <= a || st >= b);
+    pref = Math.min(Math.max(pref, WIN[0]), WIN[1] - DUR);
+    for (let st = pref; st <= WIN[1] - DUR; st += 15) if (free(st)) return st;
+    for (let st = pref - 15; st >= WIN[0]; st -= 15) if (free(st)) return st;
+    return pref;   // journée pleine : on garde l'heure prévue
+  }
   async function syncCalendar(t) {
     const old = t.events || {}; const next = {}; let ok = 0, bad = 0;
     const ms = milestones(t).filter(m => !m.closed && m.date >= today());
+    const busyCache = {};
+    for (const m of ms) {
+      if (m.info) continue;
+      const day = m.date; if (!busyCache[day]) busyCache[day] = await busyOn(day);
+      const pref = m.task ? 10 * 60 : 9 * 60 + 30;
+      m.slot = freeSlot(busyCache[day], pref);
+      busyCache[day].push([m.slot, m.slot + DUR]);            // deux tâches du même jour ne se chevauchent pas
+    }
     for (const m of ms) {
       try {
         const body = evBody(t, m), prev = old[m.key];
         let res = null;
         if (prev) res = await gReq('PUT', `calendars/${encodeURIComponent(prev.cal)}/events/${encodeURIComponent(prev.id)}`, body);
         if (!res || !res.id) res = await gReq('POST', `calendars/${encodeURIComponent(calId())}/events`, body);
-        if (res && res.id) { next[m.key] = { cal: prev && res.id === prev.id ? prev.cal : calId(), id: res.id }; ok++; } else bad++;
+        if (res && res.id) { next[m.key] = { cal: prev && res.id === prev.id ? prev.cal : calId(), id: res.id, slot: m.slot }; ok++; } else bad++;
       } catch (x) { bad++; }
     }
     for (const k of Object.keys(old)) if (!next[k]) { try { await gReq('DELETE', `calendars/${encodeURIComponent(old[k].cal)}/events/${encodeURIComponent(old[k].id)}`); } catch (x) {} }
@@ -247,7 +290,7 @@
   function msRow(m, withAddr) {
     const cd = countdown(m.date);
     return `<div class="tx-ms ${m.info ? 'info' : ''}${m.task ? ' task' : ''} ${cd.cls}${m.closed ? ' closed' : ''}">
-      <div class="tx-ms-d"><b>${fmtD(m.date)}</b><span>${m.task ? 'tâche · ' + hh(m.hour) : m.info ? (m.hour ? hh(m.hour) : 'journée') : 'limite ' + hh(m.hour)}</span></div>
+      <div class="tx-ms-d"><b>${fmtD(m.date)}</b><span>${m.task ? 'tâche · ' + (m.placed != null ? hh(Math.floor(m.placed / 60) + ':' + String(m.placed % 60).padStart(2, '0')) : hh(m.hour)) : m.info ? (m.hour ? hh(m.hour) : 'journée') : 'limite ' + hh(m.hour)}</span></div>
       <div class="tx-ms-b"><div>${m.icon} ${e(m.label)}</div>${withAddr ? `<div class="crm-muted">${e(m.t.address || '')}${m.t.clients ? ' · ' + e(m.t.clients) : ''}</div>` : ''}${m.legal ? `<div class="crm-muted">⚖️ ${e(m.legal)}</div>` : ''}${m.weekend && !m.info ? '<div class="tx-we">⚠️ tombe un week-end — vérifie le délai</div>' : ''}</div>
       <div class="tx-ms-c">${m.closed ? '✓' : `<span class="tx-cd">${cd.t}</span>`}${!m.info && !m.closed ? `<button onclick="event.stopPropagation();TX.done('${m.t.id}','${m.key}')" title="Fait">✓</button>` : ''}</div>
     </div>`;
@@ -350,7 +393,7 @@
     if ((d.conditions || []).some(c => c.days == null || c.days === '')) { toastMsg('Il manque le nombre de jours pour une condition.'); return; }
     const wantCal = document.getElementById('tx-cal') && document.getElementById('tx-cal').checked;
     const file = d._file; delete d._file; delete d._warn; delete d._imp;
-    d.status = d.status || 'active'; d.evv = 2;
+    d.status = d.status || 'active'; d.evv = 3;
     save(d);
     if (file) uploadPdf(d, file);
     // fiche client : passe à l'étape « Conditions »
@@ -451,9 +494,9 @@
     if (++migTries > 40) return clearInterval(mig);
     if (typeof accessToken === 'undefined' || !accessToken) return;
     clearInterval(mig);
-    const todo = list().filter(t => t.status !== 'fermee' && (t.evv || 0) < 2 && t.events && Object.keys(t.events).length);
-    for (const t of todo) { t.evv = 2; try { await syncCalendar(t); } catch (x) {} }
-    if (todo.length) toastMsg(`📅 Rappels de ${todo.length} dossier(s) mis à jour : le matin à 9 h 30 + tâches banque et EzMax`, 7000);
+    const todo = list().filter(t => t.status !== 'fermee' && (t.evv || 0) < 3 && t.events && Object.keys(t.events).length);
+    for (const t of todo) { t.evv = 3; try { await syncCalendar(t); } catch (x) {} }
+    if (todo.length) toastMsg(`📅 Rappels de ${todo.length} dossier(s) replacés entre 9 h et 17 h, sans chevaucher tes rendez-vous`, 7000);
   }, 3000);
   window.addEventListener('online', flush);
 })();
