@@ -387,6 +387,10 @@
   }
 
   window.LST = { _list: list, _cur: curPrice, _status: statusOf, render, open, close, edit, f, sf, sadd, sdel, saveForm, importFile, drop, saveDrop, extend, saveExtend, offer, paFile, offerManual, linkTx, setStatus, done, resync, del, doDel, _parse: parseCC, _milestones: milestones, _all: () => L };
-  render(); pull().then(() => setTimeout(splitOld, 1500));
+  // inscriptions ajoutées hors de l'app (ex. import du rapport) : créer leurs rappels dans l'agenda une fois Google connecté
+  async function autoSync() {
+    for (const x of list().filter(x => x.needSync)) { try { const r = await syncCalendar(x); if (r.ok && !r.bad) { delete x.needSync; save(x); } else if (!r.bad) { delete x.needSync; save(x); } } catch (z) {} }
+  }
+  render(); pull().then(() => setTimeout(() => { splitOld(); setTimeout(autoSync, 2500); }, 1500));
   window.addEventListener('online', flush);
 })();

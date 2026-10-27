@@ -15,14 +15,14 @@
     if (t.status === 'conclue' || (t.deedAt && t.deedAt < today())) return 'conclue';
     return 'cours';
   }
-  const txComm = (t) => (t.price && t.commissionPct ? t.price * t.commissionPct / 100 : 0);
+  const txComm = (t) => (t.commAmount != null && t.commAmount !== '' ? +t.commAmount : t.price && t.commissionPct ? t.price * t.commissionPct / 100 : 0);
   const txYear = (t) => (t.deedAt || t.acceptedAt || '').slice(0, 4);
   const txMonth = (t) => +((t.deedAt || t.acceptedAt || '').slice(5, 7)) - 1;
 
   function data() {
     const y = String(new Date().getFullYear()), t0 = today();
     const txs = window.TX ? Object.values(TX._all()).filter(t => !t.deleted) : [];
-    const done = txs.filter(t => txState(t) === 'conclue' && txYear(t) === y);
+    const done = txs.filter(t => txState(t) === 'conclue' && txYear(t) === y), sales = done.filter(t => t.kind !== 'revenu');
     const cours = txs.filter(t => txState(t) === 'cours');
     const monthly = Array.from({ length: 12 }, () => ({ done: 0, plan: 0 }));
     done.forEach(t => { if (txMonth(t) >= 0) monthly[txMonth(t)].done += txComm(t); });
@@ -55,9 +55,9 @@
     txs.filter(t => txState(t) === 'cours').forEach(t => TX._milestones(t).forEach(m => { if (!m.closed && !m.info && m.date >= t0) next.push({ date: m.date, icon: m.icon, label: m.label, where: t.address, open: `${go('transactions')};TX.open('${t.id}')` }); }));
     L.forEach(x => LST._milestones(x).forEach(m => { if (!m.closed && m.date >= t0) next.push({ date: m.date, icon: m.icon, label: m.label, where: x.address, open: `${go('inscriptions')};LST.open('${x.id}')` }); }));
     next.sort((a, b) => a.date.localeCompare(b.date));
-    return { y, done, cours, monthly, lstActive, lstCond, P, pipe, sessW, dueN, inboxN, next: next.slice(0, 6),
+    return { y, done, sales, cours, monthly, lstActive, lstCond, P, pipe, sessW, dueN, inboxN, next: next.slice(0, 6),
       rev: done.reduce((a, t) => a + txComm(t), 0), revPlan: cours.reduce((a, t) => a + txComm(t), 0),
-      missingPct: done.concat(cours).filter(t => !t.commissionPct).length,
+      missingPct: done.concat(cours).filter(t => !txComm(t)).length,
       volume: lstActive.reduce((a, x) => a + (LST._cur(x) || 0), 0) };
   }
 
@@ -92,7 +92,7 @@
           <div class="db-card db-hero">
             <div class="db-l">Revenus ${D.y} · commissions conclues (brut)</div>
             <div class="db-big">${money(D.rev)}</div>
-            <div class="db-s">${D.done.length} transaction${D.done.length > 1 ? 's' : ''} conclue${D.done.length > 1 ? 's' : ''} · <b>${money(D.revPlan)}</b> à venir (${D.cours.length} en cours)</div>
+            <div class="db-s">${D.sales.length} transaction${D.sales.length > 1 ? 's' : ''} conclue${D.sales.length > 1 ? 's' : ''} · <b>${money(D.revPlan)}</b> à venir (${D.cours.length} en cours)</div>
             ${chart(D.monthly)}
             ${D.missingPct ? `<div class="db-warn">⚠️ ${D.missingPct} transaction${D.missingPct > 1 ? 's' : ''} sans % de commission — <a onclick="${go('transactions')}">ajoute-le</a> pour qu'elle compte dans tes revenus.</div>` : ''}
           </div>
@@ -100,7 +100,7 @@
             ${tile('Inscriptions actives', D.lstActive.length, D.volume ? kmoney(D.volume) + ' en vente' : 'aucune', go('inscriptions'))}
             ${tile('Sous condition', D.lstCond.length, 'inscriptions avec offre acceptée', go('inscriptions'))}
             ${tile('Transactions en cours', D.cours.length, D.revPlan ? kmoney(D.revPlan) + ' de commissions' : '', go('transactions'))}
-            ${tile('Ventes conclues ' + D.y, D.done.length, D.rev ? kmoney(D.rev) : '', go('transactions'))}
+            ${tile('Ventes conclues ' + D.y, D.sales.length, D.rev ? kmoney(D.rev) : '', go('transactions'))}
           </div>
         </div>
 

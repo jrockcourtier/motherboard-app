@@ -52,7 +52,7 @@
 
   // ---------- dates limites ----------
   function milestones(t) {
-    const out = [], acc = t.acceptedAt; if (!acc) return out;
+    const out = [], acc = t.acceptedAt; if (!acc || t.kind === 'revenu') return out;
     const hour = t.hour || '19:00';
     (t.conditions || []).forEach(c => {
       const ty = CTYPES[c.type] || CTYPES.autre, n = +c.days; if (!n && n !== 0) return;
@@ -77,6 +77,10 @@
     out.forEach(m => { const ev = (t.events || {})[m.key]; if (ev && ev.slot != null) m.placed = ev.slot; const c = (t.conditions || []).find(k => k.id === m.cid); m.closed = !!(c && (c.status === 'levee' || c.status === 'nulle')) || !!(t.done || {})[m.key]; const wd = new Date(m.date + 'T12:00:00').getDay(); m.weekend = wd === 0 || wd === 6; });
     return out.sort((a, b) => (a.date + (a.hour || '')).localeCompare(b.date + (b.hour || '')));
   }
+  const KIND_L = { vente: 'Vente', achat: 'Achat', double: 'Vente + achat', location: 'Location', revenu: 'Autre revenu' };
+  const kindL = (t) => KIND_L[t.kind] || 'Achat';
+  const commOf = (t) => t.commAmount != null && t.commAmount !== '' ? +t.commAmount : (t.price && t.commissionPct ? t.price * t.commissionPct / 100 : 0);
+  const commLine = (t) => t.commAmount != null && t.commAmount !== '' ? `<br>💰 Ta part : <b>${money(+t.commAmount)}</b> <span class="crm-muted">(montant fixe${t.commNote ? ' · ' + e(t.commNote) : ''})</span>` : t.commissionPct && t.price ? `<br>💰 Ta part : <b>${String(t.commissionPct).replace('.', ',')} %</b> × ${money(t.price)} = <b>${money(t.price * t.commissionPct / 100)}</b> <span class="crm-muted">(+ taxes)</span>` : '';
   function countdown(date) {
     const n = diffD(today(), date);
     if (n < 0) return { t: `dépassée (${-n} j)`, cls: 'past' };
@@ -298,7 +302,7 @@
   }
   function render() {
     const root = document.getElementById('transactions'); if (!root) return;
-    const all = list().sort((a, b) => (b.acceptedAt || '').localeCompare(a.acceptedAt || ''));
+    const all = list().sort((a, b) => (b.acceptedAt || b.deedAt || '').localeCompare(a.acceptedAt || a.deedAt || ''));
     const up = upcoming(null).filter(m => !m.info || diffD(today(), m.date) <= 14).filter(m => m.date >= addD(today(), -3));
     root.innerHTML = `
       <input type="file" id="tx-file" accept="application/pdf,.pdf" style="display:none" onchange="TX.importFile(this.files[0]);this.value=''">
@@ -314,9 +318,9 @@
     const ms = milestones(t).filter(m => !m.info), open = ms.filter(m => !m.closed), next = open[0];
     const conds = (t.conditions || []).map(c => { const ty = CTYPES[c.type] || CTYPES.autre; return `<span class="tx-cond ${c.status || ''}">${ty.icon} ${e(c.type === 'autre' && c.label ? c.label : ty.label)}${c.status === 'levee' ? ' ✓' : c.status === 'nulle' ? ' ✗' : ''}</span>`; }).join('');
     return `<div class="tx-card" onclick="TX.open('${t.id}')">
-      <div class="tx-l1"><span class="tx-kind ${t.kind}">${t.kind === 'vente' ? 'Vente' : 'Achat'}</span><b>${e(t.address || 'Dossier sans adresse')}</b><span class="tx-price">${money(t.price)}</span></div>
-      <div class="crm-muted">${t.clients ? '👤 ' + e(t.clients) + ' · ' : ''}acceptée le ${fmtD(t.acceptedAt)}${t.deedAt ? ' · 🖋️ notaire ' + fmtD(t.deedAt) : ''}</div>
-      <div class="tx-conds">${conds || '<span class="crm-muted">Aucune condition</span>'}</div>
+      <div class="tx-l1"><span class="tx-kind ${t.kind}">${kindL(t)}</span><b>${e(t.address || 'Dossier sans adresse')}</b><span class="tx-price">${t.price ? money(t.price) : ''}</span></div>
+      <div class="crm-muted">${t.clients ? '👤 ' + e(t.clients) + ' · ' : ''}${t.acceptedAt ? 'acceptée le ' + fmtD(t.acceptedAt) : ''}${t.deedAt ? (t.acceptedAt ? ' · ' : '') + (t.kind === 'revenu' ? '📅 ' : '🖋️ notaire ') + fmtD(t.deedAt) : ''}${t.status === 'conclue' ? ' · ✅ conclue' : ''}${commOf(t) ? ' · 💰 ' + money(commOf(t)) : ''}</div>
+      ${t.status === 'conclue' && !(t.conditions || []).length ? '' : `<div class="tx-conds">${conds || '<span class="crm-muted">Aucune condition</span>'}</div>`}
       ${next ? `<div class="tx-next ${countdown(next.date).cls}">⏰ Prochaine : ${e(next.label)} — <b>${fmtD(next.date)} ${hh(next.hour)}</b> (${countdown(next.date).t})</div>` : ms.length ? '<div class="tx-next ok">✅ Toutes les conditions sont réglées</div>' : ''}
     </div>`;
   }
@@ -325,8 +329,8 @@
     const box = modal().querySelector('.sheet');
     const ms = milestones(t);
     box.innerHTML = `
-      <div class="sheet-head"><button type="button" class="sheet-x" onclick="TX.close()">✕</button><b>${t.kind === 'vente' ? 'Vente' : 'Achat'} · ${e(t.address || '')}</b><span class="sheet-acts"><button class="sheet-trash" onclick="TX.del('${t.id}')" title="Supprimer">🗑</button><button class="sheet-save" onclick="TX.edit('${t.id}')">Modifier</button></span></div>
-      <div class="tx-sum">${money(t.price)}${t.clients ? ' · 👤 ' + e(t.clients) : ''}${t.otherParty ? ` · ${t.kind === 'vente' ? 'Acheteur' : 'Vendeur'} : ${e(t.otherParty)}` : ''}<br>Acceptée le <b>${fmtD(t.acceptedAt, true)}</b> · jour 1 = ${fmtD(addD(t.acceptedAt, 1))}${t.commissionPct && t.price ? `<br>💰 Ta part : <b>${String(t.commissionPct).replace('.', ',')} %</b> × ${money(t.price)} = <b>${money(t.price * t.commissionPct / 100)}</b> <span class="crm-muted">(+ taxes)</span>` : ''}${t.listingId && window.LST ? `<br><button class="tx-link" onclick="TX.close();LST.open('${t.listingId}')">🏷️ Voir l'inscription</button>` : ''}</div>
+      <div class="sheet-head"><button type="button" class="sheet-x" onclick="TX.close()">✕</button><b>${kindL(t)} · ${e(t.address || '')}</b><span class="sheet-acts"><button class="sheet-trash" onclick="TX.del('${t.id}')" title="Supprimer">🗑</button><button class="sheet-save" onclick="TX.edit('${t.id}')">Modifier</button></span></div>
+      <div class="tx-sum">${t.price ? money(t.price) : ''}${t.centris ? ' · Centris ' + e(t.centris) : ''}${t.clients ? ' · 👤 ' + e(t.clients) : ''}${t.otherParty ? ` · ${t.kind === 'vente' ? 'Acheteur' : 'Vendeur'} : ${e(t.otherParty)}` : ''}${t.acceptedAt ? `<br>Acceptée le <b>${fmtD(t.acceptedAt, true)}</b> · jour 1 = ${fmtD(addD(t.acceptedAt, 1))}` : ''}${t.deedAt && (t.status === 'conclue' || !t.acceptedAt) ? `<br>${t.kind === 'revenu' ? 'Reçu le' : 'Notarié le'} <b>${fmtD(t.deedAt, true)}</b>` : ''}${commLine(t)}${t.memo ? `<br><span class="crm-muted">${e(t.memo)}</span>` : ''}${t.listingId && window.LST ? `<br><button class="tx-link" onclick="TX.close();LST.open('${t.listingId}')">🏷️ Voir l'inscription</button>` : ''}</div>
       <div class="f-label">Conditions</div>
       ${(t.conditions || []).map(c => { const ty = CTYPES[c.type] || CTYPES.autre; return `<div class="tx-crow"><div>${ty.icon} <b>${e(c.type === 'autre' && c.label ? c.label : ty.label)}</b> · ${c.days} jours${c.extra ? ' + ' + c.extra : ''}${c.type === 'documents' && c.label ? `<div class="crm-muted">${e(c.label)}</div>` : ''}</div>
         <div class="chips">${[['', 'En cours'], ['levee', '✓ Levée / réalisée'], ['nulle', '✗ Promesse nulle']].map(([k, l]) => `<button class="${(c.status || '') === k ? 'on' : ''}" onclick="TX.cstatus('${t.id}','${c.id}','${k}')">${l}</button>`).join('')}</div></div>`; }).join('') || '<div class="crm-muted">Aucune condition.</div>'}
@@ -357,11 +361,12 @@
       <div class="sheet-head"><button type="button" class="sheet-x" onclick="TX.close()">✕</button><b>${imp ? 'Vérifie le dossier importé' : txs[d.id] ? 'Modifier le dossier' : 'Nouveau dossier'}</b><button class="sheet-save" onclick="TX.saveForm()">Enregistrer</button></div>
       ${(d._warn || []).map(w => `<div class="tx-warn">⚠️ ${e(w)}</div>`).join('')}
       ${imp ? '<div class="tx-info">Vérifie chaque date avec ta promesse d\'achat avant d\'enregistrer : une date limite manquée a des conséquences légales.</div>' : ''}
-      <div class="chips" style="margin-top:12px">${[['achat', "🛒 Dossier d'achat"], ['vente', '🏷️ Dossier de vente']].map(([k, l]) => `<button class="${d.kind === k ? 'on' : ''}" onclick="TX.f('kind','${k}')">${l}</button>`).join('')}</div>
+      <div class="chips" style="margin-top:12px">${[['achat', "🛒 Dossier d'achat"], ['vente', '🏷️ Dossier de vente'], ['double', '🔁 Vente + achat'], ['location', '🔑 Location'], ['revenu', '💵 Autre revenu']].map(([k, l]) => `<button class="${d.kind === k ? 'on' : ''}" onclick="TX.f('kind','${k}')">${l}</button>`).join('')}</div>
       <label class="f-block">Adresse de l'immeuble<input value="${e(d.address || '')}" oninput="TX.f('address',this.value,1)"></label>
       <div class="f-row"><label style="flex:1">Prix<input inputmode="numeric" value="${d.price ? Math.round(d.price).toLocaleString('fr-CA') : ''}" oninput="TX.f('price',+this.value.replace(/[^\\d]/g,''),1)"></label>
         <label style="flex:1">${d.kind === 'vente' ? 'Acheteur' : 'Vendeur'}<input value="${e(d.otherParty || '')}" oninput="TX.f('otherParty',this.value,1)"></label></div>
       <div class="f-row"><label style="flex:1">Ma commission (%)<input inputmode="decimal" value="${d.commissionPct != null && d.commissionPct !== '' ? String(d.commissionPct).replace('.', ',') : ''}" placeholder="ex. 3,5" oninput="TX.f('commissionPct',this.value?+this.value.replace(',','.'):null,1)">${d.commTotalPct && d.collabPct ? `<span class="f-hint">Contrat : ${String(d.commTotalPct).replace('.', ',')} % − ${String(d.collabPct).replace('.', ',')} % au collaborateur. <a onclick="TX.f('commissionPct',${d.commTotalPct})">Pas de collaborateur → ${String(d.commTotalPct).replace('.', ',')} %</a></span>` : '<span class="f-hint">Ta part seulement (sans la part du collaborateur)</span>'}</label>
+        <label style="flex:1">ou montant fixe ($)<input inputmode="decimal" value="${d.commAmount != null && d.commAmount !== '' ? String(d.commAmount).replace('.', ',') : ''}" placeholder="ex. 1 000" oninput="TX.f('commAmount',this.value?+this.value.replace(/\\s/g,'').replace(',','.'):null,1)"><span class="f-hint">Remplace le %</span></label>
         <label style="flex:1">Statut<select onchange="TX.f('status',this.value,1)">${[['active', 'En cours'], ['conclue', 'Conclue (notaire signé)'], ['annulee', 'Annulée']].map(([k, l]) => `<option value="${k}" ${(d.status || 'active') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
       <label class="f-block">Mes clients<input value="${e(d.clients || '')}" placeholder="ex. Dany Bouchard et Tamar Alexanian" oninput="TX.f('clients',this.value,1)"></label>
       <label class="f-block">Lier à la fiche contact<select onchange="TX.f('contactId',this.value,1)"><option value="">—</option>${contactOpts()}</select></label>
