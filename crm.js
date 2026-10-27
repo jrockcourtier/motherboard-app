@@ -475,7 +475,7 @@
       const c = contacts[id]; if (!c) return;
       if (!k) { c.deleted = true; delete c.inbox; save(c); if (typeof toast === 'function') toast(`« ${e(c.name)} » ignoré <button onclick="CRM.unignore('${id}')">Annuler</button>`); return; }
       c.type = k; delete c.inbox; c.stage = (TYPES_C[k] || TYPES_C.acheteur).stages[0]; save(c);
-      if (typeof toast === 'function') toast(`✓ ${e(c.name)} classé : ${(TYPES_C[k] || {}).label || k}`);
+      if (typeof toast === 'function') toast(`✓ ${e(c.name)} classé : <b>${(TYPES_C[k] || {}).label || k}</b> <button onclick="CRM.unignore('${id}')">Annuler</button>`, 8000);
     },
     unignore(id) { const c = contacts[id]; if (!c) return; c.deleted = false; c.inbox = true; save(c); document.querySelectorAll('.mb-toast').forEach(x => x.remove()); },
     dueOn(day) { const t = todayStr(); return list().filter(c => !c.inbox && c.nextFollowUp && (day === t ? c.nextFollowUp <= day : c.nextFollowUp === day)).length; },
