@@ -69,6 +69,9 @@
         out.push({ key: c.id + ':a', cid: c.id, icon: '⚠️', label: `${name} — DATE LIMITE (${n} jours)`, date: addD(acc, n), hour, main: true });
       }
     });
+    // tâches automatiques après l'acceptation
+    if ((t.conditions || []).some(c => c.type === 'financement') && t.kind !== 'vente') out.push({ key: 'task:bank', icon: '📤', label: 'Envoyer les documents à la banque (financement) — au plus tard aujourd\'hui', date: addD(acc, 1), hour: '10:00', task: true });
+    out.push({ key: 'task:ezmax', icon: '🗂️', label: 'Créer la transaction dans EzSign / EzMax — au plus tard aujourd\'hui', date: addD(acc, 2), hour: '10:00', task: true });
     if (t.deedAt) out.push({ key: 'deed', icon: '🖋️', label: 'Acte de vente chez le notaire (le ou avant)', date: t.deedAt, hour: t.deedHour || '', info: true });
     if (t.occupationAt) out.push({ key: 'occ', icon: '🔑', label: 'Occupation des lieux', date: t.occupationAt, hour: t.occupationHour || '', info: true });
     out.forEach(m => { const c = (t.conditions || []).find(k => k.id === m.cid); m.closed = !!(c && (c.status === 'levee' || c.status === 'nulle')) || !!(t.done || {})[m.key]; const wd = new Date(m.date + 'T12:00:00').getDay(); m.weekend = wd === 0 || wd === 6; });
@@ -198,13 +201,15 @@
     const desc = [`${t.kind === 'vente' ? 'Dossier de vente' : "Dossier d'achat"} — ${where}`, t.clients ? 'Clients : ' + t.clients : '', `Acceptée le ${fmtD(t.acceptedAt, true)}`, m.legal ? 'Limite légale : ' + m.legal : '', 'Créé par Motherboard'].filter(Boolean).join('\n');
     const priv = { mbType: m.info ? 'reunion' : 'urgent', mbTx: t.id, mbKey: m.key };
     if (m.info && !m.hour) return { summary: `${m.icon} ${m.label} — ${where}`, description: desc, start: { date: m.date }, end: { date: addD(m.date, 1) }, extendedProperties: { private: priv }, reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 15 * 60 }] } };
-    const [h, mi] = (m.hour || '19:00').split(':').map(Number);
+    // dates limites : placées le matin (9 h 30 – 10 h) du jour limite, avec l'heure limite dans le titre ; alertes la veille 9 h 30 et le matin même 9 h 30
+    // tâches : 10 h, alerte à l'heure · info (occupation) : à son heure, alerte la veille
+    const deadline = !m.info && !m.task;
+    const [h, mi] = deadline ? [9, 30] : (m.hour || '10:00').split(':').map(Number);
     const st = new Date(m.date + 'T00:00:00'); st.setHours(h, mi || 0, 0, 0);
     const en = new Date(st.getTime() + 30 * 60000);
-    const at9 = (dOff) => { const d = new Date(m.date + 'T00:00:00'); d.setDate(d.getDate() + dOff); d.setHours(9, 0, 0, 0); return Math.max(0, Math.round((st - d) / 60000)); };
-    const rem = m.info ? [{ method: 'popup', minutes: at9(-1) }] : [{ method: 'popup', minutes: at9(-1) }, { method: 'popup', minutes: at9(0) }].filter(x => x.minutes > 0);
+    const rem = deadline ? [{ method: 'popup', minutes: 24 * 60 }, { method: 'popup', minutes: 0 }] : m.task ? [{ method: 'popup', minutes: 0 }] : [{ method: 'popup', minutes: 24 * 60 }];
     return {
-      summary: `${m.info ? m.icon : '⚠️'} ${m.label.replace(/^⚠️\s*/, '')} — ${where}`, description: desc, colorId: m.info ? '9' : '11',
+      summary: `${m.info || m.task ? m.icon : '⚠️'} ${m.label.replace(/^⚠️\s*/, '')}${deadline ? ` (limite ${hh(m.hour)})` : ''} — ${where}`, description: desc, colorId: m.info ? '9' : m.task ? '6' : '11',
       start: { dateTime: st.toISOString(), timeZone: tz }, end: { dateTime: en.toISOString(), timeZone: tz },
       extendedProperties: { private: priv }, reminders: { useDefault: false, overrides: rem }
     };
@@ -241,8 +246,8 @@
   }
   function msRow(m, withAddr) {
     const cd = countdown(m.date);
-    return `<div class="tx-ms ${m.info ? 'info' : ''} ${cd.cls}${m.closed ? ' closed' : ''}">
-      <div class="tx-ms-d"><b>${fmtD(m.date)}</b><span>${m.hour ? hh(m.hour) : 'journée'}</span></div>
+    return `<div class="tx-ms ${m.info ? 'info' : ''}${m.task ? ' task' : ''} ${cd.cls}${m.closed ? ' closed' : ''}">
+      <div class="tx-ms-d"><b>${fmtD(m.date)}</b><span>${m.task ? 'tâche · ' + hh(m.hour) : m.info ? (m.hour ? hh(m.hour) : 'journée') : 'limite ' + hh(m.hour)}</span></div>
       <div class="tx-ms-b"><div>${m.icon} ${e(m.label)}</div>${withAddr ? `<div class="crm-muted">${e(m.t.address || '')}${m.t.clients ? ' · ' + e(m.t.clients) : ''}</div>` : ''}${m.legal ? `<div class="crm-muted">⚖️ ${e(m.legal)}</div>` : ''}${m.weekend && !m.info ? '<div class="tx-we">⚠️ tombe un week-end — vérifie le délai</div>' : ''}</div>
       <div class="tx-ms-c">${m.closed ? '✓' : `<span class="tx-cd">${cd.t}</span>`}${!m.info && !m.closed ? `<button onclick="event.stopPropagation();TX.done('${m.t.id}','${m.key}')" title="Fait">✓</button>` : ''}</div>
     </div>`;
@@ -345,7 +350,7 @@
     if ((d.conditions || []).some(c => c.days == null || c.days === '')) { toastMsg('Il manque le nombre de jours pour une condition.'); return; }
     const wantCal = document.getElementById('tx-cal') && document.getElementById('tx-cal').checked;
     const file = d._file; delete d._file; delete d._warn; delete d._imp;
-    d.status = d.status || 'active';
+    d.status = d.status || 'active'; d.evv = 2;
     save(d);
     if (file) uploadPdf(d, file);
     // fiche client : passe à l'étape « Conditions »
@@ -440,5 +445,15 @@
 
   window.TX = { render, open, close, edit, f, cf, cadd, cdel, saveForm, importFile, pdf, cstatus, done, resync, del, doDel, jourBox, _parse: parsePA, _milestones: milestones, _all: () => txs };
   render(); pull(); setTimeout(jourBox, 1500);
+  // v16.1 : remettre à jour une fois les rappels déjà créés (heure du matin + nouvelles tâches)
+  let migTries = 0;
+  const mig = setInterval(async () => {
+    if (++migTries > 40) return clearInterval(mig);
+    if (typeof accessToken === 'undefined' || !accessToken) return;
+    clearInterval(mig);
+    const todo = list().filter(t => t.status !== 'fermee' && (t.evv || 0) < 2 && t.events && Object.keys(t.events).length);
+    for (const t of todo) { t.evv = 2; try { await syncCalendar(t); } catch (x) {} }
+    if (todo.length) toastMsg(`📅 Rappels de ${todo.length} dossier(s) mis à jour : le matin à 9 h 30 + tâches banque et EzMax`, 7000);
+  }, 3000);
   window.addEventListener('online', flush);
 })();

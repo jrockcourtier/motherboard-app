@@ -359,6 +359,7 @@
         if (r === 'ok') { c.notes.push({ id: CRM.newId(), at: new Date().toISOString(), text: `📅 Rappel ajouté à l'agenda : ${p.followUp.date.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' })}` }); CRM.upsert(c); }
         else msg = r === 'no-permission' ? "Fiche enregistrée. Le rappel n'a pas pu être ajouté à l'agenda : touchez « + » puis « Autoriser l'ajout de rendez-vous »." : "Fiche enregistrée. Le rappel n'a pas pu être ajouté à l'agenda (connexion Google). Il apparaîtra quand même dans « Suivis à faire ».";
       }
+      if (!p.existing && c.phone) window.__mbNew = c.id;
       VoiceCRM.close();
       CRM.open(c.id);
       if (msg) setTimeout(() => alertBar(msg), 300);
@@ -369,4 +370,6 @@
     const d = document.createElement('div'); d.className = 'vc-toast'; d.textContent = msg;
     document.body.appendChild(d); setTimeout(() => d.remove(), 7000);
   }
+  // saisie éclair : https://…/?ajout=contact ouvre directement la dictée d'un nouveau contact
+  window.addEventListener('load', () => { if (/[?&#]ajout=contact/.test(location.href)) setTimeout(() => { try { history.replaceState(null, '', location.pathname); } catch (x) {} VoiceCRM.open(); }, 700); });
 })();

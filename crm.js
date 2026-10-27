@@ -200,11 +200,12 @@
     const all = list();
     const sm = (SMART.find(x => x[0] === smart) || SMART[0])[2];
     // les fiches DuProprio pas encore appelées restent dans l'onglet Prospection (sinon la liste de contacts déborde)
-    const rows = all.filter(c => !(filter === 'tous' && !q && c.plist && cat(c) === 'proprio') && sm(c) && (filter === 'tous' || cat(c) === filter) &&
+    const inbox = all.filter(c => c.inbox).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    const rows = all.filter(c => !c.inbox && !(filter === 'tous' && !q && c.plist && cat(c) === 'proprio') && sm(c) && (filter === 'tous' || cat(c) === filter) &&
       (!q || [c.name, c.owner, c.phone, c.email, c.address, c.neighborhoods, c.stage].join(' ').toLowerCase().includes(q)));
     const due = rows.filter(c => isDue(c)).sort((a, b) => a.nextFollowUp.localeCompare(b.nextFollowUp));
     const rest = rows.filter(c => !isDue(c)).sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
-    const counts = {}; all.forEach(c => { const k = cat(c); counts[k] = (counts[k] || 0) + 1; });
+    const counts = {}; all.forEach(c => { if (c.inbox) return; const k = cat(c); counts[k] = (counts[k] || 0) + 1; });
 
     const card = (c) => {
       const t = catInfo(c);
@@ -226,13 +227,17 @@
     root.innerHTML = `
       <div class="crm-top">
         <input class="crm-search" type="search" placeholder="🔍 Rechercher…" value="${e(query)}" oninput="CRM.search(this.value)">
-        <button class="crm-add crm-mic" onclick="VoiceCRM.open()" aria-label="Dicter une fiche">🎤</button><button class="crm-add" onclick="CRM.edit()">+ Contact</button>
+        <button class="crm-add crm-mic" onclick="VoiceCRM.open()" aria-label="Dicter une fiche">🎤</button><button class="crm-add crm-mic" onclick="CRM.shortcutSetup()" title="Raccourci iPhone « Envoyer à Motherboard »">📲</button><button class="crm-add" onclick="CRM.edit()">+ Contact</button>
       </div>
       <div class="crm-stats"><div><b>${st.d.calls}</b><span>appels<br>aujourd'hui</span></div><div><b>${st.d.conv}</b><span>conversa-<br>tions</span></div><div><b>${st.d.rdv}</b><span>RDV<br>fixés</span></div><div class="wk"><b>${st.w.calls} · ${st.w.conv} · ${st.w.rdv}</b><span>cette semaine<br>appels · conv. · RDV</span></div></div>
       <div class="crm-filters crm-smart">${SMART.map(([k, l, f]) => `<button class="${smart === k ? 'on' : ''}" onclick="CRM.smart('${k}')">${l} ${k === 'tous' ? '' : smCount(f)}</button>`).join('')}</div>
       ${callable.length && smart !== 'dnc' ? `<button class="crm-dial" onclick="CRM.dial()">▶ Appeler cette liste (${callable.length})</button>` : ''}
       <div class="crm-filters">${FILTERS.map(([k, l]) => `<button class="${filter === k ? 'on' : ''}" onclick="CRM.filter('${k}')">${l}${k === 'tous' ? ` ${all.length}` : counts[k] ? ` ${counts[k]}` : ''}</button>`).join('')}</div>
       ${syncBanner()}
+      ${inbox.length ? `<div class="crm-section crm-inbox-h">📥 À classer (${inbox.length}) <span>reçus de ton iPhone</span></div>${inbox.map(c => `<div class="crm-card crm-inbox" onclick="CRM.open('${c.id}')">
+        <div class="crm-av" style="background:#607d8b">${e(initials(c.name))}</div>
+        <div class="crm-main"><div class="crm-name">${e(c.name)}</div><div class="crm-sub2">${c.phone ? '📞 ' + e(c.phone) : ''}${c.email ? ' · ' + e(c.email) : ''}</div>
+          <div class="chips crm-inbox-b">${[['acheteur', '🛒 Acheteur'], ['vendeur', '🏷️ Vendeur'], ['proprio', '🏠 Proprio']].map(([k, l]) => `<button onclick="event.stopPropagation();CRM.classify('${c.id}','${k}')">${l}</button>`).join('')}<button class="crm-inbox-x" onclick="event.stopPropagation();CRM.classify('${c.id}','')">Ignorer</button></div></div></div>`).join('')}` : ''}
       ${!all.length ? `<div class="crm-empty"><b>Aucun contact pour l'instant.</b><br>Ajoutez votre premier client avec « + Contact ».<br><button class="cta-btn" onclick="CRM.edit()">+ Ajouter un contact</button></div>` : ''}
       ${due.length ? `<div class="crm-section">À relancer (${due.length})</div>${due.map(card).join('')}` : ''}
       ${rest.length ? `<div class="crm-section">${due.length ? 'Autres contacts' : 'Contacts'} (${rest.length})</div>${rest.map(card).join('')}` : ''}
@@ -306,6 +311,7 @@
 
     sh.innerHTML = `
       <div class="sheet-head"><button type="button" class="sheet-x" onclick="CRM.close()">✕</button><b>${e(dname(c))}</b><span class="sheet-acts"><button type="button" class="sheet-trash" onclick="CRM.askDelete(true)" title="Supprimer ce contact" aria-label="Supprimer ce contact">🗑</button><button class="sheet-save" onclick="CRM.edit('${c.id}')">Modifier</button></span></div>
+      ${window.__mbNew === c.id && c.phone ? `<button class="crm-newphone" onclick="window.__mbNew=null;CRM.vcard('${c.id}');this.remove()">📲 Ajouter ${e(c.name)} à mon iPhone</button>` : ''}
       <div class="crm-hero"><div class="crm-av big" style="background:${t.color}">${e(initials(c.owner && c.type === 'proprio' ? c.owner : c.name))}</div>
         <div><span class="crm-badge" style="color:${t.color};border-color:${t.color}">${t.label}</span>${c.phone ? `<div class="crm-phone">${e(c.phone)}</div>` : ''}</div></div>
       <div class="crm-actions">
@@ -458,6 +464,38 @@
     dueIds() { return list().filter(c => !c.dnc && isDue(c) && c.phone).map(c => c.id); },
     _out: OUT,
     _stats: () => stats(),
+    classify(id, k) {
+      const c = contacts[id]; if (!c) return;
+      if (!k) { c.deleted = true; delete c.inbox; save(c); if (typeof toast === 'function') toast(`« ${e(c.name)} » ignoré <button onclick="CRM.unignore('${id}')">Annuler</button>`); return; }
+      c.type = k; delete c.inbox; c.stage = (TYPES_C[k] || TYPES_C.acheteur).stages[0]; save(c);
+      if (typeof toast === 'function') toast(`✓ ${e(c.name)} classé : ${(TYPES_C[k] || {}).label || k}`);
+    },
+    unignore(id) { const c = contacts[id]; if (!c) return; c.deleted = false; c.inbox = true; save(c); document.querySelectorAll('.mb-toast').forEach(x => x.remove()); },
+    dueOn(day) { const t = todayStr(); return list().filter(c => !c.inbox && c.nextFollowUp && (day === t ? c.nextFollowUp <= day : c.nextFollowUp === day)).length; },
+    moveFollowUp(id, day) { const c = contacts[id]; if (!c || c.deleted || !c.nextFollowUp || c.nextFollowUp === day) return; c.nextFollowUp = day; save(c); },
+    async shortcutSetup() {
+      let m = document.getElementById('sc-modal');
+      if (!m) { m = document.createElement('div'); m.id = 'sc-modal'; m.className = 'modal'; m.innerHTML = '<div class="sheet"></div>'; document.body.appendChild(m); m.addEventListener('click', ev => { if (ev.target === m) m.classList.remove('open'); }); }
+      const box = m.querySelector('.sheet'); m.classList.add('open');
+      box.innerHTML = '<div class="sheet-head"><button class="sheet-x" onclick="document.getElementById(\'sc-modal\').classList.remove(\'open\')">✕</button><b>Raccourci iPhone</b><span></span></div><div class="crm-muted">Chargement…</div>';
+      let k = null; try { const r = await fetch('/api/inbox', { credentials: 'same-origin' }); if (r.ok) k = await r.json(); } catch (x) {}
+      const cp = (v) => `<div class="sc-copy"><code>${e(v)}</code><button onclick="navigator.clipboard.writeText(${JSON.stringify(v).replace(/"/g, '&quot;')});this.textContent='✓ Copié'">Copier</button></div>`;
+      box.innerHTML = `<div class="sheet-head"><button class="sheet-x" onclick="document.getElementById('sc-modal').classList.remove('open')">✕</button><b>📲 Raccourci « Envoyer à Motherboard »</b><span></span></div>
+        ${!k ? '<div class="tx-warn">Connecte-toi à Google (en haut à droite) pour obtenir ta clé.</div>' : ''}
+        <div class="sc-intro">Une fois créé, ouvre n'importe quelle fiche dans Contacts (ou touche le nom en haut d'un texto) → <b>Partager le contact</b> → <b>Envoyer à Motherboard</b>. Le contact arrive dans « 📥 À classer ».</div>
+        <div class="f-label">À faire une seule fois, sur ton iPhone (2 minutes)</div>
+        <ol class="sc-steps">
+          <li>Ouvre l'app <b>Raccourcis</b> → <b>+</b> (nouveau raccourci). Nomme-le <b>Envoyer à Motherboard</b>.</li>
+          <li>Touche <b>ⓘ</b> (en bas) → active <b>Afficher dans la feuille de partage</b>. En haut du raccourci, règle « Reçoit » sur <b>Contacts</b> seulement.</li>
+          <li>Ajoute l'action <b>Obtenir le contenu de l'URL</b>. URL :${k ? cp(k.url) : ''}</li>
+          <li>Dans cette action, touche <b>Afficher plus</b> : Méthode <b>POST</b> · En-têtes → <b>Ajouter</b> : clé <code>x-mb-key</code>, valeur :${k ? cp(k.key) : ''}Corps de requête : <b>Fichier</b> → choisis <b>Entrée du raccourci</b>.</li>
+          <li>Ajoute l'action <b>Afficher la notification</b> avec le texte <b>Contenu de l'URL</b> (ça t'affiche « ✅ Marie Tremblay ajoutée »).</li>
+          <li>Teste : Contacts → une fiche → <b>Partager le contact</b> → <b>Envoyer à Motherboard</b>.</li>
+        </ol>
+        <div class="f-label">Saisie éclair (dictée → fiche → contact iPhone)</div>
+        <div class="sc-intro">Garde ce lien sur ton écran d'accueil ou sur le bouton Action : il ouvre directement la dictée d'un nouveau contact.${cp(location.origin + '/?ajout=contact')}Dans Raccourcis : action <b>Ouvrir les URL</b> avec ce lien, puis « Ajouter à l'écran d'accueil » ou Réglages → Bouton Action → Raccourci.</div>
+        <div class="crm-muted" style="margin:10px 0 16px">Garde la clé pour toi : quiconque l'a peut ajouter des contacts dans « À classer ».</div>`;
+    },
     callPlan, setCallPlan, callDay, callSlot,
     // une seule fois : les rappels de prospection déjà prévus un jour non permis passent au prochain jour d'appels
     _migrateCal(evs, move) {

@@ -674,7 +674,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span id="app-ver" style="opacity:.6">v16.0</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span id="app-ver" style="opacity:.6">v16.1</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -709,7 +709,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v16.0';
+    const APP_VERSION = 'v16.1';
     try { const av = document.getElementById('app-ver'); if (av) av.textContent = APP_VERSION; } catch (x) {}
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
@@ -1104,7 +1104,8 @@
 
       days.forEach((d, i) => {
         const cls = (sameDay(d, today) ? ' is-now' : '') + (sameDay(d, selectedDate) ? ' selected' : '');
-        head += `<div class="tg-dayhead${cls}" style="width:${dayW}px" onclick="selectDate(new Date(${d.getTime()}))"><span>${JOURS[i]}</span><b>${d.getDate()}</b></div>`;
+        const nSu = window.CRM && CRM.dueOn ? CRM.dueOn(ymd(d)) : 0;
+        head += `<div class="tg-dayhead${cls}" style="width:${dayW}px" onclick="selectDate(new Date(${d.getTime()}))"><span>${JOURS[i]}</span><b>${d.getDate()}</b>${nSu ? `<i class="tg-su" title="Suivis à faire" onclick="event.stopPropagation();goJour(${d.getTime()})">🔔 ${nSu}</i>` : ''}</div>`;
         const evs = eventsOn(d);
         const ad = evs.filter(e => e.allDay);
         if (ad.length) hasAllDay = true;
@@ -1130,6 +1131,7 @@
       else scrollWeekToSelected(true);
     }
 
+    function goJour(t) { const b = document.querySelector('.tab-btn[onclick*="\'jour\'"]'); if (b) showTab({ target: b }, 'jour'); selectDate(new Date(t)); }
     function setWeekDays(n) { store('mb_wdays', n); renderSemaine(); }
     function sizeWeek() {
       const wrap = document.querySelector('#semaine .tg-wrap');
@@ -1416,6 +1418,8 @@
       e.start = ns; e.end = ne; renderAll(); saveCache();
       const ok = await patchEvent(e, body).catch(() => false);
       if (!ok) { e.start = os; e.end = oe; e.allDay = oad; renderAll(); saveCache(); toast(`Impossible de déplacer « ${esc(e.title)} » (Google a refusé).`); return false; }
+      // un rappel « 📱 Rappeler » déplacé : la date de suivi du contact suit
+      if (e.contactId && window.CRM && CRM.moveFollowUp && (e.type === 'suivi' || /Rappeler/.test(e.title || ''))) CRM.moveFollowUp(e.contactId, ymd(ns));
       if (!opts.silent) {
         window._lastMove = { key: e.key, os, oe, oad };
         const when = ns.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' }) + (e.allDay ? '' : ' à ' + hhmm(ns));

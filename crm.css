@@ -391,3 +391,21 @@ body.pr-dossier-open .fab, body.pr-dossier-open .fab-mic { display: none !import
 .tx-jour { margin: 6px 0 10px; }
 .tx-jour .tx-ms { cursor: pointer; }
 .tx-sheet .f-row input { font-size: 16px; padding: 9px 10px; border: 1px solid var(--border-light); border-radius: 6px; font-family: inherit; background: var(--white); color: var(--text-primary); }
+
+.tx-ms.task { border-left-color: #f4511e; }
+.tx-ms.task .tx-cd { color: #f4511e; }
+/* v16.1 — À classer, raccourci iPhone, suivis en vue Semaine */
+.crm-inbox-h { display: flex; align-items: baseline; gap: 8px; }
+.crm-inbox-h span { font-weight: 500; text-transform: none; color: var(--text-secondary); }
+.crm-inbox { border-left: 4px solid #607d8b; }
+.crm-inbox-b { margin-top: 6px; }
+.crm-inbox-b button { padding: 5px 10px !important; font-size: 12.5px !important; }
+.crm-inbox-x { color: var(--text-secondary); }
+.crm-newphone { display: block; width: 100%; margin: 6px 0 10px; padding: 11px; border-radius: 12px; border: 0; background: #0b8043; color: #fff; font-weight: 800; font-size: 15px; cursor: pointer; }
+.sc-intro { font-size: 13.5px; line-height: 1.45; margin-top: 6px; }
+.sc-steps { padding-left: 20px; font-size: 13.5px; line-height: 1.5; }
+.sc-steps li { margin-bottom: 8px; }
+.sc-copy { display: flex; gap: 6px; align-items: center; margin: 5px 0 6px; }
+.sc-copy code { flex: 1; font-size: 12px; background: var(--light-bg, #f4f4f4); padding: 6px 8px; border-radius: 6px; word-break: break-all; }
+.sc-copy button { border: 1px solid var(--border-light); background: var(--white); border-radius: 6px; padding: 6px 10px; cursor: pointer; font-weight: 700; white-space: nowrap; }
+.tg-su { display: block; font-style: normal; font-size: 10.5px; font-weight: 800; color: #f4511e; cursor: pointer; margin-top: 1px; }
