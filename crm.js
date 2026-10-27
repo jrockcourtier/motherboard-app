@@ -305,6 +305,7 @@
       [c.type === 'proprio' ? 'Prix demandé' : 'Prix espéré', c.price ? e(c.price) : ''],
       ['Commission', c.commission ? e(c.commission) + (String(c.commission).includes('%') ? '' : ' %') : ''],
       ['Source', c.source ? e(c.source) : ''],
+      ['🎉 Transaction', c.closingDate ? fmtDate(c.closingDate) + ' · rappel chaque année' : ''],
       ['Premier contact', c.firstContact ? fmtDate(c.firstContact) : ''],
       ['Dernier contact', c.lastContact ? `${fmtDate(c.lastContact)} (${ago(c.lastContact)})` : '']
     ].filter(x => x[1]);
@@ -372,6 +373,7 @@
         ${c.type === 'vendeur' ? fld('price', 'Prix espéré / minimum', 'ex. 625 000 $') : ''}
         ${c.type === 'proprio' ? fld('owner', 'Nom du propriétaire', 'ex. Mathieu') + fld('price', 'Prix demandé (DuProprio)', 'ex. 625 000 $') + fld('dpUrl', 'Lien DuProprio', 'https://duproprio.com/…', 'url', 'inputmode="url"') + fld('oneNote', 'Lien de la page OneNote', 'OneNote → clic droit sur la page → Copier le lien', 'url', 'inputmode="url"') : ''}
         ${isPro(c) ? '' : fld('commission', 'Commission (%)', 'ex. 4', 'text', 'inputmode="decimal"')}
+        ${['acheteur', 'vendeur', 'client'].includes(c.type) ? fld('closingDate', '🎉 Date de la transaction (notaire) — rappel chaque année', '', 'date') : ''}
         ${fld('source', 'Source', 'ex. Centris, référence, appel proprio, Instagram')}
         <div class="f-row"><label>Premier contact<input type="date" name="firstContact" value="${e(c.firstContact || '')}"></label><label>Prochain suivi<input type="date" name="nextFollowUp" value="${e(c.nextFollowUp || '')}"></label></div>
         ${contacts[c.id] ? '' : `<label class="f-block">Première note<textarea name="firstNote" rows="3" placeholder="Ce qu'il cherche, sa situation… (🎤 dictée du clavier)"></textarea></label>`}
@@ -381,9 +383,47 @@
   }
   function collectForm() {
     const f = $('#crm-form'); if (!f) return;
-    ['name', 'company', 'stage', 'phone', 'email', 'address', 'budget', 'neighborhoods', 'price', 'owner', 'dpUrl', 'oneNote', 'commission', 'source', 'firstContact', 'nextFollowUp', 'firstNote'].forEach(k => {
+    ['name', 'company', 'closingDate', 'stage', 'phone', 'email', 'address', 'budget', 'neighborhoods', 'price', 'owner', 'dpUrl', 'oneNote', 'commission', 'source', 'firstContact', 'nextFollowUp', 'firstNote'].forEach(k => {
       if (f[k]) editing[k] = f[k].value.trim();
     });
+  }
+
+  // ---------- anniversaires de transaction ----------
+  const annivKind = (c) => c.type === 'vendeur' ? 'vente' : c.type === 'acheteur' ? 'achat' : 'transaction';
+  function annivMsg(c, years) {
+    let nm = String(c.owner || c.name || ''); for (let i = 0; i < 4; i++) nm = nm.replace(/^(pot|client|cliente|vendeur|vendeuse|acheteur|acheteuse|ancien|ancienne)[\s-]+/i, '');
+    const first = nm.split(/[\s-]+/)[0] || '';
+    return `Bonjour ${first} ! Déjà ${years} an${years > 1 ? 's' : ''} depuis ${c.type === 'vendeur' ? 'la vente de ta propriété' : 'l\'achat de ta propriété'} 🎉 J'espère que tout va bien ! Si jamais tu as besoin de quoi que ce soit en immobilier, je suis là. Julien`;
+  }
+  function annivToday(day) {
+    const md = day.slice(5);
+    return list().filter(c => c.closingDate && c.closingDate.slice(5) === md && c.closingDate.slice(0, 4) < day.slice(0, 4))
+      .map(c => ({ c, years: +day.slice(0, 4) - +c.closingDate.slice(0, 4) }));
+  }
+  async function gcalReq(method, path, body) {
+    if (typeof accessToken === 'undefined') return null;
+    if (!accessToken && typeof getServerToken === 'function') await getServerToken();
+    if (!accessToken) return null;
+    const go = () => fetch('https://www.googleapis.com/calendar/v3/' + path, { method, headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    let r = await go(); if (r.status === 401 && typeof getServerToken === 'function' && await getServerToken()) r = await go();
+    if (!r.ok) return null; return r.status === 204 ? {} : r.json().catch(() => ({}));
+  }
+  async function syncAnniv(c) {
+    try {
+      const old = c.annivEv;
+      if (old) await gcalReq('DELETE', `calendars/${encodeURIComponent(old.cal)}/events/${encodeURIComponent(old.id)}`);
+      if (!c.closingDate || c.deleted) { if (old) { delete c.annivEv; save(c); } return; }
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const st = new Date(c.closingDate + 'T10:00:00'); st.setFullYear(st.getFullYear() + 1);
+      const en = new Date(st.getTime() + 15 * 60000);
+      let calId = 'primary'; try { const last = JSON.parse(localStorage.getItem('mb_lastcal')); if (last) calId = last; } catch (x) {}
+      const body = { summary: `🎉 Anniversaire de ${annivKind(c)} — ${c.name} (depuis ${c.closingDate.slice(0, 4)})`,
+        description: [`Transaction le ${fmtDate(c.closingDate)}.`, c.phone ? 'Tél. : ' + c.phone : '', 'Idée de texto : ' + annivMsg(c, 1).replace(/1 an /, 'X an(s) '), 'Créé par Motherboard'].filter(Boolean).join('\n'),
+        colorId: '5', start: { dateTime: st.toISOString(), timeZone: tz }, end: { dateTime: en.toISOString(), timeZone: tz }, recurrence: ['RRULE:FREQ=YEARLY'],
+        extendedProperties: { private: { mbType: 'tache', mbContact: c.id, mbAnniv: '1' } }, reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] } };
+      const r = await gcalReq('POST', `calendars/${encodeURIComponent(calId)}/events`, body);
+      if (r && r.id) { c.annivEv = { cal: calId, id: r.id }; save(c); if (typeof toast === 'function') toast(`🎉 Rappel annuel ajouté à ton agenda (${new Date(c.closingDate + 'T12:00:00').toLocaleDateString('fr-CA', { day: 'numeric', month: 'long' })}, 10 h)`); }
+    } catch (x) {}
   }
 
   // ---------- Jour : suivis dus ----------
@@ -391,7 +431,20 @@
     const box = document.getElementById('jour');
     if (!box) return;
     const old = box.querySelector('.crm-due-box'); if (old) old.remove();
+    const oldA = box.querySelector('.crm-anniv-box'); if (oldA) oldA.remove();
     const day = typeof selectedDate !== 'undefined' ? ymdC(selectedDate) : todayStr();
+    const an = annivToday(day);
+    if (an.length) {
+      const ea = document.createElement('div'); ea.className = 'crm-anniv-box';
+      ea.innerHTML = `<div class="section-title">🎉 Anniversaires de transaction (${an.length})</div>` + an.map(({ c, years }) => {
+        const sms = c.phone ? `sms:${String(c.phone).replace(/[^\d+]/g, '')}&body=${encodeURIComponent(annivMsg(c, years))}` : '';
+        return `<div class="crm-card" onclick="CRM.open('${c.id}')"><div class="crm-av" style="background:#f6bf26">🎉</div>
+          <div class="crm-main"><div class="crm-name">${e(c.name)}</div><div class="crm-sub">${years} an${years > 1 ? 's' : ''} depuis ${annivKind(c) === 'vente' ? 'la vente' : annivKind(c) === 'achat' ? "l'achat" : 'la transaction'} (${fmtDate(c.closingDate)})</div></div>
+          <div class="crm-right" style="flex-direction:row;align-items:center">${sms ? `<a class="crm-call" href="${sms}" onclick="event.stopPropagation()" title="Texto déjà rédigé">💬</a>` : ''}${c.phone ? `<a class="crm-call" href="${telHref(c.phone)}" onclick="event.stopPropagation()">📞</a>` : ''}</div></div>`;
+      }).join('');
+      const t0 = box.querySelector('.section-title');
+      if (t0 && t0.nextSibling) box.insertBefore(ea, t0.nextSibling); else box.appendChild(ea);
+    }
     const isToday = day === todayStr();
     const due = list().filter(c => c.nextFollowUp && (isToday ? c.nextFollowUp <= day : c.nextFollowUp === day))
       .sort((a, b) => a.nextFollowUp.localeCompare(b.nextFollowUp));
@@ -558,8 +611,12 @@
       if (!editing.name) { $('#crm-msg').textContent = 'Le nom est obligatoire.'; return; }
       const c = editing; const note = c.firstNote; delete c.firstNote; delete c.inbox;
       if (note) { c.notes = c.notes || []; c.notes.push({ id: uuid(), at: new Date().toISOString(), text: note }); c.lastContact = todayStr(); }
+      const prevClose = (contacts[c.id] || {}).closingDate || '';
       editing = null; openId = c.id; save(c); renderSheet();
+      if ((c.closingDate || '') !== prevClose || (c.closingDate && !c.annivEv)) syncAnniv(c);
     },
+    setClosing(id, d) { const c = contacts[id]; if (!c || c.deleted || !d || c.closingDate) return; c.closingDate = d; save(c); syncAnniv(c); },
+    _syncAnniv: (id) => contacts[id] && syncAnniv(contacts[id]),
     stage(s) { const c = contacts[openId]; if (!c) return; c.stage = s; save(c); },
     followUp(d) { const c = contacts[openId]; if (!c) return; c.nextFollowUp = d || ''; save(c); },
     touch() { const c = contacts[openId]; if (!c) return; c.lastContact = todayStr(); save(c); },

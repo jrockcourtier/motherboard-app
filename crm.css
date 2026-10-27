@@ -413,3 +413,5 @@ body.pr-dossier-open .fab, body.pr-dossier-open .fab-mic { display: none !import
 .sc-key { border: 2px solid #0b8043; border-radius: 12px; padding: 4px 10px 10px; margin: 8px 0; background: rgba(11,128,67,.05); }
 
 .crm-inbox-b { gap: 8px !important; padding-right: 64px; }
+
+.crm-anniv-box .crm-card { border-left: 4px solid #f6bf26; }

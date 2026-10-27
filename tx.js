@@ -396,6 +396,7 @@
     d.status = d.status || 'active'; d.evv = 3;
     save(d);
     if (file) uploadPdf(d, file);
+    if (d.contactId && d.deedAt && window.CRM && CRM.setClosing) CRM.setClosing(d.contactId, d.deedAt);
     // fiche client : passe à l'étape « Conditions »
     if (d.contactId && window.CRM) { const c = CRM._all()[d.contactId]; if (c && !c.deleted) { const st = d.kind === 'vente' ? 'Offre acceptée' : 'Conditions'; if (c.stage !== st && !['Notaire', 'Client passé', 'Vendu / Notaire'].includes(c.stage)) { c.stage = st; } c.notes = c.notes || []; c.notes.push({ id: uuid(), at: new Date().toISOString(), text: `🤝 Promesse d'achat acceptée le ${fmtD(d.acceptedAt, true)} — ${d.address || ''}` }); CRM.upsert(c); } }
     close();
@@ -494,6 +495,7 @@
     if (++migTries > 40) return clearInterval(mig);
     if (typeof accessToken === 'undefined' || !accessToken) return;
     clearInterval(mig);
+    list().forEach(t => { if (t.contactId && t.deedAt && window.CRM && CRM.setClosing) CRM.setClosing(t.contactId, t.deedAt); });
     const todo = list().filter(t => t.status !== 'fermee' && (t.evv || 0) < 3 && t.events && Object.keys(t.events).length);
     for (const t of todo) { t.evv = 3; try { await syncCalendar(t); } catch (x) {} }
     if (todo.length) toastMsg(`📅 Rappels de ${todo.length} dossier(s) replacés entre 9 h et 17 h, sans chevaucher tes rendez-vous`, 7000);
