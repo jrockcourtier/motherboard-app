@@ -674,7 +674,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span id="app-ver" style="opacity:.6">v15.16</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span id="app-ver" style="opacity:.6">v16.0</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -709,7 +709,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v15.16';
+    const APP_VERSION = 'v16.0';
     try { const av = document.getElementById('app-ver'); if (av) av.textContent = APP_VERSION; } catch (x) {}
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
@@ -953,6 +953,7 @@
       document.body.dataset.tab = name;
       if (name === 'semaine') renderSemaine();
       if (name === 'prospection' && window.Prospect) Prospect.render();
+      if (name === 'transactions' && window.TX) TX.render();
     }
 
     // ================== RENDU ==================
@@ -1174,20 +1175,8 @@
       document.getElementById('mois').innerHTML = html;
     }
 
-    // ---------- Transactions & Contacts (données démo, en attendant Supabase) ----------
-    function renderTransactionsView() {
-      let html = `<div class="section-title">TRANSACTIONS ACTIVES (démo)</div>`;
-      const transactions = [
-        { adresse: '123 Avenue Mont-Royal - VENDU', prix: '450 000 $', client: 'Marie Dupont', status: 'complete', label: 'Complétée' },
-        { adresse: '456 Rue Saint-Laurent - EN COURS', prix: '525 000 $', client: 'Jean Smith', status: 'active', label: 'En inspection' },
-        { adresse: '789 Boulevard Décarie - NOUVEAU', prix: '395 000 $', client: 'Sophie Roy', status: 'draft', label: 'Offre soumise' },
-        { adresse: '321 Chemin Côte-Sainte-Catherine', prix: '650 000 $', client: 'Pierre Levesque', status: 'draft', label: 'Visite programmée' }
-      ];
-      transactions.forEach(t => {
-        html += `<div class="transaction-card"><div class="contact-name">${t.adresse}</div><div class="contact-info">Prix: ${t.prix} | Client: ${t.client}</div><span class="transaction-status status-${t.status}">${t.status === 'complete' ? '✓ ' : ''}${t.label}</span></div>`;
-      });
-      document.getElementById('transactions').innerHTML = html;
-    }
+    // ---------- Transactions : voir tx.js ----------
+    function renderTransactionsView() { if (window.TX) TX.render(); }
 
     function renderContactsView() {} // remplacé par crm.js
 
@@ -1794,6 +1783,7 @@
   <link rel="stylesheet" href="crm.css">
   <script src="crm.js"></script>
   <script src="prospect.js"></script>
+  <script src="tx.js"></script>
   <script src="voice.js"></script>
   <script src="voicecrm.js"></script>
 </body>
