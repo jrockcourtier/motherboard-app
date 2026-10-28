@@ -39,7 +39,10 @@
   const expenses = (scope) => Object.values(E).filter(x => !x.deleted && x.type !== 'settings' && (!scope || x.scope === scope));
   const incl = (scope) => expenses(scope).filter(x => x.include !== false);
   const DEF_PAID = [{ label: 'Saisie Revenu Québec sur mes commissions', pct: 30, on: true }, { label: "Paiements faits à l'Agence du revenu du Canada", amount: 0, on: true }];
-  const DEF_DEBTS = [{ label: 'Carte de crédit', balance: 5000, limit: 5000, monthly: 0, on: true }, { label: 'Marge de crédit', balance: 5000, limit: 5000, monthly: 0, on: true }];
+  const DEF_DEBTS = [{ label: 'Carte de crédit', balance: 5000, limit: 5000, rate: 14.9, monthly: 0, on: true }, { label: 'Marge de crédit', balance: 5000, limit: 5000, rate: 11.95, monthly: 0, on: true }];
+  // paiement entré à la main, sinon intérêts estimés : solde × taux annuel ÷ 12
+  const debtM = (d) => +d.monthly ? +d.monthly : (+d.balance || 0) * (+d.rate || 0) / 1200;
+  const debtEst = (d) => !+d.monthly && +d.rate > 0;
   const paidOf = (S) => S.paid || JSON.parse(JSON.stringify(DEF_PAID));
   const debtsOf = (S) => S.debts || JSON.parse(JSON.stringify(DEF_DEBTS));
   const sumM = (arr) => arr.reduce((a, x) => a + (+x.monthly || 0), 0);
@@ -76,8 +79,8 @@
     const lstActive = L.filter(x => ['active', 'a_venir'].includes(LST._status(x)));
     const paid = paidOf(S).filter(p => p.on).map(p => Object.assign({}, p, { amt: p.pct != null && p.pct !== '' ? rev * p.pct / 100 : +p.amount || 0 })).filter(p => p.amt > 0);
     const paidTot = paid.reduce((a, p) => a + p.amt, 0), left = net - paidTot;
-    const debts = debtsOf(S).filter(d => d.on && (+d.balance || +d.monthly)), debtsM = debts.reduce((a, d) => a + (+d.monthly || 0), 0);
-    return { paid, paidTot, left, debts, debtsM, y, t0, done, byMonth, rev, elapsedM, bizM, persM, bizYTD, net, months, winStart, winEnd, possible: possibleAll, posAmt, ret, retPct, lstActive, S, curM: now.getMonth() };
+    const debts = debtsOf(S).filter(d => d.on && (+d.balance || +d.monthly)), debtsM = debts.reduce((a, d) => a + debtM(d), 0), debtsEst = debts.some(debtEst);
+    return { paid, paidTot, left, debts, debtsM, debtsEst, y, t0, done, byMonth, rev, elapsedM, bizM, persM, bizYTD, net, months, winStart, winEnd, possible: possibleAll, posAmt, ret, retPct, lstActive, S, curM: now.getMonth() };
   }
 
   // ---------- écran de préparation ----------
@@ -110,9 +113,9 @@
       ${paidOf(S).map((p, i) => { const isPct = p.pct != null && p.pct !== ''; return `<div class="rpt-erow${p.on ? '' : ' off'}"><input type="checkbox" ${p.on ? 'checked' : ''} onchange="RPT.pf(${i},'on',this.checked)"><input class="rpt-lbl" value="${e(p.label)}" onchange="RPT.pf(${i},'label',this.value)"><input class="rpt-amt" inputmode="decimal" value="${isPct ? String(p.pct).replace('.', ',') : (+p.amount || 0).toFixed(2).replace('.', ',')}" onchange="RPT.pf(${i},'${isPct ? 'pct' : 'amount'}',this.value)"><span class="rpt-per">${isPct ? `% = ${money0(F.rev * p.pct / 100)}` : '$'}</span><button class="tx-cdel" onclick="RPT.pdel(${i})">✕</button></div>`; }).join('')}
       <div class="chips"><button onclick="RPT.padd(0)">+ Paiement ($)</button><button onclick="RPT.padd(1)">+ Retenue (% des commissions)</button></div>
       <div class="f-label">Dettes</div>
-      ${debtsOf(S).map((d, i) => `<div class="rpt-erow rpt-debt${d.on ? '' : ' off'}"><input type="checkbox" ${d.on ? 'checked' : ''} onchange="RPT.df(${i},'on',this.checked)"><input class="rpt-lbl" value="${e(d.label)}" onchange="RPT.df(${i},'label',this.value)"><label>solde<input class="rpt-amt" inputmode="decimal" value="${+d.balance || 0}" onchange="RPT.df(${i},'balance',this.value)"></label><label>limite<input class="rpt-amt" inputmode="decimal" value="${+d.limit || 0}" onchange="RPT.df(${i},'limit',this.value)"></label><label>paiement / mois<input class="rpt-amt" inputmode="decimal" value="${+d.monthly || 0}" onchange="RPT.df(${i},'monthly',this.value)"></label><button class="tx-cdel" onclick="RPT.ddel(${i})">✕</button></div>`).join('')}
+      ${debtsOf(S).map((d, i) => `<div class="rpt-erow rpt-debt${d.on ? '' : ' off'}"><input type="checkbox" ${d.on ? 'checked' : ''} onchange="RPT.df(${i},'on',this.checked)"><input class="rpt-lbl" value="${e(d.label)}" onchange="RPT.df(${i},'label',this.value)"><label>solde<input class="rpt-amt" inputmode="decimal" value="${+d.balance || 0}" onchange="RPT.df(${i},'balance',this.value)"></label><label>limite<input class="rpt-amt" inputmode="decimal" value="${+d.limit || 0}" onchange="RPT.df(${i},'limit',this.value)"></label><label>taux %<input class="rpt-amt" inputmode="decimal" value="${String(+d.rate || 0).replace('.', ',')}" onchange="RPT.df(${i},'rate',this.value)"></label><label>paiement / mois<input class="rpt-amt" inputmode="decimal" value="${+d.monthly || ''}" placeholder="${debtEst(d) ? 'estimé ' + Math.round(debtM(d)) : '0'}" onchange="RPT.df(${i},'monthly',this.value)"></label><button class="tx-cdel" onclick="RPT.ddel(${i})">✕</button></div>`).join('')}
       <div class="chips"><button onclick="RPT.dadd()">+ Dette</button></div>
-      <div class="f-hint">Le paiement mensuel des dettes compte dans la prévision des 3 mois.</div>
+      <div class="f-hint">Laisse « paiement / mois » vide pour utiliser les intérêts estimés (solde × taux ÷ 12). Ce montant compte dans la prévision des 3 mois.</div>
       <div class="f-label">Retenues sur mes commissions à venir (dans la prévision)</div>
       ${(S.retenues || []).map((r, i) => `<div class="rpt-erow${r.on ? '' : ' off'}"><input type="checkbox" ${r.on ? 'checked' : ''} onchange="RPT.rf(${i},'on',this.checked)"><input class="rpt-lbl" value="${e(r.label)}" onchange="RPT.rf(${i},'label',this.value)"><input class="rpt-amt" inputmode="decimal" value="${r.pct}" onchange="RPT.rf(${i},'pct',this.value)"><span class="rpt-per">%</span><button class="tx-cdel" onclick="RPT.rdel(${i})">✕</button></div>`).join('')}
       <div class="chips"><button onclick="RPT.radd()">+ Retenue</button></div>
@@ -132,7 +135,7 @@
   function pf(i, k, v) { const S = settings(); S.paid = paidOf(S); S.paid[i][k] = k === 'pct' || k === 'amount' ? num(v) : v; save(S); openPrep(); }
   function pdel(i) { const S = settings(); S.paid = paidOf(S); S.paid.splice(i, 1); save(S); openPrep(); }
   function padd(pct) { const S = settings(); S.paid = paidOf(S).concat([pct ? { label: 'Retenue', pct: 0, on: true } : { label: 'Paiement', amount: 0, on: true }]); save(S); openPrep(); }
-  function df(i, k, v) { const S = settings(); S.debts = debtsOf(S); S.debts[i][k] = ['balance', 'limit', 'monthly'].includes(k) ? num(v) : v; save(S); openPrep(); }
+  function df(i, k, v) { const S = settings(); S.debts = debtsOf(S); S.debts[i][k] = ['balance', 'limit', 'monthly', 'rate'].includes(k) ? num(v) : v; save(S); openPrep(); }
   function ddel(i) { const S = settings(); S.debts = debtsOf(S); S.debts.splice(i, 1); save(S); openPrep(); }
   function dadd() { const S = settings(); S.debts = debtsOf(S).concat([{ label: 'Dette', balance: 0, limit: 0, monthly: 0, on: true }]); save(S); openPrep(); }
   function radd() { const S = settings(); S.retenues = (S.retenues || []).concat([{ label: 'Retenue', pct: 0, on: true }]); save(S); openPrep(); }
@@ -199,9 +202,9 @@
       </tbody></table>` : ''}
 
       ${F.debts.length ? `${H('Dettes en cours')}
-      <table class="rp-t"><thead><tr><th>Dette</th><th class="n">Solde</th><th class="n">Limite</th><th class="n">Paiement mensuel</th></tr></thead><tbody>
-        ${F.debts.map(d => `<tr><td>${e(d.label)}${+d.limit && +d.balance >= +d.limit ? ' <small>(au maximum)</small>' : ''}</td><td class="n">${money(+d.balance)}</td><td class="n">${+d.limit ? money(+d.limit) : '—'}</td><td class="n">${+d.monthly ? money(+d.monthly) : '—'}</td></tr>`).join('')}
-        <tr class="tot"><td><b>Total</b></td><td class="n"><b>${money(F.debts.reduce((a, d) => a + (+d.balance || 0), 0))}</b></td><td></td><td class="n"><b>${F.debtsM ? money(F.debtsM) : '—'}</b></td></tr>
+      <table class="rp-t"><thead><tr><th>Dette</th><th class="n">Solde</th><th class="n">Limite</th><th class="n">Taux annuel</th><th class="n">Frais mensuels${F.debtsEst ? ' (estimé)' : ''}</th></tr></thead><tbody>
+        ${F.debts.map(d => `<tr><td>${e(d.label)}${+d.limit && +d.balance >= +d.limit ? ' <small>(au maximum)</small>' : ''}</td><td class="n">${money(+d.balance)}</td><td class="n">${+d.limit ? money(+d.limit) : '—'}</td><td class="n">${+d.rate ? String(+d.rate).replace('.', ',') + ' %' : '—'}</td><td class="n">${debtM(d) ? money(debtM(d)) + (debtEst(d) ? ' <small>estimé</small>' : '') : '—'}</td></tr>`).join('')}
+        <tr class="tot"><td><b>Total</b></td><td class="n"><b>${money(F.debts.reduce((a, d) => a + (+d.balance || 0), 0))}</b></td><td></td><td></td><td class="n"><b>${F.debtsM ? money(F.debtsM) : '—'}</b></td></tr>
       </tbody></table>
       ${F.debts.some(d => +d.limit && +d.balance >= +d.limit) ? '<p class="rp-note">Mes crédits disponibles sont utilisés au maximum : je n\'ai plus de marge pour absorber les mois sans revenu.</p>' : ''}` : ''}
 
@@ -212,7 +215,7 @@
         ${F.ret.map(r => tr([`${e(r.label)} (${String(r.pct).replace('.', ',')} % des commissions)`, '0,00 $', '− ' + money(F.posAmt * r.pct / 100)])).join('')}
         ${tr([`Dépenses d'entreprise (3 × ${money(F.bizM)})`, '− ' + money(F.bizM * 3), '− ' + money(F.bizM * 3)])}
         ${F.persM ? tr([`Dépenses personnelles de base (3 × ${money(F.persM)})`, '− ' + money(F.persM * 3), '− ' + money(F.persM * 3)]) : ''}
-        ${F.debtsM ? tr([`Paiements sur dettes (3 × ${money(F.debtsM)})`, '− ' + money(F.debtsM * 3), '− ' + money(F.debtsM * 3)]) : ''}
+        ${F.debtsM ? tr([`${F.debtsEst ? "Frais d'intérêt estimés sur dettes" : 'Paiements sur dettes'} (3 × ${money(F.debtsM)})`, '− ' + money(F.debtsM * 3), '− ' + money(F.debtsM * 3)]) : ''}
         ${tr(['<b>Solde sur 3 mois</b>', `<b class="${s1 < 0 ? 'neg' : ''}">${money(s1)}</b>`, `<b class="${s2 < 0 ? 'neg' : ''}">${money(s2)}</b>`], 'tot')}
       </tbody></table>
       <ul class="rp-list">
