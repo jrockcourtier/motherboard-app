@@ -38,6 +38,10 @@
   const settings = () => E[SET_ID] || { id: SET_ID, type: 'settings', retenues: [{ label: 'Saisie Revenu Québec', pct: 30, on: true }, { label: 'Saisie Agence du revenu du Canada', pct: 40, on: true }], showPersonal: true };
   const expenses = (scope) => Object.values(E).filter(x => !x.deleted && x.type !== 'settings' && (!scope || x.scope === scope));
   const incl = (scope) => expenses(scope).filter(x => x.include !== false);
+  const DEF_PAID = [{ label: 'Saisie Revenu Québec sur mes commissions', pct: 30, on: true }, { label: "Paiements faits à l'Agence du revenu du Canada", amount: 0, on: true }];
+  const DEF_DEBTS = [{ label: 'Carte de crédit', balance: 5000, limit: 5000, monthly: 0, on: true }, { label: 'Marge de crédit', balance: 5000, limit: 5000, monthly: 0, on: true }];
+  const paidOf = (S) => S.paid || JSON.parse(JSON.stringify(DEF_PAID));
+  const debtsOf = (S) => S.debts || JSON.parse(JSON.stringify(DEF_DEBTS));
   const sumM = (arr) => arr.reduce((a, x) => a + (+x.monthly || 0), 0);
 
   // ---------- revenus (transactions) ----------
@@ -70,7 +74,10 @@
     const retPct = Math.min(100, ret.reduce((a, r) => a + +r.pct, 0));
     const L = window.LST ? LST._list() : [];
     const lstActive = L.filter(x => ['active', 'a_venir'].includes(LST._status(x)));
-    return { y, t0, done, byMonth, rev, elapsedM, bizM, persM, bizYTD, net, months, winStart, winEnd, possible: possibleAll, posAmt, ret, retPct, lstActive, S, curM: now.getMonth() };
+    const paid = paidOf(S).filter(p => p.on).map(p => Object.assign({}, p, { amt: p.pct != null && p.pct !== '' ? rev * p.pct / 100 : +p.amount || 0 })).filter(p => p.amt > 0);
+    const paidTot = paid.reduce((a, p) => a + p.amt, 0), left = net - paidTot;
+    const debts = debtsOf(S).filter(d => d.on && (+d.balance || +d.monthly)), debtsM = debts.reduce((a, d) => a + (+d.monthly || 0), 0);
+    return { paid, paidTot, left, debts, debtsM, y, t0, done, byMonth, rev, elapsedM, bizM, persM, bizYTD, net, months, winStart, winEnd, possible: possibleAll, posAmt, ret, retPct, lstActive, S, curM: now.getMonth() };
   }
 
   // ---------- écran de préparation ----------
@@ -99,7 +106,14 @@
       <label class="f-check"><input type="checkbox" ${S.showPersonal ? 'checked' : ''} onchange="RPT.sf('showPersonal',this.checked)"> Inclure le budget personnel dans le rapport (décoche une ligne pour la retirer)</label>
       <div class="rpt-elist">${grp('personnel')}</div>
       <div class="chips"><button onclick="RPT.eadd('personnel')">+ Dépense personnelle</button></div>
-      <div class="f-label">Retenues sur mes commissions (dans la prévision)</div>
+      <div class="f-label">Déjà retenu ou payé en ${F.y} — ${money(F.paidTot)}</div>
+      ${paidOf(S).map((p, i) => { const isPct = p.pct != null && p.pct !== ''; return `<div class="rpt-erow${p.on ? '' : ' off'}"><input type="checkbox" ${p.on ? 'checked' : ''} onchange="RPT.pf(${i},'on',this.checked)"><input class="rpt-lbl" value="${e(p.label)}" onchange="RPT.pf(${i},'label',this.value)"><input class="rpt-amt" inputmode="decimal" value="${isPct ? String(p.pct).replace('.', ',') : (+p.amount || 0).toFixed(2).replace('.', ',')}" onchange="RPT.pf(${i},'${isPct ? 'pct' : 'amount'}',this.value)"><span class="rpt-per">${isPct ? `% = ${money0(F.rev * p.pct / 100)}` : '$'}</span><button class="tx-cdel" onclick="RPT.pdel(${i})">✕</button></div>`; }).join('')}
+      <div class="chips"><button onclick="RPT.padd(0)">+ Paiement ($)</button><button onclick="RPT.padd(1)">+ Retenue (% des commissions)</button></div>
+      <div class="f-label">Dettes</div>
+      ${debtsOf(S).map((d, i) => `<div class="rpt-erow rpt-debt${d.on ? '' : ' off'}"><input type="checkbox" ${d.on ? 'checked' : ''} onchange="RPT.df(${i},'on',this.checked)"><input class="rpt-lbl" value="${e(d.label)}" onchange="RPT.df(${i},'label',this.value)"><label>solde<input class="rpt-amt" inputmode="decimal" value="${+d.balance || 0}" onchange="RPT.df(${i},'balance',this.value)"></label><label>limite<input class="rpt-amt" inputmode="decimal" value="${+d.limit || 0}" onchange="RPT.df(${i},'limit',this.value)"></label><label>paiement / mois<input class="rpt-amt" inputmode="decimal" value="${+d.monthly || 0}" onchange="RPT.df(${i},'monthly',this.value)"></label><button class="tx-cdel" onclick="RPT.ddel(${i})">✕</button></div>`).join('')}
+      <div class="chips"><button onclick="RPT.dadd()">+ Dette</button></div>
+      <div class="f-hint">Le paiement mensuel des dettes compte dans la prévision des 3 mois.</div>
+      <div class="f-label">Retenues sur mes commissions à venir (dans la prévision)</div>
       ${(S.retenues || []).map((r, i) => `<div class="rpt-erow${r.on ? '' : ' off'}"><input type="checkbox" ${r.on ? 'checked' : ''} onchange="RPT.rf(${i},'on',this.checked)"><input class="rpt-lbl" value="${e(r.label)}" onchange="RPT.rf(${i},'label',this.value)"><input class="rpt-amt" inputmode="decimal" value="${r.pct}" onchange="RPT.rf(${i},'pct',this.value)"><span class="rpt-per">%</span><button class="tx-cdel" onclick="RPT.rdel(${i})">✕</button></div>`).join('')}
       <div class="chips"><button onclick="RPT.radd()">+ Retenue</button></div>
       <label class="f-block">Note à ajouter au rapport (optionnel, tes mots)<textarea rows="4" placeholder="Ex. : contexte du marché, mois sans revenu, démarches en cours…" onchange="RPT.sf('note',this.value)">${e(S.note || '')}</textarea></label>
@@ -115,6 +129,12 @@
   function sf(k, v) { const S = settings(); S[k] = v; save(S); if (k !== 'note') openPrep(); }
   function rf(i, k, v) { const S = settings(); S.retenues = S.retenues || []; S.retenues[i][k] = k === 'pct' ? num(v) : v; save(S); openPrep(); }
   function rdel(i) { const S = settings(); S.retenues.splice(i, 1); save(S); openPrep(); }
+  function pf(i, k, v) { const S = settings(); S.paid = paidOf(S); S.paid[i][k] = k === 'pct' || k === 'amount' ? num(v) : v; save(S); openPrep(); }
+  function pdel(i) { const S = settings(); S.paid = paidOf(S); S.paid.splice(i, 1); save(S); openPrep(); }
+  function padd(pct) { const S = settings(); S.paid = paidOf(S).concat([pct ? { label: 'Retenue', pct: 0, on: true } : { label: 'Paiement', amount: 0, on: true }]); save(S); openPrep(); }
+  function df(i, k, v) { const S = settings(); S.debts = debtsOf(S); S.debts[i][k] = ['balance', 'limit', 'monthly'].includes(k) ? num(v) : v; save(S); openPrep(); }
+  function ddel(i) { const S = settings(); S.debts = debtsOf(S); S.debts.splice(i, 1); save(S); openPrep(); }
+  function dadd() { const S = settings(); S.debts = debtsOf(S).concat([{ label: 'Dette', balance: 0, limit: 0, monthly: 0, on: true }]); save(S); openPrep(); }
   function radd() { const S = settings(); S.retenues = (S.retenues || []).concat([{ label: 'Retenue', pct: 0, on: true }]); save(S); openPrep(); }
 
   // ---------- le rapport ----------
@@ -124,7 +144,7 @@
     const pers = S.showPersonal ? incl('personnel').sort((a, b) => (a.cat || '').localeCompare(b.cat || '') || b.monthly - a.monthly) : [];
     const monthsDone = F.curM + 1, avgM = F.rev / F.elapsedM;
     const zeroMonths = F.byMonth.slice(0, monthsDone).filter(m => !m.amt).length;
-    const need3 = (F.bizM + F.persM) * 3;
+    const need3 = (F.bizM + F.persM + F.debtsM) * 3; let sec = 0; const H = (t) => `<h2>${++sec}. ${t}</h2>`;
     const retAmt = F.posAmt * F.retPct / 100;
     const s1 = 0 - need3, s2 = F.posAmt - retAmt - need3;
     const per = `${MOIS[F.months[0].m]} ${F.months[0].y} à ${MOIS[F.months[2].m]} ${F.months[2].y}`;
@@ -140,42 +160,59 @@
         <div><span>Commissions brutes reçues ${F.y}</span><b>${money0(F.rev)}</b><i>avant frais d'agence et dépenses</i></div>
         <div><span>Dépenses d'entreprise (à ce jour)</span><b>${money0(F.bizYTD)}</b><i>${money0(F.bizM)} par mois</i></div>
         <div><span>Revenu net d'entreprise (à ce jour, avant impôt)</span><b>${money0(F.net)}</b><i>≈ ${money0(F.net / F.elapsedM)} par mois en moyenne</i></div>
+        <div><span>Déjà retenu ou payé (saisies et paiements)</span><b>${money0(F.paidTot)}</b><i>${F.paid.map(p => e(p.label.replace(/ sur mes commissions/, ''))).join(' · ') || '—'}</i></div>
+        <div class="hl"><span>Reste réellement reçu (à ce jour)</span><b>${money0(F.left)}</b><i>≈ ${money0(F.left / F.elapsedM)} par mois, avant impôt</i></div>
         <div class="hl"><span>Revenus confirmés — ${per}</span><b>0 $</b><i>aucune vente conclue à venir</i></div>
       </div>
 
-      <h2>1. Revenus de commissions par mois (${F.y})</h2>
+      ${H(`Revenus de commissions par mois (${F.y})`)}
       <table class="rp-t"><thead><tr><th>Mois</th><th class="n">Transactions</th><th class="n">Commissions brutes</th></tr></thead><tbody>
         ${F.byMonth.slice(0, monthsDone).map((m, i) => tr([MOIS[i][0].toUpperCase() + MOIS[i].slice(1), m.n || '—', m.amt ? money(m.amt) : '0,00 $'], m.amt ? '' : 'zero')).join('')}
         ${tr(['<b>Total</b>', `<b>${F.done.filter(t => t.kind !== 'revenu').length}</b>`, `<b>${money(F.rev)}</b>`], 'tot')}
       </tbody></table>
       <p class="rp-note">Les revenus d'un courtier immobilier ne sont versés qu'à la signature de l'acte de vente chez le notaire : ils sont irréguliers. ${zeroMonths ? `${zeroMonths} mois sur ${monthsDone} n'ont généré aucun revenu cette année.` : ''}</p>
 
-      <h2>2. Transactions conclues en ${F.y}</h2>
+      ${H(`Transactions conclues en ${F.y}`)}
       <table class="rp-t"><thead><tr><th>Date</th><th>Propriété</th><th>Représentation</th><th class="n">Commission brute</th></tr></thead><tbody>
         ${F.done.map(t => `<tr><td>${fmtD(t.deedAt)}</td><td>${e(t.address || '')}</td><td>${KIND[t.kind] || ''}</td><td class="n">${money(txComm(t))}</td></tr>`).join('')}
         <tr class="tot"><td colspan="3"><b>Total</b></td><td class="n"><b>${money(F.rev)}</b></td></tr>
       </tbody></table>
 
-      <h2>3. Dépenses d'entreprise (budget ${F.y})</h2>
+      ${F.paid.length ? `${H(`Montants déjà retenus ou payés en ${F.y}`)}
+      <table class="rp-t"><thead><tr><th>Retenue ou paiement</th><th class="n">Montant</th></tr></thead><tbody>
+        ${F.paid.map(p => tr([e(p.label) + (p.pct != null && p.pct !== '' ? ` (${String(p.pct).replace('.', ',')} % de ${money(F.rev)})` : ''), money(p.amt)])).join('')}
+        ${tr(['<b>Total</b>', `<b>${money(F.paidTot)}</b>`], 'tot')}
+      </tbody></table>
+      <p class="rp-note">Ces montants ont été retenus ou payés à même mes commissions : ils ne m'ont pas été disponibles. Après dépenses d'entreprise, il m'est réellement resté ${money(F.left)} depuis le 1<sup>er</sup> janvier, avant impôt.</p>` : ''}
+
+      ${H(`Dépenses d'entreprise (budget ${F.y})`)}
       <table class="rp-t"><thead><tr><th>Dépense</th><th class="n">Par mois</th><th class="n">Par année</th></tr></thead><tbody>
         ${tableE(biz)}
         ${tr(['<b>Total des dépenses d\'entreprise</b>', `<b>${money(F.bizM)}</b>`, `<b>${money(F.bizM * 12)}</b>`], 'tot')}
       </tbody></table>
       <p class="rp-note">Ces dépenses se paient chaque mois, qu'il y ait des ventes ou non.</p>
 
-      ${pers.length ? `<h2>4. Dépenses personnelles de base (budget mensuel)</h2>
+      ${pers.length ? `${H('Dépenses personnelles de base (budget mensuel)')}
       <table class="rp-t"><thead><tr><th>Dépense</th><th class="n">Par mois</th><th class="n">Par année</th></tr></thead><tbody>
         ${tableE(pers)}
         ${tr(['<b>Total des dépenses personnelles</b>', `<b>${money(F.persM)}</b>`, `<b>${money(F.persM * 12)}</b>`], 'tot')}
       </tbody></table>` : ''}
 
-      <h2>${pers.length ? 5 : 4}. Prévision — ${per}</h2>
+      ${F.debts.length ? `${H('Dettes en cours')}
+      <table class="rp-t"><thead><tr><th>Dette</th><th class="n">Solde</th><th class="n">Limite</th><th class="n">Paiement mensuel</th></tr></thead><tbody>
+        ${F.debts.map(d => `<tr><td>${e(d.label)}${+d.limit && +d.balance >= +d.limit ? ' <small>(au maximum)</small>' : ''}</td><td class="n">${money(+d.balance)}</td><td class="n">${+d.limit ? money(+d.limit) : '—'}</td><td class="n">${+d.monthly ? money(+d.monthly) : '—'}</td></tr>`).join('')}
+        <tr class="tot"><td><b>Total</b></td><td class="n"><b>${money(F.debts.reduce((a, d) => a + (+d.balance || 0), 0))}</b></td><td></td><td class="n"><b>${F.debtsM ? money(F.debtsM) : '—'}</b></td></tr>
+      </tbody></table>
+      ${F.debts.some(d => +d.limit && +d.balance >= +d.limit) ? '<p class="rp-note">Mes crédits disponibles sont utilisés au maximum : je n\'ai plus de marge pour absorber les mois sans revenu.</p>' : ''}` : ''}
+
+      ${H(`Prévision — ${per}`)}
       <table class="rp-t"><thead><tr><th></th><th class="n">Scénario 1<br><small>aucune vente conclue</small></th><th class="n">Scénario 2<br><small>la transaction sous condition se conclut</small></th></tr></thead><tbody>
         ${tr(['Revenus confirmés', '0,00 $', '0,00 $'])}
         ${tr([`Revenus possibles — transaction${F.possible.length > 1 ? 's' : ''} sous condition${F.possible.length ? ' (' + F.possible.map(t => 'notaire prévu le ' + fmtD(t.deedAt, true)).join(', ') + ')' : ''}`, '0,00 $', money(F.posAmt)])}
         ${F.ret.map(r => tr([`${e(r.label)} (${String(r.pct).replace('.', ',')} % des commissions)`, '0,00 $', '− ' + money(F.posAmt * r.pct / 100)])).join('')}
         ${tr([`Dépenses d'entreprise (3 × ${money(F.bizM)})`, '− ' + money(F.bizM * 3), '− ' + money(F.bizM * 3)])}
         ${F.persM ? tr([`Dépenses personnelles de base (3 × ${money(F.persM)})`, '− ' + money(F.persM * 3), '− ' + money(F.persM * 3)]) : ''}
+        ${F.debtsM ? tr([`Paiements sur dettes (3 × ${money(F.debtsM)})`, '− ' + money(F.debtsM * 3), '− ' + money(F.debtsM * 3)]) : ''}
         ${tr(['<b>Solde sur 3 mois</b>', `<b class="${s1 < 0 ? 'neg' : ''}">${money(s1)}</b>`, `<b class="${s2 < 0 ? 'neg' : ''}">${money(s2)}</b>`], 'tot')}
       </tbody></table>
       <ul class="rp-list">
@@ -187,10 +224,7 @@
 
       ${S.note ? `<h2>Note</h2><p class="rp-free">${e(S.note).replace(/\n/g, '<br>')}</p>` : ''}
 
-      <div class="rp-sign">
-        <p>Montants tirés du rapport des transactions de RE/MAX L'Espace (commissions brutes, avant frais d'agence) et de mon budget ${F.y}. J'atteste que ces renseignements sont exacts au meilleur de ma connaissance.</p>
-        <div class="rp-sl"><div><span></span>Julien Rock</div><div><span></span>Date</div></div>
-      </div>
+      <p class="rp-src">Sources : rapport des transactions de RE/MAX L'Espace (commissions brutes, avant frais d'agence) et budget ${F.y}.</p>
     </div>`;
   }
   function preview() {
@@ -203,6 +237,6 @@
   }
   function closePrev() { document.body.classList.remove('rpt-on'); const ov = document.getElementById('rpt-print'); if (ov) ov.innerHTML = ''; }
 
-  window.RPT = { open: openPrep, close, preview, closePrev, ef, edel, eadd, sf, rf, rdel, radd, _fig: figures, _html: reportHtml };
+  window.RPT = { open: openPrep, close, preview, closePrev, ef, edel, eadd, sf, rf, rdel, radd, pf, pdel, padd, df, ddel, dadd, _fig: figures, _html: reportHtml };
   pull();
 })();
