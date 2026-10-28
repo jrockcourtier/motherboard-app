@@ -67,13 +67,13 @@
     return `<div class="db-chart" role="img" aria-label="Commissions par mois">
       ${monthly.map((m, i) => {
         const hd = m.done / max * 100, hp = m.plan / max * 100;
-        const tip = `${MOIS[i]} · conclu ${money(m.done)}${m.plan ? ' · prévu ' + money(m.plan) : ''}`;
+        const tip = `${MOIS[i]} · conclu ${money(m.done)}${m.plan ? ' · possible ' + money(m.plan) : ''}`;
         return `<div class="db-col${i === cur ? ' cur' : ''}" title="${tip}"><div class="db-tip">${tip}</div>
           <div class="db-stack">${m.plan ? `<div class="db-bar plan" style="height:${hp}%"></div>` : ''}${m.done ? `<div class="db-bar done" style="height:${hd}%"></div>` : ''}</div>
           <span>${MOIS[i].replace('.', '')}</span></div>`;
       }).join('')}
     </div>
-    <div class="db-legend"><span><i class="done"></i>Conclu</span><span><i class="plan"></i>Prévu (en cours)</span></div>`;
+    <div class="db-legend"><span><i class="done"></i>Conclu</span><span><i class="plan"></i>Possible (sous condition)</span></div>`;
   }
   function tile(label, value, sub, onclick, cls = '') {
     return `<div class="db-tile ${cls}" ${onclick ? `onclick="${onclick}" role="button" tabindex="0"` : ''}><div class="db-l">${label}</div><div class="db-v">${value}</div>${sub ? `<div class="db-s">${sub}</div>` : ''}</div>`;
@@ -86,20 +86,20 @@
     root.innerHTML = `
       <div class="db">
         <div class="db-head"><div><h2>${hello} Julien</h2><div class="db-date">${new Date().toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div></div>
-          <div class="db-todo">${D.dueN ? `<button onclick="${go('jour')}">🔔 ${D.dueN} suivi${D.dueN > 1 ? 's' : ''} à faire</button>` : ''}${D.inboxN ? `<button onclick="${go('contacts')}">📥 ${D.inboxN} contact${D.inboxN > 1 ? 's' : ''} à classer</button>` : ''}</div></div>
+          <div class="db-todo"><button class="db-rpt" onclick="RPT.open()">📄 Rapport annuel + prévision (PDF)</button>${D.dueN ? `<button onclick="${go('jour')}">🔔 ${D.dueN} suivi${D.dueN > 1 ? 's' : ''} à faire</button>` : ''}${D.inboxN ? `<button onclick="${go('contacts')}">📥 ${D.inboxN} contact${D.inboxN > 1 ? 's' : ''} à classer</button>` : ''}</div></div>
 
         <div class="db-grid">
           <div class="db-card db-hero">
             <div class="db-l">Revenus ${D.y} · commissions conclues (brut)</div>
             <div class="db-big">${money(D.rev)}</div>
-            <div class="db-s">${D.sales.length} transaction${D.sales.length > 1 ? 's' : ''} conclue${D.sales.length > 1 ? 's' : ''} · <b>${money(D.revPlan)}</b> à venir (${D.cours.length} en cours)</div>
+            <div class="db-s">${D.sales.length} transaction${D.sales.length > 1 ? 's' : ''} conclue${D.sales.length > 1 ? 's' : ''} ${D.revPlan ? `· <b>${money(D.revPlan)}</b> possible${D.cours.length > 1 ? 's' : ''} si ${D.cours.length > 1 ? 'les transactions sous condition se concluent' : 'la transaction sous condition se conclut'} (non garanti)` : ''}</div>
             ${chart(D.monthly)}
             ${D.missingPct ? `<div class="db-warn">⚠️ ${D.missingPct} transaction${D.missingPct > 1 ? 's' : ''} sans % de commission — <a onclick="${go('transactions')}">ajoute-le</a> pour qu'elle compte dans tes revenus.</div>` : ''}
           </div>
           <div class="db-tiles">
-            ${tile('Inscriptions actives', D.lstActive.length, D.volume ? kmoney(D.volume) + ' en vente' : 'aucune', go('inscriptions'))}
+            ${tile('Inscriptions actives', D.lstActive.length, D.lstActive.length ? 'propriétés à vendre' : 'aucune', go('inscriptions'))}
             ${tile('Sous condition', D.lstCond.length, 'inscriptions avec offre acceptée', go('inscriptions'))}
-            ${tile('Transactions en cours', D.cours.length, D.revPlan ? kmoney(D.revPlan) + ' de commissions' : '', go('transactions'))}
+            ${tile('Transactions en cours', D.cours.length, D.revPlan ? kmoney(D.revPlan) + ' possibles (sous condition)' : '', go('transactions'))}
             ${tile('Ventes conclues ' + D.y, D.sales.length, D.rev ? kmoney(D.rev) : '', go('transactions'))}
           </div>
         </div>
