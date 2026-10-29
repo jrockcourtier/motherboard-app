@@ -240,6 +240,6 @@
   }
   function closePrev() { document.body.classList.remove('rpt-on'); const ov = document.getElementById('rpt-print'); if (ov) ov.innerHTML = ''; }
 
-  window.RPT = { open: openPrep, close, preview, closePrev, ef, edel, eadd, sf, rf, rdel, radd, pf, pdel, padd, df, ddel, dadd, _fig: figures, _html: reportHtml };
+  window.RPT = { _settings: settings, _save: save, open: openPrep, close, preview, closePrev, ef, edel, eadd, sf, rf, rdel, radd, pf, pdel, padd, df, ddel, dadd, _fig: figures, _html: reportHtml };
   pull();
 })();

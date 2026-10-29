@@ -78,6 +78,27 @@
   function tile(label, value, sub, onclick, cls = '') {
     return `<div class="db-tile ${cls}" ${onclick ? `onclick="${onclick}" role="button" tabindex="0"` : ''}><div class="db-l">${label}</div><div class="db-v">${value}</div>${sub ? `<div class="db-s">${sub}</div>` : ''}</div>`;
   }
+  // ---------- récompenses : une étoile toutes les 3 transactions conclues (à partir du 29 oct. 2026) ----------
+  const RW_START = '2026-10-29', RW_EVERY = 3, RW_AMT = 1000;
+  function rewards() {
+    const txs = window.TX ? Object.values(TX._all()).filter(t => !t.deleted && t.kind !== 'revenu' && txState(t) === 'conclue' && (t.deedAt || '') >= RW_START) : [];
+    const S = window.RPT && RPT._settings ? RPT._settings() : {}; const paid = (S.rewards && S.rewards.paid) || {};
+    const n = txs.length, stars = Math.floor(n / RW_EVERY);
+    return { n, stars, left: RW_EVERY - (n % RW_EVERY), prog: n % RW_EVERY, paid, owed: Array.from({ length: stars }, (_, i) => i + 1).filter(i => !paid[i]) };
+  }
+  function rewardPaid(i) { if (!window.RPT || !RPT._settings) return; const S = RPT._settings(); S.rewards = S.rewards || {}; S.rewards.paid = Object.assign({}, S.rewards.paid, { [i]: new Date().toISOString().slice(0, 10) }); RPT._save(S); render(); if (typeof toast === 'function') toast('🎉 Récompense notée comme versée'); }
+  function rewardCard() {
+    const R = rewards();
+    const starsHtml = R.stars ? '⭐'.repeat(Math.min(R.stars, 20)) + (R.stars > 20 ? ` ×${R.stars}` : '') : '<span class="db-rw-empty">☆</span>';
+    return `<div class="db-card db-rw">
+      <div class="db-row-h"><b>🏆 Récompenses</b><span class="crm-muted">1 étoile = ${RW_EVERY} transactions conclues · ${money(RW_AMT)} pour toi</span></div>
+      <div class="db-rw-row"><div class="db-rw-stars">${starsHtml}</div>
+        <div class="db-rw-prog"><div class="db-rw-bar">${Array.from({ length: RW_EVERY }, (_, i) => `<i class="${i < R.prog ? 'on' : ''}"></i>`).join('')}</div>
+        <span>${R.prog} / ${RW_EVERY} — encore <b>${R.left}</b> transaction${R.left > 1 ? 's' : ''} conclue${R.left > 1 ? 's' : ''} pour la prochaine étoile</span></div></div>
+      ${R.owed.map(i => `<div class="db-rw-owed">🎁 Étoile ${i} : <b>${money(RW_AMT)}</b> à te verser <button onclick="DASH.rewardPaid(${i})">✓ Fait</button></div>`).join('')}
+      ${!R.n ? `<div class="crm-muted" style="font-size:12px">Le compteur part du ${fmtD(RW_START)} : chaque dossier passé à « Conclue » compte.</div>` : ''}
+    </div>`;
+  }
   function render() {
     const root = document.getElementById('accueil'); if (!root) return;
     const D = data(), P = D.P;
@@ -104,6 +125,8 @@
           </div>
         </div>
 
+        ${rewardCard()}
+
         <div class="db-card">
           <div class="db-row-h"><b>📞 Prospection</b><button class="db-link" onclick="${go('prospection')}">Ouvrir la prospection →</button></div>
           <div class="db-prosp">
@@ -125,7 +148,7 @@
         <div style="height:90px"></div>
       </div>`;
   }
-  window.DASH = { render };
+  window.DASH = { render, rewardPaid, _rewards: rewards };
   // rafraîchir quand les données bougent
   let t = null; const later = () => { clearTimeout(t); t = setTimeout(() => { if (document.body.dataset.tab === 'accueil') render(); }, 400); };
   ['mb_contacts', 'mb_tx', 'mb_lst'].forEach(() => {});
