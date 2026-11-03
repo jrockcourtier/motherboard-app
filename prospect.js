@@ -526,7 +526,7 @@
   const lnSt = (c, k) => ((c.lnnte || {})[k] || {}).status;
   const lnListed = (c) => lnSt(c, 'p1') === 'listed' || lnSt(c, 'p2') === 'listed';
   const lnWhich = (c) => lnSt(c, 'p1') === 'listed' && lnSt(c, 'p2') === 'listed' ? 'les deux numéros sont' : lnSt(c, 'p1') === 'listed' ? `le ${e(c.phone)} est` : `le 2ᵉ numéro (${e(c.phone2)}) est`;
-  const lnFresh = (c) => { const l = c.lnnte; if (!l || !l.at || l.phone !== (c.phone || '') || l.phone2 !== (c.phone2 || '')) return false; const age = (Date.now() - new Date(l.at)) / 864e5; const err = ['p1', 'p2'].some(k => l[k] && l[k].status === 'error'); return err ? age < 1 / 24 : age < LN_DAYS; };   // erreur : on réessaie au plus une fois par heure
+  const lnFresh = (c) => { const l = c.lnnte; if (!l || !l.at || l.phone !== (c.phone || '') || l.phone2 !== (c.phone2 || '')) return false; const age = (Date.now() - new Date(l.at)) / 864e5; const err = ['p1', 'p2'].some(k => l[k] && l[k].status === 'error'); return err ? age < 5 / 1440 : age < LN_DAYS; };   // erreur : on réessaie après 5 minutes
   function lnBadge(c, short) {
     if (!c.phone || c.dnc) return '';
     if (!c.lnnte) return ' · <span class="pr-lnnte">LNNTE…</span>';
