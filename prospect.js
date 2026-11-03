@@ -7,7 +7,8 @@
 (function () {
   const e = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const ls = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (x) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (x) {} } };
-  const COLS = [['appeler', 'À appeler'], ['suivi', 'Suivi'], ['signe', 'Signé'], ['archive', 'Archivés']];
+  const COLS = [['appeler', 'À appeler'], ['suivi', 'Suivi'], ['signe', 'Signé'], ['onenote', '📓 À valider (OneNote)'], ['sansnum', '📵 Sans numéro'], ['archive', 'Archivés'], ['vendu', '🏠 Vendus']];
+  const VENDU = 'Vendu (par le proprio)';
   let col = 'appeler', curList = ls.get('mb_plist', null), thumbs = ls.get('mb_thumbs', {}), thumbsLoaded = false, q = '';
 
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -15,7 +16,10 @@
   function colOf(c) {
     const s = c.stage || 'À appeler';
     if (s === 'Signé' || s === 'Converti en vendeur') return 'signe';
+    if (s === VENDU) return 'vendu';                       // vendue par le proprio ou un autre courtier — pas une vente à moi
     if (s === 'Pas intéressé' || s === 'Injoignable' || s === 'A un courtier') return 'archive';
+    if (c.onenote) return 'onenote';                       // à valider avec mes anciennes notes OneNote
+    if (!hasPhone(c) && !c.suivi && s !== 'Intéressé' && s !== 'Rendez-vous') return 'sansnum';
     // Suivi = seulement quand Julien le décide (📌 Suivi) ou qu'il y a de l'intérêt / un RDV
     if (c.suivi || s === 'Intéressé' || s === 'Rendez-vous') return 'suivi';
     return 'appeler';
@@ -68,6 +72,16 @@
   }
   const PHONE_RX = /(?:^|[^\d])\(?([2-9]\d{2})\)?[\s.-]?(\d{3})[\s.-]?(\d{4})(?!\d)/g;
   const isPhoneLine = (s) => /^[\d\s().,;\/+\-]*(?:(?:ou|et|cell|tél|tel)\.?\s*:?\s*[\d\s().,;\/+\-]*)*$/i.test(s) && /\d{3}[\s.-]?\d{4}/.test(s);
+  // vraiment aucun numéro ? on regarde le téléphone, le 2e numéro, puis tout le texte de la fiche (notes comprises) avant de la classer « Sans numéro »
+  function hasPhone(c) { return !!(c.phone || c.phone2 || foundPhone(c)); }
+  function foundPhone(c) {
+    if (c._fp !== undefined && c._fpAt === c.updatedAt) return c._fp;
+    const txt = [c.desc, c.description, c.raw, c.text, c.ownerInfo, c.contactInfo].concat((c.notes || []).map(n => n.text)).filter(x => typeof x === 'string');
+    const f = phonesIn(txt)[0] || '';
+    Object.defineProperty(c, '_fp', { value: f, writable: true, configurable: true, enumerable: false });
+    Object.defineProperty(c, '_fpAt', { value: c.updatedAt, writable: true, configurable: true, enumerable: false });
+    return f;
+  }
   function phonesIn(lines) {
     const out = [];
     lines.forEach(l => { let m; PHONE_RX.lastIndex = 0; while ((m = PHONE_RX.exec(l))) { const n = `${m[1]}-${m[2]}-${m[3]}`; if (!out.includes(n)) out.push(n); } });
@@ -307,7 +321,7 @@
   const QUICK = [['Nom du proprio', 'Nom du proprio : '], ['Prix minimum', 'Prix minimum : '], ['Commission', 'Commission : '], ['Délai', 'Délai : '], ['Motivation', 'Motivation : '], ['Courtier ?', 'A déjà un courtier : ']];
   function openFiche(id) {
     const c = CRM._all()[id]; if (!c) return;
-    cur = id; CRM.focus(id);
+    cur = id; CRM.focus(id); setTimeout(() => lnCheck(id), 50);
     const items = all().filter(k => k.plist === c.plist);
     const inCol = items.filter(k => colOf(k) === colOf(c));
     const list = (q ? items.filter(k => [k.name, k.address, k.owner, k.phone, k.listingNo].join(' ').toLowerCase().includes(q.toLowerCase())) : inCol);
@@ -394,11 +408,14 @@
       ${thumb(c.id) ? `<img class="pd-photo" src="${thumb(c.id)}" alt="">` : '<div class="pd-photo pr-nothumb">🏠</div>'}
       <div class="pd-price">${e(c.price || '')} <span>${e(c.ptype || '')}${c.rooms ? ' · ' + e(c.rooms) + ' ch.' : ''}</span></div>
       ${c.priceDropAt && c.prevPrice ? `<div class="pd-drop">🔻 Baisse de prix le ${new Date(c.priceDropAt).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })} · avant ${e(c.prevPrice)}</div>` : ''}
+      ${lnListed(c) ? `<div class="pd-ln-big">⛔ LNNTE : ${lnWhich(c)} sur la liste nationale de numéros exclus<span>Rien n'a été déplacé ni supprimé. Valide toi-même avant d'appeler (vérifié le ${fmtD((c.lnnte || {}).at.slice(0, 10))}).</span><a href="https://lnnte-dncl.gc.ca/" target="_blank" rel="noopener">Vérifier sur le site de la LNNTE</a></div>` : ''}
       ${c.revalider ? `<div class="pd-reval">🤝 Avait déjà un courtier — demande-lui si c'est toujours le cas.</div>` : ''}
+      ${c.onenote ? `<div class="pd-onenote">📓 À valider avec tes anciennes notes OneNote<span>Mets tes notes à jour à droite, puis :</span><div><button onclick="Prospect.oneNote(false,'suivi')">📌 Vers Suivi</button><button onclick="Prospect.oneNote(false,'appeler')">↩ Vers À appeler</button><button onclick="Prospect.oneNote(false,'archive')">🗄 Archiver</button></div></div>` : ''}
+      ${colOf(c) === 'vendu' ? `<div class="pd-onenote">🏠 Vendue (pas par toi)<div><button onclick="Prospect.vendu(false)">↩ Annuler « Vendu »</button></div></div>` : ''}
       ${offerCalc(c)}
       <div class="pd-addr">${e(c.name)}</div>
       <div class="crm-muted">${e((c.address || '').replace(c.name + ', ', ''))}${c.listingNo ? ' · DuProprio #' + e(c.listingNo) : ''}</div>
-      ${c.dnc ? '<div class="crm-dnc-banner">⛔ Ne pas appeler</div>' : c.phone ? `<a class="dial-call" href="tel:${String(c.phone).replace(/[^\d+]/g, '')}" onclick="CRM.touch && CRM.touch()">📞 Appeler ${e(c.phone)}</a>${c.phone2 ? `<a class="pd-call2" href="tel:${String(c.phone2).replace(/[^\d+]/g, '')}">📞 2ᵉ numéro : ${e(c.phone2)}</a>` : ''}` : '<div class="pd-nophone">📵 Pas de téléphone sur la fiche — contacte-le via DuProprio</div>'}
+      ${c.dnc ? '<div class="crm-dnc-banner">⛔ Ne pas appeler</div>' : c.phone ? `<a class="dial-call" href="tel:${String(c.phone).replace(/[^\d+]/g, '')}" onclick="CRM.touch && CRM.touch()">📞 Appeler ${e(c.phone)}</a>${c.phone2 ? `<a class="pd-call2" href="tel:${String(c.phone2).replace(/[^\d+]/g, '')}">📞 2ᵉ numéro : ${e(c.phone2)}</a>` : ''}` : (foundPhone(c) ? `<div class="pd-nophone">📵 Pas de téléphone enregistré — mais un numéro apparaît dans la fiche : <b>${e(foundPhone(c))}</b> <button onclick="Prospect.set('phone', ${JSON.stringify(foundPhone(c)).replace(/"/g, '&quot;')});Prospect.open('${c.id}')">Utiliser ce numéro</button></div>` : '<div class="pd-nophone">📵 Aucun numéro trouvé sur la fiche (vérifie le PDF à gauche) — elle reste dans « Sans numéro », rien n\'est supprimé</div>')}
       ${c.isContact ? `<div class="pd-contact ok">✓ Dans tes contacts <span>POT-${e(c.owner || 'Proprio')} - ${e(c.name)}</span><button onclick="Prospect.toContact(true)">📲 Renvoyer au téléphone</button></div>`
         : `<button class="pd-contact-btn" onclick="Prospect.toContact()">📇 Ajouter à mes contacts <span>POT-${e(c.owner || '…')} - ${e(c.name)}</span></button>`}
       <div class="pd-facts">
@@ -408,10 +425,11 @@
         <div>Appels<b>${n ? n + ' essai' + (n > 1 ? 's' : '') : 'jamais appelé'}</b></div>
       </div>
       ${lc ? `<div class="crm-muted" style="margin-top:6px">Dernier : ${OUTL[lc.outcome] || ''} · ${new Date(lc.at).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })}</div>` : ''}
-      ${!c.dncChecked && !c.dnc && c.phone ? `<div class="dial-warn">LNNTE non vérifiée · <a href="https://lnnte-dncl.gc.ca/" target="_blank" rel="noopener">vérifier</a> · <button onclick="Prospect.set('dncChecked', true)">✓ Vérifiée</button></div>` : ''}
+      ${lnDetail(c)}
       ${fu}
       ${colOf(c) === 'suivi' ? `<button class="pd-move" onclick="Prospect.toSuivi(false)">↩ Remettre dans « À appeler »</button>` : colOf(c) === 'appeler' && (c.calls || []).length ? `<button class="pd-move" onclick="Prospect.toSuivi(true)">📌 Mettre en suivi</button>` : ''}
       <div class="pd-stages">${['À appeler', 'Appelé – rappeler', 'Intéressé', 'Rendez-vous', 'Signé', 'Pas intéressé'].map(s => `<button class="${(c.stage || 'À appeler') === s ? 'on' : ''}" onclick="Prospect.set('stage', ${JSON.stringify(s).replace(/"/g, '&quot;')})">${s === 'Signé' ? '✍️ Signé' : e(s)}</button>`).join('')}</div>
+      <div class="pd-tools">${colOf(c) !== 'vendu' ? `<button onclick="Prospect.vendu(true)">🏠 Vendu <small>(par le proprio / un autre)</small></button>` : ''}${!c.onenote ? `<button onclick="Prospect.oneNote(true)">📓 Voir OneNote</button>` : ''}</div>
       <div class="pd-links">${c.dpUrl ? `<a href="${e(c.dpUrl)}" target="_blank" rel="noopener">🏠 Annonce DuProprio</a>` : ''}<button onclick="CRM.open('${c.id}')">Fiche contact complète</button>
         <label class="pd-dnc"><input type="checkbox" ${c.dnc ? 'checked' : ''} onchange="Prospect.set('dnc', this.checked)"> ⛔ Ne pas appeler</label></div>`;
   }
@@ -481,6 +499,72 @@
   function out2suivi() {
     const c = CRM._all()[cur]; if (!c) return; c.suivi = true; CRM.upsert(c);
     document.getElementById('pd-after').innerHTML = `<div class="crm-after-q">📌 En suivi — quand le rappeler ?</div><div class="chips">${[[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Prospect.follow(${d})">${l}</button>`).join('')}<label class="crm-datepick">📅<input type="date" onchange="Prospect.followDate(this.value)"></label></div><label class="crm-cal"><input type="checkbox" id="pd-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
+  }
+  function vendu(on) {
+    const c = CRM._all()[cur]; if (!c) return; const now = new Date().toISOString();
+    c.notes = c.notes || [];
+    if (on) { c.prevStage = c.stage || 'À appeler'; c.stage = VENDU; c.suivi = false; c.nextFollowUp = ''; c.onenote = false; c.notes.push({ id: CRM.newId(), at: now, text: '🏠 Propriété vendue (par le proprio ou un autre courtier) — archivée' }); }
+    else { c.stage = c.prevStage && c.prevStage !== VENDU ? c.prevStage : 'À appeler'; c.notes.push({ id: CRM.newId(), at: now, text: '↩ « Vendu » annulé' }); }
+    CRM.upsert(c); renderFiche(false); toastMsg(on ? '🏠 Vendue — rangée dans « Vendus »' : '↩ Remise dans tes listes');
+  }
+  function oneNote(on, to) {
+    const c = CRM._all()[cur]; if (!c) return; const now = new Date().toISOString();
+    c.notes = c.notes || [];
+    if (on) { c.onenote = true; c.notes.push({ id: CRM.newId(), at: now, text: '📓 À valider avec mes anciennes notes OneNote' }); }
+    else {
+      c.onenote = false;
+      if (to === 'suivi') { c.suivi = true; }
+      else if (to === 'appeler') { c.suivi = false; if (['Intéressé', 'Rendez-vous'].includes(c.stage)) c.stage = 'Appelé – rappeler'; }
+      else if (to === 'archive') { c.stage = 'Pas intéressé'; c.suivi = false; c.nextFollowUp = ''; }
+      c.notes.push({ id: CRM.newId(), at: now, text: '📓 Notes OneNote validées' + (to === 'suivi' ? ' → Suivi' : to === 'archive' ? ' → Archivée' : ' → À appeler') });
+    }
+    CRM.upsert(c); renderFiche(false); toastMsg(on ? '📓 Rangée dans « À valider (OneNote) »' : '✓ Validée');
+  }
+
+  // ---------- LNNTE (liste nationale de numéros exclus) via Telelisting : automatique, sans rien déplacer ----------
+  const LN_DAYS = 31;
+  const lnSt = (c, k) => ((c.lnnte || {})[k] || {}).status;
+  const lnListed = (c) => lnSt(c, 'p1') === 'listed' || lnSt(c, 'p2') === 'listed';
+  const lnWhich = (c) => lnSt(c, 'p1') === 'listed' && lnSt(c, 'p2') === 'listed' ? 'les deux numéros sont' : lnSt(c, 'p1') === 'listed' ? `le ${e(c.phone)} est` : `le 2ᵉ numéro (${e(c.phone2)}) est`;
+  const lnFresh = (c) => { const l = c.lnnte; if (!l || !l.at || l.phone !== (c.phone || '') || l.phone2 !== (c.phone2 || '')) return false; const age = (Date.now() - new Date(l.at)) / 864e5; const err = ['p1', 'p2'].some(k => l[k] && l[k].status === 'error'); return err ? age < 1 / 24 : age < LN_DAYS; };   // erreur : on réessaie au plus une fois par heure
+  function lnBadge(c, short) {
+    if (!c.phone || c.dnc) return '';
+    if (!c.lnnte) return ' · <span class="pr-lnnte">LNNTE…</span>';
+    if (lnListed(c)) return ' · <span class="pr-ln listed">⛔ LNNTE</span>';
+    if (['p1', 'p2'].some(k => lnSt(c, k) === 'uncovered')) return ' · <span class="pr-ln unc">⚠️ hors couverture</span>';
+    if (['p1', 'p2'].some(k => lnSt(c, k) === 'error')) return ' · <span class="pr-lnnte">LNNTE ?</span>';
+    return ' · <span class="pr-ln ok">✓ LNNTE</span>';
+  }
+  function lnDetail(c) {
+    if (!c.phone || c.dnc) return '';
+    const l = c.lnnte;
+    if (!l) return '<div class="pd-ln wait">⏳ Vérification LNNTE en cours…</div>';
+    const row = (k, ph) => { const st = lnSt(c, k); if (!ph) return ''; return `<div>${e(ph)} : ${st === 'listed' ? '<b class="r">⛔ sur la liste</b>' : st === 'clean' ? '<b class="g">✓ pas sur la liste</b>' : st === 'uncovered' ? '<b class="o">⚠️ indicatif non couvert par l\'abonnement de RE/MAX (450 et 514 seulement) — vérifie toi-même</b>' : '<b class="o">? vérification impossible pour l\'instant</b>'}</div>`; };
+    return `<div class="pd-ln">${row('p1', c.phone)}${row('p2', c.phone2)}<span>LNNTE via Telelisting · ${fmtD(l.at.slice(0, 10))} · <a href="https://lnnte-dncl.gc.ca/" target="_blank" rel="noopener">site LNNTE</a> · <button onclick="Prospect.lnCheck('${c.id}',true)">↻ Revérifier</button></span></div>`;
+  }
+  async function lnOne(ph) {
+    try { const r = await fetch('/api/inbox?lnnte=' + encodeURIComponent(String(ph).replace(/\D/g, '').slice(-10)), { credentials: 'same-origin', cache: 'no-store' }); const j = await r.json().catch(() => ({})); return { status: j.status || 'error' }; }
+    catch (x) { return { status: 'error' }; }
+  }
+  const lnBusy = new Set();
+  async function lnCheck(id, force) {
+    const c = CRM._all()[id]; if (!c || !c.phone || c.dnc || lnBusy.has(id) || (!force && lnFresh(c))) return;
+    lnBusy.add(id);
+    try {
+      const p1 = await lnOne(c.phone), p2 = c.phone2 ? await lnOne(c.phone2) : null;
+      const cc = CRM._all()[id]; if (!cc) return;
+      cc.lnnte = { at: new Date().toISOString(), phone: cc.phone || '', phone2: cc.phone2 || '', p1, p2 };
+      if (cc.lnnte && lnListed(cc)) { cc.notes = cc.notes || []; if (!(cc.notes.slice(-3) || []).some(n => /LNNTE/.test(n.text || ''))) cc.notes.push({ id: CRM.newId(), at: cc.lnnte.at, text: '⛔ LNNTE : numéro sur la liste nationale (vérification Telelisting) — à valider' }); }
+      CRM.upsert(cc);
+      if (cur === id) renderFiche(false);
+    } finally { lnBusy.delete(id); }
+  }
+  // en arrière-plan : toutes les fiches de la liste affichée (après un import, par exemple), une à la fois
+  let lnRun = false;
+  async function lnSweep() {
+    if (lnRun) return; lnRun = true;
+    try { for (const c of all().filter(k => k.plist === curList && k.phone && !k.dnc && !lnFresh(k))) { await lnCheck(c.id); await new Promise(r => setTimeout(r, 250)); } }
+    finally { lnRun = false; }
   }
   function toSuivi(on) {
     const c = CRM._all()[cur]; if (!c) return;
@@ -586,7 +670,7 @@
     const L = lists();
     if (!curList || !L.some(l => l.name === curList)) curList = L.length ? L[0].name : null;
     const items = all().filter(c => c.plist === curList);
-    const by = { appeler: [], suivi: [], signe: [], archive: [] };
+    const by = {}; COLS.forEach(([k]) => { by[k] = []; });
     items.forEach(c => by[colOf(c)].push(c));
     const due = by.suivi.filter(isDue).length;
     let rows = by[col];
@@ -611,9 +695,10 @@
       <div class="crm-filters pr-cols">${COLS.map(([k, l]) => `<button class="${col === k && !q ? 'on' : ''}" onclick="Prospect.col('${k}')">${l} ${by[k].length}${k === 'suivi' && due ? ` <span class="pr-due">${due} à rappeler</span>` : ''}</button>`).join('')}</div>
       <div class="pr-searchrow"><input class="crm-search" type="search" placeholder="🔍 Adresse, numéro, nom…" value="${e(q)}" oninput="Prospect.search(this.value)"></div>
       ${callable.length ? `<button class="crm-dial" onclick="Prospect.dial()">▶ Appeler ${col === 'suivi' ? 'les rappels dus' : 'la liste'} (${callable.length})</button>` : ''}
-      <div class="pr-grid" id="pr-drop">${(() => { nextId = col === 'appeler' && !q ? ((rows.find(c => !(c.calls || []).length && c.phone && !c.dnc) || {}).id || null) : null; return rows.map(card).join(''); })() || `<div class="crm-empty">${col === 'suivi' ? 'Aucun suivi pour l\'instant. Quand tu parles à quelqu\'un, il arrive ici automatiquement.' : col === 'signe' ? 'Aucun contrat signé… pour l\'instant 💪' : col === 'archive' ? 'Rien d\'archivé.' : 'Toute la liste a été appelée 🎉'}</div>`}</div>`}
+      <div class="pr-grid" id="pr-drop">${(() => { nextId = col === 'appeler' && !q ? ((rows.find(c => !(c.calls || []).length && c.phone && !c.dnc) || {}).id || null) : null; return rows.map(card).join(''); })() || `<div class="crm-empty">${col === 'suivi' ? 'Aucun suivi pour l\'instant. Quand tu parles à quelqu\'un, il arrive ici automatiquement.' : col === 'signe' ? 'Aucun contrat signé… pour l\'instant 💪' : col === 'archive' ? 'Rien d\'archivé.' : col === 'vendu' ? 'Aucune propriété vendue par un autre.' : col === 'onenote' ? 'Rien à valider avec OneNote.' : col === 'sansnum' ? 'Toutes les fiches ont un numéro 👍' : 'Toute la liste a été appelée 🎉'}</div>`}</div>`}
       <div style="height:90px"></div>`;
     bindDrop(root);
+    if (curList) setTimeout(lnSweep, 800);
   }
   let nextId = null;
   function card(c) {
@@ -622,12 +707,12 @@
     const done = col === 'appeler' && nCalls > 0 && !!c.nextFollowUp && !isDue(c);   // déjà essayé, pas encore le moment de rappeler
     const isNext = c.id === nextId;
     const fu = c.nextFollowUp ? `<span class="${isDue(c) ? 'crm-due-txt' : ''}">🔔 ${c.nextFollowUp === today() ? "aujourd'hui" : fmtD(c.nextFollowUp)}</span>` : '';
-    return `<div class="pr-card${c.dnc ? ' dnc' : ''}${done ? ' done' : ''}${isNext ? ' next' : ''}" onclick="Prospect.open('${c.id}')">
+    return `<div class="pr-card${c.dnc ? ' dnc' : ''}${lnListed(c) ? ' lnlisted' : ''}${done ? ' done' : ''}${isNext ? ' next' : ''}" onclick="Prospect.open('${c.id}')">
       ${thumbHtml(c, 'pr-thumb')}
       <div class="pr-body">
-        <div class="pr-l1">${isNext ? '<span class="pr-next">▶ Prochain</span>' : ''}<span class="pr-no">#${e(c.porder || '')}</span><b>${e(c.price || '')}</b>${c.priceDropAt ? '<span class="pr-drop" title="Baisse de prix">🔻</span>' : ''}${c.isContact ? '<span class="pr-drop" title="Dans tes contacts">📇</span>' : ''}${c.revalider ? '<span class="pr-reval">🤝 à revalider</span>' : ''}<span class="pr-type">${e(c.ptype || '')}</span></div>
+        ${lnListed(c) ? '<div class="pr-ln-strip">⛔ LNNTE — sur la liste nationale · à valider</div>' : ''}<div class="pr-l1">${isNext ? '<span class="pr-next">▶ Prochain</span>' : ''}${c.onenote ? '<span class="pr-reval">📓 OneNote</span>' : ''}<span class="pr-no">#${e(c.porder || '')}</span><b>${e(c.price || '')}</b>${c.priceDropAt ? '<span class="pr-drop" title="Baisse de prix">🔻</span>' : ''}${c.isContact ? '<span class="pr-drop" title="Dans tes contacts">📇</span>' : ''}${c.revalider ? '<span class="pr-reval">🤝 à revalider</span>' : ''}<span class="pr-type">${e(c.ptype || '')}</span></div>
         <div class="pr-addr">${e(c.name)}${c.owner ? ` · <b>${e(c.owner)}</b>` : ''}</div>
-        <div class="pr-meta">${c.hood ? e(c.hood) + ' · ' : ''}${c.dnc ? '⛔ Ne pas appeler' : c.phone ? '📞 ' + e(c.phone) + (c.phone2 ? ' · ' + e(c.phone2) : '') : '📵 pas de tél.'}${!c.dncChecked && c.phone && !c.dnc ? ' · <span class="pr-lnnte">LNNTE ?</span>' : ''}</div>
+        <div class="pr-meta">${c.hood ? e(c.hood) + ' · ' : ''}${c.dnc ? '⛔ Ne pas appeler' : c.phone ? '📞 ' + e(c.phone) + (c.phone2 ? ' · ' + e(c.phone2) : '') : '📵 pas de tél.'}${lnBadge(c, true)}</div>
         <div class="pr-meta">${done ? `<span class="pr-done">✓ appelé ${new Date(lc.at).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })}</span> · ` : ''}${lc ? `${OUTL[lc.outcome] || ''} · ${nCalls} essai${nCalls > 1 ? 's' : ''} · ` : ''}${fu ? fu.replace('🔔 ', '🔔 rappel ') : ''}</div>
       </div>
       ${c.phone && !c.dnc ? `<a class="crm-call" href="tel:${String(c.phone).replace(/[^\d+]/g, '')}" onclick="event.stopPropagation()" aria-label="Appeler">📞</a>` : ''}
@@ -651,7 +736,7 @@
 
   window.Prospect = {
     sess: sessToggle, callT: () => (callT0 ? callStop() : callStart()), takeCallDur,
-    out2suivi, toSuivi, offer, toContact, plan, savePlan,
+    out2suivi, toSuivi, vendu, oneNote, lnCheck, offer, toContact, plan, savePlan,
     render, changed, thumb, thumbHtml, importFiles, confirmImport, closeModal, pick, dial, _parse: parseText,
     open: openFiche, close: closeFiche, step, typed, quick, set, out, follow, followDate, big,
     pane(k) { pane = k; const g = document.querySelector('#pr-dossier .pd-grid'); if (g) g.className = 'pd-grid pane-' + k; document.querySelectorAll('#pr-dossier .pd-tabs button').forEach(b => b.classList.toggle('on', b.getAttribute('onclick').includes("'" + k + "'"))); },

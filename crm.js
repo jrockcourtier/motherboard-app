@@ -41,7 +41,7 @@
     courtier:      { l: 'A déjà un courtier', i: '🤝', conv: true }
   };
   const HOT = ['En visites', "Offre d'achat", 'Conditions', 'Notaire', 'Évaluation', 'CCV signé', 'En vigueur', 'Offre acceptée', 'Intéressé', 'Rendez-vous'];
-  const CLOSED = ['A un courtier', 'Client passé', 'Pas intéressé', 'Vendu / Notaire', 'Converti en vendeur', 'Signé', 'Injoignable'];
+  const CLOSED = ['Vendu (par le proprio)', 'A un courtier', 'Client passé', 'Pas intéressé', 'Vendu / Notaire', 'Converti en vendeur', 'Signé', 'Injoignable'];
   const SMART = [
     ['tous', 'Tous', () => true],
     ['appeler', '📞 À appeler', c => !c.dnc && isDue(c)],

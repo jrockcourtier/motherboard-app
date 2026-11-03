@@ -38,10 +38,31 @@ async function raw(req) {
   const ch = []; for await (const c of req) ch.push(c); return Buffer.concat(ch).toString('utf8');
 }
 
+async function lnnte(phone, res) {
+  const d = digits(phone);
+  if (d.length !== 10) return L.json(res, 400, { status: 'error', error: 'numero_invalide' });
+  const k = await L.sb('secrets?select=value&name=eq.telelisting_key');
+  const key = k.ok && k.body && k.body[0] && k.body[0].value;
+  if (!key) return L.json(res, 503, { status: 'error', error: 'cle_absente' });
+  try {
+    const r = await fetch(`https://crm.telelisting.net/api/v1/lookup?phone=${d}&dnclOnly=1`, { headers: { 'X-Api-Key': key, Accept: 'application/json' } });
+    const txt = await r.text(); let j = null; try { j = JSON.parse(txt); } catch (e) {}
+    if (!r.ok || !j) return L.json(res, 502, { status: 'error', error: 'telelisting_' + r.status, detail: String(txt).slice(0, 200) });
+    const dn = j.dncl || (j.data && j.data.dncl) || j;
+    const on = dn && Object.prototype.hasOwnProperty.call(dn, 'onList') ? dn.onList : undefined;
+    const status = on === true ? 'listed' : on === false ? 'clean' : on === null ? 'uncovered' : 'error';
+    res.setHeader('Cache-Control', 'no-store');
+    return L.json(res, 200, { status, phone: d, at: new Date().toISOString(), keys: status === 'error' ? Object.keys(j).slice(0, 12) : undefined });
+  } catch (e) { return L.json(res, 502, { status: 'error', error: e.message }); }
+}
+
 module.exports = async (req, res) => {
   try {
     if (req.method === 'GET') {
       const email = await L.requireOwner(req, res); if (!email) return;
+      // vérification LNNTE via Telelisting (gratuite avec dnclOnly=1) : GET /api/inbox?lnnte=5145551234
+      const qs = new URL(req.url, 'http://x').searchParams;
+      if (qs.get('lnnte') != null) return lnnte(qs.get('lnnte'), res);
       return L.json(res, 200, { key: inboxKey(), url: L.origin(req) + '/api/inbox' });
     }
     if (req.method !== 'POST') { res.setHeader('Allow', 'GET, POST'); return L.json(res, 405, { error: 'method_not_allowed' }); }
