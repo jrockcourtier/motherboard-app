@@ -367,11 +367,12 @@
     tick();
   }
   function money(n) { return Math.round(n).toLocaleString('fr-CA') + ' $'; }
+  const COLLAB = 2;   // Julien donne toujours 2 % au courtier collaborateur
   function offerCalc(c) {
     const v = priceNum(c.price); if (!v) return '';
     const sel = c.offer && c.offer.price === c.price ? c.offer.pct : null;
-    return `<div class="pd-offer"><div class="pd-offer-h">Prix à proposer <span>(prix demandé − commission) · coche ce que tu as proposé</span></div>${[3.5, 3.25, 3].map(t => { const com = v * t / 100;
-      return `<label class="pd-offer-r${sel === t ? ' on' : ''}"><input type="checkbox" ${sel === t ? 'checked' : ''} onchange="Prospect.offer(${t}, this.checked)"><span class="pd-offer-t">${String(t).replace('.', ',')} %</span><b>${money(v - com)}</b><span class="pd-offer-c">comm. ${money(com)}</span></label>`; }).join('')}
+    return `<div class="pd-offer"><div class="pd-offer-h">Prix à proposer <span>(prix demandé − commission) · coche ce que tu as proposé · 2 % au collaborateur</span></div><div class="pd-offer-r pd-offer-hd"><span></span><span class="pd-offer-t">Total</span><b>Prix</b><span class="pd-offer-c">Comm. totale</span><span class="pd-offer-m">Ma part</span></div>${[3.75, 3.5, 3.25, 3].map(t => { const com = v * t / 100, mine = Math.max(0, t - COLLAB);
+      return `<label class="pd-offer-r${sel === t ? ' on' : ''}"><input type="checkbox" ${sel === t ? 'checked' : ''} onchange="Prospect.offer(${t}, this.checked)"><span class="pd-offer-t">${String(t).replace('.', ',')} %</span><b>${money(v - com)}</b><span class="pd-offer-c">${money(com)}</span><span class="pd-offer-m">${String(+mine.toFixed(2)).replace('.', ',')} % · ${money(v * mine / 100)}</span></label>`; }).join('')}
       ${c.offer && c.offer.price !== c.price ? `<div class="pd-offer-old">Déjà proposé : ${String(c.offer.pct).replace('.', ',')} % → ${money(c.offer.amount)} (sur ${e(c.offer.price)})</div>` : ''}</div>`;
   }
   function toContact(again) {
@@ -396,7 +397,7 @@
     if (on) {
       const amount = Math.round(v * (1 - t / 100));
       c.offer = { pct: t, amount, price: c.price, at: now };
-      c.notes.push({ id: CRM.newId(), at: now, text: `🤝 Proposé ${money(amount)} (${String(t).replace('.', ',')} % · comm. ${money(v * t / 100)}) — prix demandé ${c.price}` });
+      c.notes.push({ id: CRM.newId(), at: now, text: `🤝 Proposé ${money(amount)} (${String(t).replace('.', ',')} % · comm. totale ${money(v * t / 100)} · ma part ${String(+Math.max(0, t - COLLAB).toFixed(2)).replace('.', ',')} % = ${money(v * Math.max(0, t - COLLAB) / 100)}) — prix demandé ${c.price}` });
     } else if (c.offer && c.offer.pct === t) { delete c.offer; }
     CRM.upsert(c); renderFiche(false);
   }
@@ -429,7 +430,8 @@
       ${fu}
       ${colOf(c) === 'suivi' ? `<button class="pd-move" onclick="Prospect.toSuivi(false)">↩ Remettre dans « À appeler »</button>` : colOf(c) === 'appeler' && (c.calls || []).length ? `<button class="pd-move" onclick="Prospect.toSuivi(true)">📌 Mettre en suivi</button>` : ''}
       <div class="pd-stages">${['À appeler', 'Appelé – rappeler', 'Intéressé', 'Rendez-vous', 'Signé', 'Pas intéressé'].map(s => `<button class="${(c.stage || 'À appeler') === s ? 'on' : ''}" onclick="Prospect.set('stage', ${JSON.stringify(s).replace(/"/g, '&quot;')})">${s === 'Signé' ? '✍️ Signé' : e(s)}</button>`).join('')}</div>
-      <div class="pd-tools">${colOf(c) !== 'vendu' ? `<button onclick="Prospect.vendu(true)">🏠 Vendu <small>(par le proprio / un autre)</small></button>` : ''}${!c.onenote ? `<button onclick="Prospect.oneNote(true)">📓 Voir OneNote</button>` : ''}</div>
+      <div class="pd-tools">${colOf(c) !== 'vendu' ? `<button onclick="Prospect.vendu(true)">🏠 Vendu <small>(par le proprio / un autre)</small></button>` : ''}${!c.onenote ? `<button onclick="Prospect.oneNote(true)">📓 Voir OneNote</button>` : ''}<button onclick="Prospect.mergeOpen()">🔗 Fusionner avec un contact</button><button class="pd-del" onclick="Prospect.delFiche()">🗑 Supprimer la fiche</button></div>
+      <div id="pd-merge"></div>
       <div class="pd-links">${c.dpUrl ? `<a href="${e(c.dpUrl)}" target="_blank" rel="noopener">🏠 Annonce DuProprio</a>` : ''}<button onclick="CRM.open('${c.id}')">Fiche contact complète</button>
         <label class="pd-dnc"><input type="checkbox" ${c.dnc ? 'checked' : ''} onchange="Prospect.set('dnc', this.checked)"> ⛔ Ne pas appeler</label></div>`;
   }
@@ -500,6 +502,45 @@
     const c = CRM._all()[cur]; if (!c) return; c.suivi = true; CRM.upsert(c);
     document.getElementById('pd-after').innerHTML = `<div class="crm-after-q">📌 En suivi — quand le rappeler ?</div><div class="chips">${[[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Prospect.follow(${d})">${l}</button>`).join('')}<label class="crm-datepick">📅<input type="date" onchange="Prospect.followDate(this.value)"></label></div><label class="crm-cal"><input type="checkbox" id="pd-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
   }
+  function delFiche() {
+    const c = CRM._all()[cur]; if (!c) return; const id = c.id, nm = c.name;
+    const i = order.indexOf(id), next = order[i + 1] || order[i - 1];
+    c.deleted = true; c.deletedAt = new Date().toISOString(); CRM.upsert(c);
+    window.__undoPDel = () => { const k = CRM._all()[id]; if (k) { k.deleted = false; delete k.deletedAt; CRM.upsert(k); render(); } document.querySelectorAll('.mb-toast').forEach(x => x.remove()); };
+    if (typeof toast === 'function') toast(`🗑 Fiche « ${e(nm)} » supprimée <button onclick="__undoPDel()">Annuler</button>`, 8000);
+    if (next) openFiche(next); else closeFiche();
+  }
+  // fusionner la fiche avec un contact déjà dans l'app (ex. reçu de l'iPhone, ou ancien contact OneNote)
+  function mergeOpen() {
+    const el = document.getElementById('pd-merge'); if (!el) return;
+    el.innerHTML = `<div class="guest-panel"><b>🔗 Fusionner avec un contact de l'app</b><input id="pd-merge-q" placeholder="Nom ou numéro…" oninput="Prospect.mergeList(this.value)" style="width:100%;margin-top:6px"><div id="pd-merge-r" class="pd-merge-r"></div>
+      <div class="f-hint">La fiche garde tout et reçoit le nom, le courriel, le numéro et les notes du contact choisi. Le contact choisi est ensuite retiré (il n'y a plus qu'une seule fiche).<br>Pour un contact qui est seulement dans ton iPhone : envoie-le avec ton raccourci « Envoyer à Motherboard ». S'il a le même numéro, il se fusionne tout seul avec cette fiche.</div></div>`;
+    mergeList(''); setTimeout(() => { const i = document.getElementById('pd-merge-q'); if (i) i.focus(); }, 50);
+  }
+  function mergeList(qq) {
+    const box = document.getElementById('pd-merge-r'); if (!box) return;
+    const dg = (v) => String(v || '').replace(/\D/g, '');
+    const s = String(qq || '').toLowerCase().trim(), sd = dg(qq);
+    const c = CRM._all()[cur]; const myD = [dg(c.phone).slice(-10), dg(c.phone2).slice(-10)].filter(Boolean);
+    const L = Object.values(CRM._all()).filter(k => !k.deleted && k.id !== cur && !(k.type === 'proprio' && k.plist))
+      .map(k => ({ k, same: myD.length && [dg(k.phone).slice(-10), dg(k.phone2).slice(-10)].some(x => x && myD.includes(x)) }))
+      .filter(({ k, same }) => same || (s && ((k.name || '').toLowerCase().includes(s) || (sd.length >= 3 && (dg(k.phone) + ' ' + dg(k.phone2)).includes(sd)) || (k.email || '').toLowerCase().includes(s))))
+      .sort((a, b) => b.same - a.same).slice(0, 8);
+    box.innerHTML = L.length ? L.map(({ k, same }) => `<button onclick="Prospect.mergeWith('${k.id}')">${same ? '⭐ ' : ''}<b>${e(k.name || '')}</b> <span>${e(k.phone || '')}${k.email ? ' · ' + e(k.email) : ''}${same ? ' · même numéro' : ''}</span></button>`).join('') : `<div class="crm-muted">${s ? 'Aucun contact trouvé.' : 'Écris un nom ou un numéro.'}</div>`;
+  }
+  function mergeWith(oid) {
+    const c = CRM._all()[cur], o = CRM._all()[oid]; if (!c || !o) return; const now = new Date().toISOString();
+    const dg = (v) => String(v || '').replace(/\D/g, '').slice(-10);
+    if (!String(c.owner || '').trim() && o.name) c.owner = o.name;
+    if (!c.email && o.email) c.email = o.email;
+    [o.phone, o.phone2].filter(Boolean).forEach(ph => { if (![c.phone, c.phone2].some(x => x && dg(x) === dg(ph))) { if (!c.phone) c.phone = ph; else if (!c.phone2) c.phone2 = ph; } });
+    c.notes = (c.notes || []).concat((o.notes || []).map(n => Object.assign({}, n, { text: '↪ ' + (n.text || '') })));
+    c.calls = (c.calls || []).concat(o.calls || []).sort((a, b) => String(a.at).localeCompare(String(b.at)));
+    if (o.isContact) c.isContact = true;
+    c.notes.push({ id: CRM.newId(), at: now, text: `🔗 Fusionné avec le contact « ${o.name || ''} »${o.phone ? ' (' + o.phone + ')' : ''}` });
+    o.deleted = true; o.mergedInto = c.id; o.deletedAt = now;
+    CRM.upsert(o); CRM.upsert(c); delete c.lnnte; renderFiche(true); toastMsg(`🔗 Fusionné avec « ${e(o.name || '')} »`);
+  }
   function vendu(on) {
     const c = CRM._all()[cur]; if (!c) return; const now = new Date().toISOString();
     c.notes = c.notes || [];
@@ -531,16 +572,19 @@
     if (!c.phone || c.dnc) return '';
     if (!c.lnnte) return ' · <span class="pr-lnnte">LNNTE…</span>';
     if (lnListed(c)) return ' · <span class="pr-ln listed">⛔ LNNTE</span>';
-    if (['p1', 'p2'].some(k => lnSt(c, k) === 'uncovered')) return ' · <span class="pr-ln unc">⚠️ hors couverture</span>';
+    if (['p1', 'p2'].some(k => lnSt(c, k) === 'uncovered') && !c.lnManual) return ' · <span class="pr-ln unc">⚠️ hors couverture</span>';
+    if (c.lnManual) return ' · <span class="pr-ln ok">✓ LNNTE (moi)</span>';
     if (['p1', 'p2'].some(k => lnSt(c, k) === 'error')) return ' · <span class="pr-lnnte">LNNTE ?</span>';
     return ' · <span class="pr-ln ok">✓ LNNTE</span>';
   }
+  function lnMine(on) { const c = CRM._all()[cur]; if (!c) return; c.lnManual = on ? new Date().toISOString() : ''; c.dncChecked = !!on; if (on) { c.notes = c.notes || []; c.notes.push({ id: CRM.newId(), at: c.lnManual, text: '✓ LNNTE vérifiée par moi' }); } CRM.upsert(c); renderFiche(false); }
+  const lnMineBox = (c) => `<label class="pd-ln-mine"><input type="checkbox" ${c.lnManual ? 'checked' : ''} onchange="Prospect.lnMine(this.checked)"> ✓ LNNTE vérifiée par moi${c.lnManual ? ' le ' + fmtD(String(c.lnManual).slice(0, 10)) : ''}</label>`;
   function lnDetail(c) {
     if (!c.phone || c.dnc) return '';
     const l = c.lnnte;
-    if (!l) return '<div class="pd-ln wait">⏳ Vérification LNNTE en cours…</div>';
+    if (!l) return '<div class="pd-ln wait">⏳ Vérification LNNTE en cours…' + lnMineBox(c) + '</div>';
     const row = (k, ph) => { const st = lnSt(c, k); if (!ph) return ''; return `<div>${e(ph)} : ${st === 'listed' ? '<b class="r">⛔ sur la liste</b>' : st === 'clean' ? '<b class="g">✓ pas sur la liste</b>' : st === 'uncovered' ? '<b class="o">⚠️ indicatif non couvert par l\'abonnement de RE/MAX (450 et 514 seulement) — vérifie toi-même</b>' : '<b class="o">? vérification impossible pour l\'instant</b>'}</div>`; };
-    return `<div class="pd-ln">${row('p1', c.phone)}${row('p2', c.phone2)}<span>LNNTE via Telelisting · ${fmtD(l.at.slice(0, 10))} · <a href="https://lnnte-dncl.gc.ca/" target="_blank" rel="noopener">site LNNTE</a> · <button onclick="Prospect.lnCheck('${c.id}',true)">↻ Revérifier</button></span></div>`;
+    return `<div class="pd-ln">${row('p1', c.phone)}${row('p2', c.phone2)}<span>LNNTE via Telelisting · ${fmtD(l.at.slice(0, 10))} · <a href="https://lnnte-dncl.gc.ca/" target="_blank" rel="noopener">site LNNTE</a> · <button onclick="Prospect.lnCheck('${c.id}',true)">↻ Revérifier</button></span>${lnMineBox(c)}</div>`;
   }
   async function lnOne(ph) {
     try { const r = await fetch('/api/inbox?lnnte=' + encodeURIComponent(String(ph).replace(/\D/g, '').slice(-10)), { credentials: 'same-origin', cache: 'no-store' }); const j = await r.json().catch(() => ({})); return { status: j.status || 'error' }; }
@@ -736,7 +780,7 @@
 
   window.Prospect = {
     sess: sessToggle, callT: () => (callT0 ? callStop() : callStart()), takeCallDur,
-    out2suivi, toSuivi, vendu, oneNote, lnCheck, offer, toContact, plan, savePlan,
+    out2suivi, toSuivi, vendu, oneNote, lnCheck, delFiche, mergeOpen, mergeList, mergeWith, lnMine, offer, toContact, plan, savePlan,
     render, changed, thumb, thumbHtml, importFiles, confirmImport, closeModal, pick, dial, _parse: parseText,
     open: openFiche, close: closeFiche, step, typed, quick, set, out, follow, followDate, big,
     pane(k) { pane = k; const g = document.querySelector('#pr-dossier .pd-grid'); if (g) g.className = 'pd-grid pane-' + k; document.querySelectorAll('#pr-dossier .pd-tabs button').forEach(b => b.classList.toggle('on', b.getAttribute('onclick').includes("'" + k + "'"))); },

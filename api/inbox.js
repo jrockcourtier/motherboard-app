@@ -78,18 +78,32 @@ module.exports = async (req, res) => {
     if (!cards.length) { res.statusCode = 400; res.setHeader('Content-Type', 'text/plain; charset=utf-8'); return res.end('⚠️ Aucune fiche contact reçue.'); }
     const ex = await L.sb('contacts?select=id,data&limit=5000');
     const known = {};
-    (ex.body || []).forEach(r => { const d = r.data || {}; if (d.deleted) return; [d.phone, d.phone2].forEach(p => { const x = digits(p); if (x.length >= 10) known[x] = { name: d.name || 'contact', id: r.id }; }); });
+    (ex.body || []).forEach(r => { const d = r.data || {}; if (d.deleted) return; [d.phone, d.phone2].forEach(p => { const x = digits(p); if (x.length >= 10) known[x] = { name: d.name || 'contact', id: r.id, data: d }; }); });
+    const merged = [];
     const now = new Date().toISOString(), rows = [], msgs = []; let firstId = null;
     cards.slice(0, 20).forEach(c => {
       const name = (c.fn || c.n || '').trim() || fmtPhone(c.phones[0]) || 'Contact sans nom';
       const ph = c.phones.map(fmtPhone);
       const dup = ph.map(digits).find(x => known[x]);
-      if (dup) { msgs.push(`ℹ️ ${name} est déjà dans Motherboard (${known[dup].name})`); firstId = firstId || known[dup].id; return; }
+      if (dup) {
+        // même numéro qu'une fiche existante (ex. un proprio déjà appelé) : on fusionne au lieu d'ignorer
+        const k = known[dup], d = Object.assign({}, k.data), nowIso = new Date().toISOString(); let changed = [];
+        const realName = (c.fn || c.n || '').trim();
+        if (realName && d.type === 'proprio' && !String(d.owner || '').trim()) { d.owner = realName; changed.push('nom'); }
+        if (realName && d.type !== 'proprio' && /^\d|^Contact sans nom/.test(d.name || '')) { d.name = realName; changed.push('nom'); }
+        if (!d.email && c.emails[0]) { d.email = c.emails[0]; changed.push('courriel'); }
+        const others = ph.filter(x => digits(x) !== digits(d.phone) && digits(x) !== digits(d.phone2));
+        if (others[0] && !d.phone2) { d.phone2 = others[0]; changed.push('2e numéro'); }
+        d.isContact = true; d.notes = (d.notes || []).concat([{ id: crypto.randomUUID(), at: nowIso, text: `📲 Fusionné avec le contact de l'iPhone « ${realName || ph[0]} »${changed.length ? ' — ajouté : ' + changed.join(', ') : ''}${c.note ? ' — note : ' + c.note : ''}` }]);
+        d.updatedAt = nowIso; merged.push({ id: k.id, updated_at: nowIso, data: d });
+        msgs.push(`🔗 ${name} fusionné avec « ${k.name} » dans Motherboard`); firstId = firstId || k.id; return;
+      }
       const id = crypto.randomUUID(); firstId = firstId || id;
       rows.push({ id, updated_at: now, data: { id, inbox: true, type: 'acheteur', name, phone: ph[0] || '', phone2: ph[1] || '', email: c.emails[0] || '', address: c.adr || '', source: 'iPhone', firstContact: now.slice(0, 10), lastContact: now.slice(0, 10),
         notes: [{ id: crypto.randomUUID(), at: now, text: '📲 Reçu de l\'iPhone' + (c.note ? ' — ' + c.note : '') + (c.org ? ' · ' + c.org : '') }], calls: [], createdAt: now, updatedAt: now } });
       msgs.push(`✅ ${name} ajouté à Motherboard (À classer)`);
     });
+    rows.push(...merged);
     if (rows.length) {
       const r = await L.sb('contacts?on_conflict=id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(rows) });
       if (!r.ok) { res.statusCode = 502; res.setHeader('Content-Type', 'text/plain; charset=utf-8'); return res.end('⚠️ Motherboard n\'a pas pu enregistrer le contact. Réessaie dans un instant.'); }

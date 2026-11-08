@@ -598,3 +598,14 @@ body.rpt-on #rpt-print { display: block; position: fixed; inset: 0; z-index: 999
 .pr-ln { font-weight: 700; } .pr-ln.listed { color: #C62828; } .pr-ln.unc { color: #E65100; } .pr-ln.ok { color: #2E7D32; }
 .pr-card.lnlisted { outline: 3px solid #C62828; outline-offset: -3px; }
 .pr-ln-strip { background: #C62828; color: #fff; font-weight: 800; font-size: 12px; padding: 4px 8px; border-radius: 6px; margin-bottom: 4px; }
+
+/* v18.2 */
+.pd-offer-r .pd-offer-m { margin-left: auto; font-weight: 700; color: #2E7D32; white-space: nowrap; font-size: 12px; }
+.pd-offer-hd { font-size: 10.5px; text-transform: uppercase; letter-spacing: .3px; opacity: .6; cursor: default; }
+.pd-offer-hd b { font-weight: 600; }
+.pd-tools .pd-del { color: #C62828; border-color: rgba(198,40,40,.4); }
+.pd-merge-r { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.pd-merge-r button { text-align: left; border: 1px solid rgba(128,128,128,.3); background: transparent; color: inherit; border-radius: 8px; padding: 7px 10px; cursor: pointer; }
+.pd-merge-r button span { opacity: .7; font-size: 12px; }
+.pd-ln-mine { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.pd-offer-hd > span:first-child { width: 13px; flex: none; }
