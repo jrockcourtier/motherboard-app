@@ -758,10 +758,13 @@
   function pickNext(rows) {
     const free = (c) => !(c.calls || []).length && c.phone && !c.dnc;
     const listAll = all().filter(c => c.plist === curList);
-    let last = null, lastAt = '';
-    listAll.forEach(c => { const lc = lastCall(c); if (lc && String(lc.at) > lastAt) { lastAt = String(lc.at); last = c; } });
     const sorted = rows.slice().sort((a, b) => (a.porder || 0) - (b.porder || 0));
-    const from = last ? (last.porder || 0) : -Infinity;
+    // 1) les nouvelles du dernier import passent en premier
+    const fresh = sorted.find(c => isNew(c) && free(c)); if (fresh) return fresh.id;
+    // 2) sinon on continue après la fiche la plus avancée appelée le même jour que le dernier appel (un rappel sur une vieille fiche ne fait pas reculer)
+    let lastAt = ''; listAll.forEach(c => { const lc = lastCall(c); if (lc && String(lc.at) > lastAt) lastAt = String(lc.at); });
+    const day = lastAt.slice(0, 10);
+    const from = day ? Math.max(...listAll.filter(c => (c.calls || []).some(k => String(k.at).slice(0, 10) === day)).map(c => c.porder || 0)) : -Infinity;
     const after = sorted.find(c => (c.porder || 0) > from && free(c));
     return ((after || sorted.find(free)) || {}).id || null;
   }
@@ -818,7 +821,7 @@
   function dialIds() {
     if (col !== 'appeler' && col !== 'suivi') return [];
     return all().filter(c => c.plist === curList && colOf(c) === col && c.phone && !c.dnc && (col === 'suivi' ? isDue(c) : (!c.nextFollowUp || isDue(c))))
-      .sort((a, b) => col === 'appeler' ? (a.porder || 0) - (b.porder || 0) : (a.nextFollowUp || '').localeCompare(b.nextFollowUp || ''));
+      .sort((a, b) => col === 'appeler' ? (isNew(b) && !(b.calls || []).length) - (isNew(a) && !(a.calls || []).length) || (a.porder || 0) - (b.porder || 0) : (a.nextFollowUp || '').localeCompare(b.nextFollowUp || ''));
   }
   function dial() { if (window.CRM) CRM.dial(dialIds().map(c => c.id)); }
   let rt = null;
