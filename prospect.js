@@ -739,12 +739,43 @@
       <div class="crm-filters pr-cols">${COLS.map(([k, l]) => `<button class="${col === k && !q ? 'on' : ''}" onclick="Prospect.col('${k}')">${l} ${by[k].length}${k === 'suivi' && due ? ` <span class="pr-due">${due} à rappeler</span>` : ''}</button>`).join('')}</div>
       <div class="pr-searchrow"><input class="crm-search" type="search" placeholder="🔍 Adresse, numéro, nom…" value="${e(q)}" oninput="Prospect.search(this.value)"></div>
       ${callable.length ? `<button class="crm-dial" onclick="Prospect.dial()">▶ Appeler ${col === 'suivi' ? 'les rappels dus' : 'la liste'} (${callable.length})</button>` : ''}
-      <div class="pr-grid" id="pr-drop">${(() => { nextId = col === 'appeler' && !q ? ((rows.find(c => !(c.calls || []).length && c.phone && !c.dnc) || {}).id || null) : null; return rows.map(card).join(''); })() || `<div class="crm-empty">${col === 'suivi' ? 'Aucun suivi pour l\'instant. Quand tu parles à quelqu\'un, il arrive ici automatiquement.' : col === 'signe' ? 'Aucun contrat signé… pour l\'instant 💪' : col === 'archive' ? 'Rien d\'archivé.' : col === 'vendu' ? 'Aucune propriété vendue par un autre.' : col === 'onenote' ? 'Rien à valider avec OneNote.' : col === 'sansnum' ? 'Toutes les fiches ont un numéro 👍' : 'Toute la liste a été appelée 🎉'}</div>`}</div>`}
+      <div class="pr-grid" id="pr-drop">${(() => { nextId = col === 'appeler' && !q ? pickNext(rows) : null; return rows.map(card).join(''); })() || `<div class="crm-empty">${col === 'suivi' ? 'Aucun suivi pour l\'instant. Quand tu parles à quelqu\'un, il arrive ici automatiquement.' : col === 'signe' ? 'Aucun contrat signé… pour l\'instant 💪' : col === 'archive' ? 'Rien d\'archivé.' : col === 'vendu' ? 'Aucune propriété vendue par un autre.' : col === 'onenote' ? 'Rien à valider avec OneNote.' : col === 'sansnum' ? 'Toutes les fiches ont un numéro 👍' : 'Toute la liste a été appelée 🎉'}</div>`}</div>`}
       <div style="height:90px"></div>`;
     bindDrop(root);
     if (curList) setTimeout(lnSweep, 800);
+    setTimeout(dedupe, 1500);
   }
   let nextId = null;
+  // « Prochain » = la première fiche jamais appelée APRÈS ton dernier appel (dans l'ordre des numéros), puis on repart du début
+  function pickNext(rows) {
+    const free = (c) => !(c.calls || []).length && c.phone && !c.dnc;
+    const listAll = all().filter(c => c.plist === curList);
+    let last = null, lastAt = '';
+    listAll.forEach(c => { const lc = lastCall(c); if (lc && String(lc.at) > lastAt) { lastAt = String(lc.at); last = c; } });
+    const sorted = rows.slice().sort((a, b) => (a.porder || 0) - (b.porder || 0));
+    const from = last ? (last.porder || 0) : -Infinity;
+    const after = sorted.find(c => (c.porder || 0) > from && free(c));
+    return ((after || sorted.find(free)) || {}).id || null;
+  }
+  // doublons (même annonce DuProprio dans la même liste) : on garde celle qui a des appels / notes, l'autre est fusionnée
+  let dedupDone = false;
+  function dedupe() {
+    if (dedupDone || !window.CRM) return; dedupDone = true;
+    const g = {};
+    all().forEach(c => { if (c.listingNo) (g[c.plist + '|' + c.listingNo] = g[c.plist + '|' + c.listingNo] || []).push(c); });
+    Object.values(g).filter(a => a.length > 1).forEach(a => {
+      const score = (c) => (c.calls || []).length * 10 + (c.notes || []).length + (c.isContact ? 5 : 0);
+      a.sort((x, y) => score(y) - score(x) || (x.porder || 0) - (y.porder || 0));
+      const keep = a[0];
+      a.slice(1).forEach(d => {
+        keep.notes = (keep.notes || []).concat((d.notes || []).map(n => Object.assign({}, n, { text: '↪ ' + (n.text || '') })));
+        keep.calls = (keep.calls || []).concat(d.calls || []).sort((x, y) => String(x.at).localeCompare(String(y.at)));
+        if (!keep.owner && d.owner) keep.owner = d.owner;
+        d.deleted = true; d.mergedInto = keep.id; d.deletedAt = new Date().toISOString(); CRM.upsert(d);
+      });
+      CRM.upsert(keep);
+    });
+  }
   function card(c) {
     const lc = lastCall(c);
     const nCalls = (c.calls || []).length;
