@@ -480,7 +480,11 @@
     const first = (c.pnotes || '').split('\n').map(x => x.trim()).filter(Boolean).slice(-1)[0] || '';
     const ta = document.createElement('textarea'); ta.id = 'pd-tmp'; ta.value = k === 'parle' || k === 'rdv' || k === 'pas_interesse' ? first.slice(0, 160) : ''; ta.style.display = 'none'; document.body.appendChild(ta);
     if (k === 'suivi') ta.value = first.slice(0, 160);
-    CRM.logCall(k === 'suivi' ? 'parle' : k, { id: c.id, noteId: 'pd-tmp', silent: true }); ta.remove();
+    // « Suivi » juste après un appel déjà noté (ex. Pas de réponse) : on planifie seulement le rappel, sans inventer un « Parlé »
+    const lk = (c.calls || []).slice(-1)[0];
+    const justLogged = k === 'suivi' && lk && Date.now() - new Date(lk.at).getTime() < 30 * 60000;
+    if (!justLogged) CRM.logCall(k === 'suivi' ? 'parle' : k, { id: c.id, noteId: 'pd-tmp', silent: true });
+    ta.remove();
     const after = document.getElementById('pd-after');
     if (k === 'parle') {
       // conversation sans suite : reste dans « À appeler », rappel automatique dans 1 semaine (modifiable)
