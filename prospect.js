@@ -724,6 +724,7 @@
     tm = tm || ''; if (tm) c.followTime = tm; else delete c.followTime;
     CRM.upsert(c);
     const cal = document.getElementById('pd-cal');
+    if (!(cal && cal.checked) && window.VoiceCRM && VoiceCRM.dropReminders) VoiceCRM.dropReminders(c).catch(() => {});
     if (cal && cal.checked && window.VoiceCRM && VoiceCRM.reminder) VoiceCRM.reminder(c, { date: new Date(c.nextFollowUp + 'T12:00:00'), start: tm ? +tm.slice(0, 2) * 60 + +tm.slice(3, 5) : (CRM.callSlot ? CRM.callSlot(c.nextFollowUp) : null) }).catch(() => {});
     document.getElementById('pd-after').innerHTML = '';
     toastMsg(`${c.suivi ? '📌 Suivi' : '💬 Reste dans « À appeler »'} — rappel le ${fmtD(c.nextFollowUp)}${hmTxt(c.followTime)}`);

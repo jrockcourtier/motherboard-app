@@ -271,10 +271,27 @@
       <div class="vc-nav"><button type="button" class="vc-skip" onclick="VoiceCRM.edit()">Corriger</button><button type="button" class="sheet-save" id="vc-save" onclick="VoiceCRM.save()">${p.existing ? 'Mettre à jour' : 'Créer la fiche'}</button></div>`;
   }
 
+  // un nouveau rappel remplace les anciens « 📱 Rappeler » à venir du même contact (on n'en garde qu'un)
+  async function dropReminders(c) {
+    if (typeof events === 'undefined' || !accessToken || !c) return 0;
+    const now = new Date(), nm = String(c.name || '').toLowerCase().trim();
+    const old = events.filter(ev => !ev.done && ev.calId && ev.evId && ev.end >= now && /Rappeler/i.test(ev.title || '') &&
+      (ev.contactId === c.id || (nm.length > 4 && (ev.title || '').toLowerCase().includes(nm))));
+    let n = 0;
+    for (const ev of old) {
+      const del = () => fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(ev.calId)}/events/${encodeURIComponent(ev.evId)}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + accessToken } });
+      let r = await del().catch(() => null);
+      if (r && r.status === 401 && typeof getServerToken === 'function' && await getServerToken()) r = await del().catch(() => null);
+      if (r && (r.ok || r.status === 410 || r.status === 404)) { const i = events.indexOf(ev); if (i >= 0) events.splice(i, 1); n++; }
+    }
+    if (n) { if (typeof saveCache === 'function') saveCache(); if (typeof renderAll === 'function') renderAll(); if (window.Prospect && Prospect.changed) Prospect.changed(); }
+    return n;
+  }
   async function createReminder(c, fu) {
     if (typeof accessToken === 'undefined') return 'no-app';
     if (!accessToken && typeof getServerToken === 'function') await getServerToken();
     if (!accessToken) return 'no-token';
+    if (!fu.keep) await dropReminders(c).catch(() => 0);
     const start = new Date(fu.date);
     if (fu.start != null) start.setHours(Math.floor(fu.start / 60), fu.start % 60, 0, 0); else start.setHours(9, 0, 0, 0);
     const end = new Date(start.getTime() + 15 * 60000);
@@ -296,13 +313,14 @@
     if (r.status === 403) return 'no-permission';
     if (!r.ok) return 'error';
     const created = await r.json();
-    if (typeof events !== 'undefined' && typeof normalize === 'function') { events.push(normalize(created, { id: calId, summary: (cals.find(x => x.id === calId) || {}).name || '' })); if (typeof renderAll === 'function') renderAll(); }
+    if (typeof events !== 'undefined' && typeof normalize === 'function') { events.push(normalize(created, { id: calId, summary: (cals.find(x => x.id === calId) || {}).name || '' })); if (typeof renderAll === 'function') renderAll(); if (typeof saveCache === 'function') saveCache(); if (window.Prospect && Prospect.changed) Prospect.changed(); }
     return 'ok';
   }
 
   window.VoiceCRM = {
     parse: parseContact,
     reminder: (c, fu) => createReminder(c, fu),
+    dropReminders: (c) => dropReminders(c),
     pm(v) {
       const p = state.p; const n = document.getElementById('vc-note'); if (n) p.note = n.value;
       Voice.setPm(p.followUp, v); renderSummary();

@@ -460,7 +460,7 @@
     let calOk = 0;
     if (cal && people.length && window.VoiceCRM && VoiceCRM.reminder) {
       const who = { id: people[0].id, name: `${people.map(c => c.name).join(' et ')} — relister ${x.address || ''}`, phone: people.map(c => c.phone).filter(Boolean).join(' · '), stage: 'À relister', notes: [{ text: `Inscription retirée le ${fmtD(wd, true)}${note ? ' · ' + note : ''}` }] };
-      for (const d of dates) { const r = await VoiceCRM.reminder(who, { date: new Date(d + 'T12:00:00'), start: CRM.callSlot ? CRM.callSlot(d) : null }).catch(() => 'error'); if (r === 'ok') calOk++; }
+      for (const d of dates) { const r = await VoiceCRM.reminder(who, { date: new Date(d + 'T12:00:00'), start: CRM.callSlot ? CRM.callSlot(d) : null, keep: d !== dates[0] }).catch(() => 'error'); if (r === 'ok') calOk++; }
     }
     toastMsg(`⏸ Inscription retirée · ${people.length} vendeur${people.length > 1 ? 's' : ''} dans « 🔁 À relister » (Contacts)${cal ? (calOk === dates.length ? ' · 📅 agenda à jour' : " · ⚠️ l'agenda n'a pas pu être mis à jour") : ''}`, 6000);
   }
