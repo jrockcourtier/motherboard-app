@@ -522,7 +522,13 @@
       const c = contacts[id]; if (!c || !(c.calls || []).length) return;
       const k = c.calls.pop(); if (k && 'prevFu' in k) { c.nextFollowUp = k.prevFu; c.stage = k.prevStage || c.stage; if (k.outcome === 'courtier') delete c.hasBroker; } save(c); document.querySelectorAll('.mb-toast').forEach(x => x.remove());
     },
-    delCall(callId) { const c = contacts[openId]; c.calls = (c.calls || []).filter(k => k.id !== callId); save(c); },
+    delCall(callId) {
+      // la fiche peut être ouverte depuis la prospection (openId vide) : on retrouve le contact par l'appel
+      const c = Object.values(contacts).find(k => (k.calls || []).some(x => x.id === callId)); if (!c) return;
+      const last = c.calls[c.calls.length - 1];
+      if (last && last.id === callId && 'prevFu' in last) { c.nextFollowUp = last.prevFu; c.stage = last.prevStage || c.stage; }   // dernier appel enlevé : on revient à l'état d'avant
+      c.calls = c.calls.filter(k => k.id !== callId); save(c);
+    },
     dial(ids) { Dialer.start(ids || (() => { const sm = (SMART.find(x => x[0] === smart) || SMART[0])[2]; return list().filter(c => sm(c) && (filter === 'tous' || cat(c) === filter) && c.phone && !c.dnc).sort((a, b) => (a.nextFollowUp || '9').localeCompare(b.nextFollowUp || '9')).map(c => c.id); })()); },
     dueIds() { return list().filter(c => !c.dnc && isDue(c) && c.phone).map(c => c.id); },
     _out: OUT,
@@ -628,7 +634,7 @@
       const c = contacts[openId]; c.notes = c.notes || [];
       c.notes.push({ id: uuid(), at: new Date().toISOString(), text: txt }); c.lastContact = todayStr(); save(c);
     },
-    delNote(nid) { const c = contacts[openId]; c.notes = (c.notes || []).filter(n => n.id !== nid); save(c); },
+    delNote(nid) { const c = Object.values(contacts).find(k => (k.notes || []).some(n => n.id === nid)); if (!c) return; c.notes = c.notes.filter(n => n.id !== nid); save(c); },
     askDelete(scroll) { const d = $('#crm-del'); if (!d) return; if (scroll) d.scrollIntoView({ behavior: 'smooth', block: 'center' }); d.innerHTML = `Supprimer ce contact ? <button class="danger" onclick="CRM.doDelete()">Oui, supprimer</button><button onclick="CRM.open('${openId}')">Annuler</button>`; },
     doDelete() {
       const c = contacts[openId]; if (!c) return; c.deleted = true; save(c); CRM.close(); renderList();

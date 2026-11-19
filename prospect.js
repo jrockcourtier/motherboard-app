@@ -493,13 +493,13 @@
     if (k === 'parle') {
       // conversation sans suite : reste dans « À appeler », rappel automatique dans 1 semaine (modifiable)
       c.suivi = false; c.nextFollowUp = CRM.callDay(addDays(7)); CRM.upsert(c);
-      after.innerHTML = `<div class="crm-after-q">💬 Reste dans « À appeler » — rappel le ${fmtD(c.nextFollowUp)}. Changer ?</div>${TIMEPICK}<div class="chips">${[[3, '3 jours'], [14, '2 sem'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Prospect.follow(${d})">${l}</button>`).join('')}<button class="pd-otherdate" onclick="Prospect.pickDate()">📅 Autre jour / heure</button><button onclick="Prospect.out2suivi()">📌 Finalement, en suivi</button></div>${DTROW}<label class="crm-cal"><input type="checkbox" id="pd-cal"> Ajouter « 📱 Rappeler » à mon agenda</label>`;
+      after.innerHTML = fuPanel(`💬 Reste dans « À appeler » — rappel le ${fmtD(c.nextFollowUp)}. Changer le jour ou ajouter une heure ?`, c.nextFollowUp, false, [[3, '3 jours'], [7, '1 sem'], [14, '2 sem'], [30, '1 mois'], [90, '3 mois']], `<button onclick="Prospect.out2suivi()">📌 Finalement, en suivi</button>`);
       toastMsg(`💬 Parlé — reste dans « À appeler » <button onclick="CRM.undoCall('${c.id}')">Annuler</button>`);
       return;
     }
     if (k === 'suivi') {
       c.suivi = true; CRM.upsert(c);
-      after.innerHTML = `<div class="crm-after-q">📌 En suivi — quand le rappeler ?</div>${TIMEPICK}<div class="chips">${[[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Prospect.follow(${d})">${l}</button>`).join('')}<button class="pd-otherdate" onclick="Prospect.pickDate()">📅 Autre jour / heure</button></div>${DTROW}<label class="crm-cal"><input type="checkbox" id="pd-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
+      after.innerHTML = fuPanel('📌 En suivi — quand le rappeler ?', CRM.callDay(addDays(3)), true);
       return;
     }
     if (k === 'rdv') { CRM.focus(c.id); CRM.meeting(); return; }
@@ -508,7 +508,7 @@
   }
   function out2suivi() {
     const c = CRM._all()[cur]; if (!c) return; c.suivi = true; CRM.upsert(c);
-    document.getElementById('pd-after').innerHTML = `<div class="crm-after-q">📌 En suivi — quand le rappeler ?</div>${TIMEPICK}<div class="chips">${[[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Prospect.follow(${d})">${l}</button>`).join('')}<button class="pd-otherdate" onclick="Prospect.pickDate()">📅 Autre jour / heure</button></div>${DTROW}<label class="crm-cal"><input type="checkbox" id="pd-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
+    document.getElementById('pd-after').innerHTML = fuPanel('📌 En suivi — quand le rappeler ?', CRM.callDay(addDays(3)), true);
   }
   function delFiche() {
     const c = CRM._all()[cur]; if (!c) return; const id = c.id, nm = c.name;
@@ -696,29 +696,32 @@
     toastMsg(`🕙 Rappels : ${daysLabel(days)} · ${hm(a)}–${hm(b)}`);
   }
   // heure du rappel (facultatif) : « rappelle-moi à 18 h » → l'agenda est coché automatiquement
-  const TIMEPICK = `<label class="crm-timepick">🕕 À quelle heure ? <input type="time" id="pd-time" step="900" onchange="const k = document.getElementById('pd-cal'); if (this.value && k) k.checked = true"><span>facultatif · choisis l'heure, puis le jour</span></label>`;
-  const DTROW = `<div id="pd-dt" class="crm-dt" style="display:none"><label>Jour<input type="date" id="pd-date"></label><label>Heure<input type="time" id="pd-time2" step="900"></label><button onclick="Prospect.followDateGo()">✓ Confirmer</button></div>`;
-  function pickDate() {
-    const r = document.getElementById('pd-dt'); if (!r) return; r.style.display = 'flex';
-    const d = document.getElementById('pd-date'); if (!d.value) d.value = today();
-    const t0 = (document.getElementById('pd-time') || {}).value; if (t0) document.getElementById('pd-time2').value = t0;
-    d.focus();
+  // encadré « quand le rappeler ? » : jour + heure visibles tout de suite, les boutons rapides remplissent le jour
+  const SUIVI_CHIPS = [[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']];
+  function fuPanel(title, day, cal, chips, extra) {
+    return `<div class="crm-after-q">${title}</div>
+      <div class="chips">${(chips || SUIVI_CHIPS).map(([d, l]) => `<button onclick="Prospect.setDay(${d}, this)">${l}</button>`).join('')}${extra || ''}</div>
+      <div class="crm-dt"><label>Jour<input type="date" id="pd-date" value="${day || ''}"></label><label>Heure (facultatif)<input type="time" id="pd-time2" step="900" onchange="const k = document.getElementById('pd-cal'); if (this.value && k) k.checked = true"></label><button onclick="Prospect.followDateGo()">✓ Enregistrer le rappel</button></div>
+      <label class="crm-cal"><input type="checkbox" id="pd-cal"${cal ? ' checked' : ''}> Ajouter « 📱 Rappeler » à mon agenda</label>`;
+  }
+  function setDay(days, btn) {
+    const d = document.getElementById('pd-date'); if (d) d.value = CRM.callDay ? CRM.callDay(addDays(days)) : addDays(days);
+    if (btn) btn.parentNode.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
+    const t = document.getElementById('pd-time2'); if (t) t.focus();
   }
   function followDateGo() {
     const d = (document.getElementById('pd-date') || {}).value; if (!d) { toastMsg('Choisis le jour.'); return; }
-    const t = (document.getElementById('pd-time2') || {}).value || '', t1 = document.getElementById('pd-time');
-    if (t1) t1.value = t;
+    const t = (document.getElementById('pd-time2') || {}).value || '';
     const k = document.getElementById('pd-cal'); if (t && k) k.checked = true;
-    follow(0, d);
+    follow(0, d, t);
   }
   const hmTxt = (t) => t ? ' à ' + t.replace(':', ' h ').replace(/ h 00$/, ' h') : '';
   function followDate(v) { if (!v) return; follow(0, v); }
   // chips (3 j, 1 sem…) : prochain jour d'appels permis ; date choisie dans le calendrier : respectée telle quelle (week-end compris)
-  function follow(days, exact) {
+  function follow(days, exact, tm) {
     const c = CRM._all()[cur]; if (!c) return;
     c.nextFollowUp = exact || (CRM.callDay ? CRM.callDay(addDays(days)) : addDays(days));
-    const tm = (document.getElementById('pd-time') || {}).value || '';
-    if (tm) c.followTime = tm; else delete c.followTime;
+    tm = tm || ''; if (tm) c.followTime = tm; else delete c.followTime;
     CRM.upsert(c);
     const cal = document.getElementById('pd-cal');
     if (cal && cal.checked && window.VoiceCRM && VoiceCRM.reminder) VoiceCRM.reminder(c, { date: new Date(c.nextFollowUp + 'T12:00:00'), start: tm ? +tm.slice(0, 2) * 60 + +tm.slice(3, 5) : (CRM.callSlot ? CRM.callSlot(c.nextFollowUp) : null) }).catch(() => {});
@@ -851,7 +854,7 @@
     sess: sessToggle, callT: () => (callT0 ? callStop() : callStart()), takeCallDur,
     out2suivi, toSuivi, vendu, oneNote, lnCheck, delFiche, mergeOpen, mergeList, mergeWith, lnMine, offer, toContact, plan, savePlan,
     render, changed, thumb, thumbHtml, importFiles, confirmImport, closeModal, pick, dial, _parse: parseText, _review: review,
-    open: openFiche, close: closeFiche, step, typed, quick, set, out, follow, followDate, pickDate, followDateGo, big,
+    open: openFiche, close: closeFiche, step, typed, quick, set, out, follow, followDate, setDay, followDateGo, big,
     pane(k) { pane = k; const g = document.querySelector('#pr-dossier .pd-grid'); if (g) g.className = 'pd-grid pane-' + k; document.querySelectorAll('#pr-dossier .pd-tabs button').forEach(b => b.classList.toggle('on', b.getAttribute('onclick').includes("'" + k + "'"))); },
     list(v) { curList = v; ls.set('mb_plist', v); render(); },
     col(k) { col = k; q = ''; render(); },
