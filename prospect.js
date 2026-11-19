@@ -325,6 +325,7 @@
   function openFiche(id) {
     const c = CRM._all()[id]; if (!c) return;
     cur = id; CRM.focus(id); setTimeout(() => lnCheck(id), 50);
+    if (window.VoiceCRM && VoiceCRM.cleanReminders) VoiceCRM.cleanReminders(c).catch(() => {});
     const items = all().filter(k => k.plist === c.plist);
     const inCol = items.filter(k => colOf(k) === colOf(c));
     const list = (q ? items.filter(k => [k.name, k.address, k.owner, k.phone, k.listingNo].join(' ').toLowerCase().includes(q.toLowerCase())) : inCol);

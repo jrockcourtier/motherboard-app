@@ -272,11 +272,25 @@
   }
 
   // un nouveau rappel remplace les anciens « 📱 Rappeler » à venir du même contact (on n'en garde qu'un)
-  async function dropReminders(c) {
-    if (typeof events === 'undefined' || !accessToken || !c) return 0;
+  function upcoming(c) {
+    if (typeof events === 'undefined' || !c) return [];
     const now = new Date(), nm = String(c.name || '').toLowerCase().trim();
-    const old = events.filter(ev => !ev.done && ev.calId && ev.evId && ev.end >= now && /Rappeler/i.test(ev.title || '') &&
+    return events.filter(ev => !ev.done && ev.calId && ev.evId && ev.end >= now && /Rappeler/i.test(ev.title || '') &&
       (ev.contactId === c.id || (nm.length > 4 && (ev.title || '').toLowerCase().includes(nm))));
+  }
+  // à l'ouverture d'une fiche : s'il reste plusieurs « Rappeler » à venir, on garde seulement celui du prochain rappel
+  async function cleanReminders(c) {
+    if (!accessToken || !c || !c.nextFollowUp) return 0;
+    const L = upcoming(c); if (L.length < 2) return 0;
+    const same = L.filter(ev => ymdL(ev.start) === c.nextFollowUp);
+    if (!same.length) return 0;
+    const hm = (ev) => `${String(ev.start.getHours()).padStart(2, '0')}:${String(ev.start.getMinutes()).padStart(2, '0')}`;
+    const keep = same.find(ev => c.followTime && hm(ev) === c.followTime) || same[same.length - 1];
+    return dropReminders(c, keep);
+  }
+  async function dropReminders(c, keep) {
+    if (typeof events === 'undefined' || !accessToken || !c) return 0;
+    const old = upcoming(c).filter(ev => ev !== keep);
     let n = 0;
     for (const ev of old) {
       const del = () => fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(ev.calId)}/events/${encodeURIComponent(ev.evId)}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + accessToken } });
@@ -321,6 +335,7 @@
     parse: parseContact,
     reminder: (c, fu) => createReminder(c, fu),
     dropReminders: (c) => dropReminders(c),
+    cleanReminders: (c) => cleanReminders(c),
     pm(v) {
       const p = state.p; const n = document.getElementById('vc-note'); if (n) p.note = n.value;
       Voice.setPm(p.followUp, v); renderSummary();
