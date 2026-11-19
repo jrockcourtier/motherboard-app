@@ -407,7 +407,7 @@
   function renderProp(c) {
     const el = document.getElementById('pd-prop'); if (!el) return;
     const lc = lastCall(c), n = (c.calls || []).length;
-    const fu = c.nextFollowUp ? (c.nextFollowUp <= today() ? `<div class="pd-fu due">🔔 À rappeler ${c.nextFollowUp === today() ? "aujourd'hui" : 'depuis le ' + fmtD(c.nextFollowUp)}</div>` : `<div class="pd-fu">🔔 Prochain rappel : ${fmtD(c.nextFollowUp)}</div>`) : '';
+    const fu = c.nextFollowUp ? (c.nextFollowUp <= today() ? `<div class="pd-fu due">🔔 À rappeler ${c.nextFollowUp === today() ? "aujourd'hui" + hmTxt(c.followTime) : 'depuis le ' + fmtD(c.nextFollowUp)}</div>` : `<div class="pd-fu">🔔 Prochain rappel : ${fmtD(c.nextFollowUp)}${hmTxt(c.followTime)}</div>`) : '';
     el.innerHTML = `
       ${thumb(c.id) ? `<img class="pd-photo" src="${thumb(c.id)}" alt="">` : '<div class="pd-photo pr-nothumb">🏠</div>'}
       <div class="pd-price">${e(c.price || '')} <span>${e(c.ptype || '')}${c.rooms ? ' · ' + e(c.rooms) + ' ch.' : ''}</span></div>
@@ -426,7 +426,7 @@
       <div class="pd-facts">
         <div>Propriétaire<b><input value="${e(c.owner || '')}" placeholder="nom ?" onchange="Prospect.set('owner', this.value)"></b></div>
         <div>Étape<b>${e(c.stage || 'À appeler')}</b></div>
-        <div>Prochain rappel<b>${c.nextFollowUp ? fmtD(c.nextFollowUp) : '—'}</b></div>
+        <div>Prochain rappel<b>${c.nextFollowUp ? fmtD(c.nextFollowUp) + hmTxt(c.followTime) : '—'}</b></div>
         <div>Appels<b>${n ? n + ' essai' + (n > 1 ? 's' : '') : 'jamais appelé'}</b></div>
       </div>
       ${lc ? `<div class="crm-muted" style="margin-top:6px">Dernier : ${OUTL[lc.outcome] || ''} · ${new Date(lc.at).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })}</div>` : ''}
@@ -493,13 +493,13 @@
     if (k === 'parle') {
       // conversation sans suite : reste dans « À appeler », rappel automatique dans 1 semaine (modifiable)
       c.suivi = false; c.nextFollowUp = CRM.callDay(addDays(7)); CRM.upsert(c);
-      after.innerHTML = `<div class="crm-after-q">💬 Reste dans « À appeler » — rappel le ${fmtD(c.nextFollowUp)}. Changer ?</div><div class="chips">${[[3, '3 jours'], [14, '2 sem'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Prospect.follow(${d})">${l}</button>`).join('')}<label class="crm-datepick">📅<input type="date" onchange="Prospect.followDate(this.value)"></label><button onclick="Prospect.out2suivi()">📌 Finalement, en suivi</button></div>`;
+      after.innerHTML = `<div class="crm-after-q">💬 Reste dans « À appeler » — rappel le ${fmtD(c.nextFollowUp)}. Changer ?</div>${TIMEPICK}<div class="chips">${[[3, '3 jours'], [14, '2 sem'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Prospect.follow(${d})">${l}</button>`).join('')}<label class="crm-datepick">📅<input type="date" onchange="Prospect.followDate(this.value)"></label><button onclick="Prospect.out2suivi()">📌 Finalement, en suivi</button></div><label class="crm-cal"><input type="checkbox" id="pd-cal"> Ajouter « 📱 Rappeler » à mon agenda</label>`;
       toastMsg(`💬 Parlé — reste dans « À appeler » <button onclick="CRM.undoCall('${c.id}')">Annuler</button>`);
       return;
     }
     if (k === 'suivi') {
       c.suivi = true; CRM.upsert(c);
-      after.innerHTML = `<div class="crm-after-q">📌 En suivi — quand le rappeler ?</div><div class="chips">${[[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Prospect.follow(${d})">${l}</button>`).join('')}<label class="crm-datepick">📅<input type="date" onchange="Prospect.followDate(this.value)"></label></div><label class="crm-cal"><input type="checkbox" id="pd-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
+      after.innerHTML = `<div class="crm-after-q">📌 En suivi — quand le rappeler ?</div>${TIMEPICK}<div class="chips">${[[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Prospect.follow(${d})">${l}</button>`).join('')}<label class="crm-datepick">📅<input type="date" onchange="Prospect.followDate(this.value)"></label></div><label class="crm-cal"><input type="checkbox" id="pd-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
       return;
     }
     if (k === 'rdv') { CRM.focus(c.id); CRM.meeting(); return; }
@@ -508,7 +508,7 @@
   }
   function out2suivi() {
     const c = CRM._all()[cur]; if (!c) return; c.suivi = true; CRM.upsert(c);
-    document.getElementById('pd-after').innerHTML = `<div class="crm-after-q">📌 En suivi — quand le rappeler ?</div><div class="chips">${[[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Prospect.follow(${d})">${l}</button>`).join('')}<label class="crm-datepick">📅<input type="date" onchange="Prospect.followDate(this.value)"></label></div><label class="crm-cal"><input type="checkbox" id="pd-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
+    document.getElementById('pd-after').innerHTML = `<div class="crm-after-q">📌 En suivi — quand le rappeler ?</div>${TIMEPICK}<div class="chips">${[[3, '3 jours (il réfléchit)'], [7, '1 sem'], [14, '2 sem (pas maintenant)'], [30, '1 mois'], [90, '3 mois']].map(([d, l]) => `<button onclick="Prospect.follow(${d})">${l}</button>`).join('')}<label class="crm-datepick">📅<input type="date" onchange="Prospect.followDate(this.value)"></label></div><label class="crm-cal"><input type="checkbox" id="pd-cal" checked> Ajouter « 📱 Rappeler » à mon agenda</label>`;
   }
   function delFiche() {
     const c = CRM._all()[cur]; if (!c) return; const id = c.id, nm = c.name;
@@ -695,15 +695,21 @@
     CRM.setCallPlan({ days, start: a, end: b }); closeModal(); render();
     toastMsg(`🕙 Rappels : ${daysLabel(days)} · ${hm(a)}–${hm(b)}`);
   }
+  // heure du rappel (facultatif) : « rappelle-moi à 18 h » → l'agenda est coché automatiquement
+  const TIMEPICK = `<label class="crm-timepick">🕕 À quelle heure ? <input type="time" id="pd-time" step="900" onchange="const k = document.getElementById('pd-cal'); if (this.value && k) k.checked = true"><span>facultatif · choisis l'heure, puis le jour</span></label>`;
+  const hmTxt = (t) => t ? ' à ' + t.replace(':', ' h ').replace(/ h 00$/, ' h') : '';
   function followDate(v) { if (!v) return; follow(0, v); }
   // chips (3 j, 1 sem…) : prochain jour d'appels permis ; date choisie dans le calendrier : respectée telle quelle (week-end compris)
   function follow(days, exact) {
     const c = CRM._all()[cur]; if (!c) return;
-    c.nextFollowUp = exact || (CRM.callDay ? CRM.callDay(addDays(days)) : addDays(days)); CRM.upsert(c);
+    c.nextFollowUp = exact || (CRM.callDay ? CRM.callDay(addDays(days)) : addDays(days));
+    const tm = (document.getElementById('pd-time') || {}).value || '';
+    if (tm) c.followTime = tm; else delete c.followTime;
+    CRM.upsert(c);
     const cal = document.getElementById('pd-cal');
-    if (cal && cal.checked && window.VoiceCRM && VoiceCRM.reminder) VoiceCRM.reminder(c, { date: new Date(c.nextFollowUp + 'T12:00:00'), start: CRM.callSlot ? CRM.callSlot(c.nextFollowUp) : null }).catch(() => {});
+    if (cal && cal.checked && window.VoiceCRM && VoiceCRM.reminder) VoiceCRM.reminder(c, { date: new Date(c.nextFollowUp + 'T12:00:00'), start: tm ? +tm.slice(0, 2) * 60 + +tm.slice(3, 5) : (CRM.callSlot ? CRM.callSlot(c.nextFollowUp) : null) }).catch(() => {});
     document.getElementById('pd-after').innerHTML = '';
-    toastMsg(`${c.suivi ? '📌 Suivi' : '💬 Reste dans « À appeler »'} — rappel le ${fmtD(c.nextFollowUp)}`);
+    toastMsg(`${c.suivi ? '📌 Suivi' : '💬 Reste dans « À appeler »'} — rappel le ${fmtD(c.nextFollowUp)}${hmTxt(c.followTime)}`);
   }
 
   // ---------- affichage ----------
@@ -799,7 +805,7 @@
     const nCalls = (c.calls || []).length;
     const done = col === 'appeler' && nCalls > 0 && !!c.nextFollowUp && !isDue(c);   // déjà essayé, pas encore le moment de rappeler
     const isNext = c.id === nextId;
-    const fu = c.nextFollowUp ? `<span class="${isDue(c) ? 'crm-due-txt' : ''}">🔔 ${c.nextFollowUp === today() ? "aujourd'hui" : fmtD(c.nextFollowUp)}</span>` : '';
+    const fu = c.nextFollowUp ? `<span class="${isDue(c) ? 'crm-due-txt' : ''}">🔔 ${c.nextFollowUp === today() ? "aujourd'hui" : fmtD(c.nextFollowUp)}${hmTxt(c.followTime)}</span>` : '';
     return `<div class="pr-card${c.dnc ? ' dnc' : ''}${lnListed(c) ? ' lnlisted' : ''}${done ? ' done' : ''}${isNext ? ' next' : ''}${isNew(c) ? ' isnew' : ''}" onclick="Prospect.open('${c.id}')">
       ${thumbHtml(c, 'pr-thumb')}
       <div class="pr-body">

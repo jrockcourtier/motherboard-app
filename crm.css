@@ -614,3 +614,7 @@ body.rpt-on #rpt-print { display: block; position: fixed; inset: 0; z-index: 999
 .pd-merge-r button span { opacity: .7; font-size: 12px; }
 .pd-ln-mine { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .pd-offer-hd > span:first-child { width: 13px; flex: none; }
+
+.crm-timepick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; margin: 4px 0 6px; }
+.crm-timepick input { border: 1px solid var(--border-light); border-radius: 10px; padding: 4px 8px; font-size: 14px; }
+.crm-timepick span { font-weight: 400; font-size: 11.5px; color: var(--muted, #777); }
