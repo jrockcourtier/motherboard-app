@@ -285,9 +285,9 @@
     const body = {
       summary: `📱 Rappeler ${c.name}`,
       description: [c.phone ? 'Tél. : ' + c.phone : '', c.stage ? 'Étape : ' + c.stage : '', 'Dernière note : ' + ((c.notes || []).slice(-1)[0] || {}).text].filter(Boolean).join('\n'),
-      colorId: '6',
+      colorId: c.type === 'proprio' ? '8' : '6',   // suivis de prospection en gris, les autres en orange
       start: { dateTime: start.toISOString(), timeZone: tz }, end: { dateTime: end.toISOString(), timeZone: tz },
-      extendedProperties: { private: { mbType: 'suivi', mbContact: c.id } },
+      extendedProperties: { private: Object.assign({ mbType: 'suivi', mbContact: c.id }, c.type === 'proprio' ? { mbColor: 'gris' } : {}) },
       reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] }
     };
     const send = () => fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`, { method: 'POST', headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });

@@ -689,7 +689,7 @@
       <div class="logo-circle">JR</div>
       <div class="header-titles">
         <div class="header-name">JULIEN ROCK</div>
-        <div class="header-subtitle">COURTIER IMMOBILIER · <span id="app-ver" style="opacity:.6">v18.9</span></div>
+        <div class="header-subtitle">COURTIER IMMOBILIER · <span id="app-ver" style="opacity:.6">v19.0</span></div>
       </div>
     </div>
     <div class="header-actions">
@@ -728,7 +728,7 @@
     // ================== CONFIG ==================
     const GOOGLE_CLIENT_ID = '331553953189-ri23lfat50mtim15fjghlhrf3hjegmfi.apps.googleusercontent.com';
     const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
-    const APP_VERSION = 'v18.9';
+    const APP_VERSION = 'v19.0';
     try { const av = document.getElementById('app-ver'); if (av) av.textContent = APP_VERSION; } catch (x) {}
 
     const JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
@@ -934,6 +934,7 @@
         loadedRange = need;
         store('mb_cache', events.map(e => ({ ...e, start: e.start.getTime(), end: e.end.getTime() })));
         try { if (window.CRM && CRM._migrateCal && Object.keys(CRM._all()).length) CRM._migrateCal(events, moveEvent); } catch (x) {}
+        recolorProspect();
         setStatus(calErrors.length ? `⚠️ Calendrier non lu : ${calErrors.join(', ')} — vérifiez le partage` : `À jour · ${hhmm(new Date())} · ${loadedCals.length} calendrier(s)`, calErrors.length > 0); if (calErrors.length) console.warn('Calendriers en erreur', calErrors);
       } catch (err) {
         setStatus(err.message === 'expired' ? 'Session Google expirée — touchez « Reconnecter Google »' : 'Erreur : ' + err.message, true);
@@ -1222,6 +1223,18 @@
       document.querySelectorAll('.mb-toast').forEach(x => x.remove());
       const d = document.createElement('div'); d.className = 'mb-toast'; d.innerHTML = html;
       document.body.appendChild(d); setTimeout(() => d.remove(), ms); return d;
+    }
+    // suivis de prospection (contact « Proprio ») : en gris dans l'agenda, les autres suivis restent orange
+    async function recolorProspect() {
+      if (!window.CRM || !CRM._all) return;
+      const C = CRM._all(), now = new Date();
+      const todo = events.filter(e => e.contactId && C[e.contactId] && C[e.contactId].type === 'proprio' && !e.done && e.end >= now && e.color !== 'gris' && /Rappeler/.test(e.title || ''));
+      let n = 0;
+      for (const e of todo) {
+        const ok = await patchEvent(e, { colorId: COLORS.gris.g, extendedProperties: { private: { mbType: 'suivi', mbContact: e.contactId, mbColor: 'gris' } } }).catch(() => false);
+        if (ok) { e.color = 'gris'; n++; }
+      }
+      if (n) { renderAll(); saveCache(); }
     }
     async function patchEvent(e, body) {
       if (!e.calId || !e.evId) return false;
