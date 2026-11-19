@@ -216,6 +216,7 @@
       ${s === 'retiree' && x.withdrawnAt ? `<div class="tx-info">⏸ Retirée le <b>${fmtD(x.withdrawnAt, true)}</b> — à relister.${(x.relistDates || []).length ? ` Suivis avec les vendeurs : <b>${x.relistDates.map(d => fmtD(d, true)).join('</b> et <b>')}</b>.` : ''}</div>` : ''}
       <div class="tx-actions">
         ${isLive(x) || s === 'expiree' ? `<button onclick="LST.drop('${x.id}')">🔻 Baisse de prix</button><button class="lst-offer" onclick="LST.offer('${x.id}')">🤝 Offre d'achat acceptée</button><button onclick="LST.extend('${x.id}')">🔄 Prolonger le contrat</button><button onclick="LST.withdraw('${x.id}')">⏸ Retirer · relister plus tard</button>` : ''}
+        ${s === 'retiree' && !x.withdrawnAt ? `<button class="lst-offer" onclick="LST.withdraw('${x.id}')">⏸ Créer les suivis pour relister</button>` : ''}
         ${x.hasPdf ? `<button onclick="TX.pdf('${x.id}')">📄 Voir le contrat</button>` : `<button onclick="LST.attach('${x.id}')">📎 Ajouter le contrat (PDF)</button>`}
         ${window.CRM ? sellerIds(x).map(cid => { const c = CRM._all()[cid]; return c && !c.deleted ? `<button onclick="LST.close();CRM.open('${cid}')">👤 ${e(c.name)}</button>` : ''; }).join('') : ''}
         <button onclick="LST.resync('${x.id}')">📅 Rappels dans l'agenda</button>
@@ -223,7 +224,7 @@
       <div id="lst-inline"></div>
       ${(x.priceHist || []).length ? `<div class="f-label">Historique de prix</div><div class="tx-note">${[{ at: x.signedAt || x.createdAt, price: x.price, note: 'Prix initial' }].concat(x.priceHist).map(h => `${fmtD(String(h.at).slice(0, 10))} — <b>${money(h.price)}</b>${h.note ? ' · ' + e(h.note) : ''}`).join('<br>')}</div>` : ''}
       <div class="f-label">Statut</div>
-      <div class="chips">${['active', 'sous_condition', 'vendue', 'expiree', 'retiree'].map(k => `<button class="${(x.status || 'active') === k ? 'on' : ''}" onclick="LST.setStatus('${x.id}','${k}')">${STATUS[k].label}</button>`).join('')}</div>
+      <div class="chips">${['active', 'sous_condition', 'vendue', 'expiree', 'retiree'].map(k => `<button class="${(x.status || 'active') === k ? 'on' : ''}" onclick="${k === 'retiree' && (x.status || 'active') !== 'retiree' ? `LST.withdraw('${x.id}')` : `LST.setStatus('${x.id}','${k}')`}">${STATUS[k].label}</button>`).join('')}</div>
       <div class="f-label">Rappels</div>
       <div class="tx-list">${milestones(x).map(m => msRow(x, m, false)).join('') || '<div class="crm-muted">Aucun rappel (inscription non active).</div>'}</div>
       ${x.otherText ? `<div class="f-label">Autres déclarations et conditions (11)</div><div class="tx-note">${e(x.otherText)}</div>` : ''}
