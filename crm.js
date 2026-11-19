@@ -45,6 +45,7 @@
   const SMART = [
     ['tous', 'Tous', () => true],
     ['appeler', '📞 À appeler', c => !c.dnc && isDue(c)],
+    ['relister', '🔁 À relister', c => !!c.relist],
     ['retard', '⏰ En retard', c => !c.dnc && c.nextFollowUp && c.nextFollowUp < todayStr()],
     ['nouveaux', '🆕 Nouveaux', c => !isPro(c) && !(c.calls || []).length && (!c.firstContact || daysSince(c.firstContact) <= 14)],
     ['sanscontact', '💤 30 j sans contact', c => !isPro(c) && !c.dnc && !CLOSED.includes(c.stage) && (!c.lastContact || daysSince(c.lastContact) > 30)],
@@ -484,6 +485,7 @@
       if (c.revalider) delete c.revalider;
       const o = OUT[outcome];
       if (o.days) c.nextFollowUp = addDaysStr(o.days);
+      if (o.conv && (c.fuQueue || []).length) { const q = c.fuQueue.filter(d => d > todayStr()); c.nextFollowUp = q[0] || c.nextFollowUp; c.fuQueue = q.slice(1); }
       if (outcome === 'rdv') c.nextFollowUp = '';
       if (outcome === 'pas_interesse' && c.type === 'proprio') c.stage = 'Pas intéressé';
       if (outcome === 'courtier') { c.stage = c.type === 'proprio' ? 'A un courtier' : c.stage; c.nextFollowUp = ''; c.suivi = false; c.hasBroker = true; }

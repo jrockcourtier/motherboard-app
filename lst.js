@@ -213,8 +213,9 @@
       </div>
       <div class="lst-comm big">${commLine(x)}</div>
       ${tx ? `<div class="tx-info">🤝 Offre acceptée le <b>${fmtD(tx.acceptedAt, true)}</b> à <b>${money(tx.price)}</b>${tx.commissionPct ? ` · ta part ${String(tx.commissionPct).replace('.', ',')} % = ${money(tx.price * tx.commissionPct / 100)} (+ taxes)` : ''}<br><button class="tx-link" onclick="LST.close();showTab({target:document.querySelector('.tab-btn[onclick*=transactions]')},'transactions');TX.open('${tx.id}')">Voir la transaction et ses dates limites →</button></div>` : ''}
+      ${s === 'retiree' && x.withdrawnAt ? `<div class="tx-info">⏸ Retirée le <b>${fmtD(x.withdrawnAt, true)}</b> — à relister.${(x.relistDates || []).length ? ` Suivis avec les vendeurs : <b>${x.relistDates.map(d => fmtD(d, true)).join('</b> et <b>')}</b>.` : ''}</div>` : ''}
       <div class="tx-actions">
-        ${isLive(x) || s === 'expiree' ? `<button onclick="LST.drop('${x.id}')">🔻 Baisse de prix</button><button class="lst-offer" onclick="LST.offer('${x.id}')">🤝 Offre d'achat acceptée</button><button onclick="LST.extend('${x.id}')">🔄 Prolonger le contrat</button>` : ''}
+        ${isLive(x) || s === 'expiree' ? `<button onclick="LST.drop('${x.id}')">🔻 Baisse de prix</button><button class="lst-offer" onclick="LST.offer('${x.id}')">🤝 Offre d'achat acceptée</button><button onclick="LST.extend('${x.id}')">🔄 Prolonger le contrat</button><button onclick="LST.withdraw('${x.id}')">⏸ Retirer · relister plus tard</button>` : ''}
         ${x.hasPdf ? `<button onclick="TX.pdf('${x.id}')">📄 Voir le contrat</button>` : `<button onclick="LST.attach('${x.id}')">📎 Ajouter le contrat (PDF)</button>`}
         ${window.CRM ? sellerIds(x).map(cid => { const c = CRM._all()[cid]; return c && !c.deleted ? `<button onclick="LST.close();CRM.open('${cid}')">👤 ${e(c.name)}</button>` : ''; }).join('') : ''}
         <button onclick="LST.resync('${x.id}')">📅 Rappels dans l'agenda</button>
@@ -304,7 +305,7 @@
     (d.sellers || []).filter(v => v.name || v.phone).forEach(v => { const c = sellerContact(d, v, create); if (c && !ids.includes(c.id)) ids.push(c.id); });
     if (!ids.length && d.contactId) ids.push(d.contactId);
     d.contactIds = ids; d.contactId = ids[0] || d.contactId || '';
-    ids.forEach(id => { const c = CRM._all()[id]; if (c && c.type === 'vendeur' && ['Lead', 'Évaluation'].includes(c.stage)) { c.stage = 'CCV signé'; CRM.upsert(c); } });
+    ids.forEach(id => { const c = CRM._all()[id]; if (!c) return; let ch = false; if (c.relist && c.relist.listingId !== d.id) { delete c.relist; delete c.fuQueue; ch = true; } if (c.type === 'vendeur' && ['Lead', 'Évaluation'].includes(c.stage)) { c.stage = 'CCV signé'; ch = true; } if (ch) CRM.upsert(c); });
   }
   const sellerIds = (x) => (x.contactIds && x.contactIds.length ? x.contactIds : x.contactId ? [x.contactId] : []);
   // correction (v17.1) : une ancienne fiche « Catherine Mongeau et Marco Savard » devient deux fiches
@@ -423,6 +424,45 @@
     if (window.CRM) sellerIds(x).slice(1).forEach(cid => { const c = CRM._all()[cid]; if (c && !['Vendu / Notaire', 'Client passé'].includes(c.stage)) { c.stage = 'Offre acceptée'; CRM.upsert(c); } });
     save(x); syncCalendar(x).catch(() => {});
   }
+  // ---------- retirer l'inscription et planifier les suivis pour la relister ----------
+  function nextOn(md) { const y = +today().slice(0, 4); const d = `${y}-${md}`; return d > today() ? d : `${y + 1}-${md}`; }
+  function withdraw(id) {
+    const x = L[id]; const d1 = nextOn('01-15'), d2 = d1 < nextOn('02-15') ? nextOn('02-15') : '';
+    inline(`<div class="guest-panel"><b>⏸ Retirer l'inscription · relister plus tard</b>
+      <div class="f-hint">L'inscription passe à « Retirée » (ses rappels de contrat sont enlevés de l'agenda) et des suivis sont créés avec ${sellerIds(x).length > 1 ? 'les vendeurs' : 'le vendeur'}.</div>
+      <label class="f-block">Retirée le<input id="lst-wd" type="date" value="${today()}"></label>
+      <label class="f-block">1er suivi<input id="lst-w1" type="date" value="${d1}"></label>
+      <label class="f-block">2e suivi (facultatif)<input id="lst-w2" type="date" value="${d2}"></label>
+      <label class="f-block">Note (facultatif)<input id="lst-wn" placeholder="ex. relister en février ou mars, revoir le prix"></label>
+      <label class="crm-cal"><input type="checkbox" id="lst-wcal" checked> Ajouter « 📱 Rappeler » à mon agenda pour chaque suivi</label>
+      <label class="crm-cal"><input type="checkbox" id="lst-wev" checked> Remettre les vendeurs à l'étape « Évaluation »</label>
+      <div class="guest-row"><button onclick="LST.saveWithdraw('${id}')">⏸ Retirer et créer les suivis</button></div></div>`);
+  }
+  async function saveWithdraw(id) {
+    const x = L[id]; if (!x) return;
+    const v = (k) => (document.getElementById(k) || {}).value || '';
+    const wd = v('lst-wd') || today(), dates = [v('lst-w1'), v('lst-w2')].filter(Boolean).sort(), note = v('lst-wn').trim();
+    const cal = document.getElementById('lst-wcal').checked, ev = document.getElementById('lst-wev').checked;
+    if (!dates.length) { toastMsg('Choisis au moins une date de suivi.'); return; }
+    x.status = 'retiree'; x.withdrawnAt = wd; x.relistDates = dates; if (note) x.notes = (x.notes ? x.notes + '\n' : '') + `Retirée le ${fmtD(wd, true)} : ${note}`;
+    save(x);
+    const people = [];
+    if (window.CRM) sellerIds(x).forEach(cid => {
+      const c = CRM._all()[cid]; if (!c || c.deleted) return;
+      c.relist = { listingId: x.id, address: x.address || '', at: wd };
+      c.nextFollowUp = dates[0]; c.fuQueue = dates.slice(1);
+      if (ev && c.type === 'vendeur') c.stage = 'Évaluation';
+      c.notes = c.notes || []; c.notes.push({ id: H.uuid(), at: new Date().toISOString(), text: `⏸ Inscription retirée le ${fmtD(wd)} (${x.address || ''}) — à relister · suivis : ${dates.map(d => fmtD(d)).join(', ')}${note ? ' · ' + note : ''}` });
+      CRM.upsert(c); people.push(c);
+    });
+    open(id); await syncCalendar(x); open(id);
+    let calOk = 0;
+    if (cal && people.length && window.VoiceCRM && VoiceCRM.reminder) {
+      const who = { id: people[0].id, name: `${people.map(c => c.name).join(' et ')} — relister ${x.address || ''}`, phone: people.map(c => c.phone).filter(Boolean).join(' · '), stage: 'À relister', notes: [{ text: `Inscription retirée le ${fmtD(wd, true)}${note ? ' · ' + note : ''}` }] };
+      for (const d of dates) { const r = await VoiceCRM.reminder(who, { date: new Date(d + 'T12:00:00'), start: CRM.callSlot ? CRM.callSlot(d) : null }).catch(() => 'error'); if (r === 'ok') calOk++; }
+    }
+    toastMsg(`⏸ Inscription retirée · ${people.length} vendeur${people.length > 1 ? 's' : ''} dans « 🔁 À relister » (Contacts)${cal ? (calOk === dates.length ? ' · 📅 agenda à jour' : " · ⚠️ l'agenda n'a pas pu être mis à jour") : ''}`, 6000);
+  }
   async function setStatus(id, st) { const x = L[id]; x.status = st; save(x); open(id); await syncCalendar(x); open(id); }
   async function done(id, key) { const x = L[id]; x.done = x.done || {}; x.done[key] = new Date().toISOString(); save(x); if (document.getElementById('lst-modal').classList.contains('open')) open(id); await syncCalendar(x); }
   async function resync(id) { const x = L[id]; toastMsg("📅 Mise à jour de l'agenda…"); const r = await syncCalendar(x); open(id); toastMsg(r.bad ? `⚠️ ${r.bad} rappel(s) en erreur — connecte Google` : `✅ ${r.ok} rappel(s) à jour`); }
@@ -433,7 +473,7 @@
     toastMsg('🗑 Inscription supprimée');
   }
 
-  window.LST = { attach, attachFile, _key: addrKey, _same: sameAddr, _merge: mergeCC, _list: list, _cur: curPrice, _status: statusOf, render, open, close, edit, f, sf, sadd, sdel, saveForm, importFile, drop, saveDrop, extend, saveExtend, offer, paFile, offerManual, linkTx, setStatus, done, resync, del, doDel, _parse: parseCC, _milestones: milestones, _all: () => L };
+  window.LST = { withdraw, saveWithdraw, attach, attachFile, _key: addrKey, _same: sameAddr, _merge: mergeCC, _list: list, _cur: curPrice, _status: statusOf, render, open, close, edit, f, sf, sadd, sdel, saveForm, importFile, drop, saveDrop, extend, saveExtend, offer, paFile, offerManual, linkTx, setStatus, done, resync, del, doDel, _parse: parseCC, _milestones: milestones, _all: () => L };
   // inscriptions ajoutées hors de l'app (ex. import du rapport) : créer leurs rappels dans l'agenda une fois Google connecté
   async function autoSync() {
     for (const x of list().filter(x => x.needSync)) { try { const r = await syncCalendar(x); if (r.ok && !r.bad) { delete x.needSync; save(x); } else if (!r.bad) { delete x.needSync; save(x); } } catch (z) {} }
