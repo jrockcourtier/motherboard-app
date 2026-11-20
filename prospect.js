@@ -631,6 +631,26 @@
   const fmtH = (sec) => { const m = Math.round(sec / 60); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0'); };
   const ymdL = (iso) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   function sessLog() { return ls.get('mb_sess_log', []); }
+  // sessions partagées entre l'ordi et le téléphone (Supabase, table « sessions »)
+  async function sessPush(list) {
+    if (!list.length) return true;
+    try { const r = await fetch('/api/contacts?kind=sessions', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: list.map(x => ({ id: x.id, data: { s: x.s, e: x.e } })) }) }); return r.ok; } catch (x) { return false; }
+  }
+  async function sessSync() {
+    let remote = null;
+    try { const r = await fetch('/api/contacts?kind=sessions', { credentials: 'same-origin', cache: 'no-store' }); if (r.ok) remote = (await r.json()).items || []; } catch (x) {}
+    if (!remote) return;
+    const lg = sessLog(); let ch = false;
+    lg.forEach(x => { if (!x.id) { x.id = CRM.newId(); ch = true; } });
+    const have = new Set(lg.map(x => x.id)), there = new Set(remote.map(x => x.id));
+    const up = lg.filter(x => !there.has(x.id));
+    remote.forEach(it => { if (!have.has(it.id) && it.data && it.data.s && it.data.e) { lg.push({ id: it.id, s: it.data.s, e: it.data.e }); ch = true; } });
+    if (ch) { lg.sort((a, b) => String(a.s).localeCompare(String(b.s))); ls.set('mb_sess_log', lg.slice(-3000)); }
+    if (up.length) await sessPush(up);
+    if (ch) { if (window.DASH && DASH.render) try { DASH.render(); } catch (x) {} const root = document.getElementById('prospection'); if (root && root.classList.contains('active')) render(); }
+  }
+  setTimeout(sessSync, 2500);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sessSync(); });
   function sessRun() { return ls.get('mb_sess', null); }
   function sessTotal(fromYmd) {
     let t = 0; sessLog().forEach(x => { if (ymdL(x.s) >= fromYmd) t += (new Date(x.e) - new Date(x.s)) / 1000; });
@@ -640,7 +660,7 @@
   function weekStart() { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
   function sessToggle() {
     const r = sessRun();
-    if (r) { const lg = sessLog(); lg.push({ s: r.t0, e: new Date().toISOString() }); ls.set('mb_sess_log', lg.slice(-300)); ls.set('mb_sess', null); toastMsg(`⏱ Session ${hhmm(r.t0)} → ${hhmm(new Date().toISOString())} (${fmtH((Date.now() - new Date(r.t0)) / 1000)}) · total aujourd'hui ${fmtH(sessTotal(today()))}`); }
+    if (r) { const lg = sessLog(), it = { id: CRM.newId(), s: r.t0, e: new Date().toISOString() }; lg.push(it); ls.set('mb_sess_log', lg.slice(-3000)); sessPush([it]); ls.set('mb_sess', null); toastMsg(`⏱ Session ${hhmm(r.t0)} → ${hhmm(new Date().toISOString())} (${fmtH((Date.now() - new Date(r.t0)) / 1000)}) · total aujourd'hui ${fmtH(sessTotal(today()))}`); }
     else { ls.set('mb_sess', { t0: new Date().toISOString() }); toastMsg('⏱ Session de prospection démarrée'); }
     render();
   }

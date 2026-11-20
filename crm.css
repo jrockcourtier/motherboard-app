@@ -625,3 +625,6 @@ body.rpt-on #rpt-print { display: block; position: fixed; inset: 0; z-index: 999
 .crm-dt button { background: #0b8043; color: #fff; border: 0; border-radius: 8px; padding: 7px 12px; font-weight: 700; cursor: pointer; }
 /* la fenêtre « Nouveau rendez-vous » passe devant la fiche de prospection */
 body.pr-dossier-open .modal { z-index: 300; }
+
+.db-nums .db-hrs { padding-left: 12px; border-left: 1px solid var(--border-light); }
+.db-nums .db-hrs b { color: #0b8043; }

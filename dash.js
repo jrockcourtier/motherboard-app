@@ -35,7 +35,7 @@
     const OUT = (window.CRM && CRM._out) || {};
     const wk = new Date(); wk.setDate(wk.getDate() - ((wk.getDay() + 6) % 7)); const wkS = ymd(wk);
     const moS = t0.slice(0, 8) + '01', yS = y + '-01-01';
-    const P = { w: { calls: 0, conv: 0, rdv: 0 }, m: { calls: 0, conv: 0, rdv: 0 }, y: { calls: 0, conv: 0, rdv: 0 } };
+    const P = { w: { calls: 0, conv: 0, rdv: 0, sess: 0 }, m: { calls: 0, conv: 0, rdv: 0, sess: 0 }, y: { calls: 0, conv: 0, rdv: 0, sess: 0 } };
     C.forEach(c => (c.calls || []).forEach(k => {
       const d = ymd(new Date(k.at)), o = OUT[k.outcome] || {};
       [['w', wkS], ['m', moS], ['y', yS]].forEach(([p, from]) => { if (d >= from) { P[p].calls++; if (o.conv) P[p].conv++; if (k.outcome === 'rdv') P[p].rdv++; } });
@@ -47,7 +47,13 @@
       rdv: pros.filter(c => c.stage === 'Rendez-vous').length,
       signe: pros.filter(c => c.stage === 'Signé').length
     };
-    let sessW = 0; try { (JSON.parse(localStorage.getItem('mb_sess_log') || '[]') || []).forEach(s => { if (ymd(new Date(s.s)) >= wkS) sessW += (new Date(s.e) - new Date(s.s)) / 1000; }); } catch (x) {}
+    // temps de prospection (chrono « Démarrer la prospection ») : sessions terminées + celle en cours
+    try {
+      const segs = (JSON.parse(localStorage.getItem('mb_sess_log') || '[]') || []).map(s => [s.s, new Date(s.e) - new Date(s.s)]);
+      const run = JSON.parse(localStorage.getItem('mb_sess') || 'null'); if (run && run.t0) segs.push([run.t0, Date.now() - new Date(run.t0)]);
+      segs.forEach(([st, ms]) => { const d = ymd(new Date(st)); [['w', wkS], ['m', moS], ['y', yS]].forEach(([p, from]) => { if (d >= from && ms > 0) P[p].sess += ms / 1000; }); });
+    } catch (x) {}
+    const sessW = P.w.sess;
     // à faire
     const dueN = window.CRM && CRM.dueIds ? C.filter(c => !c.inbox && c.nextFollowUp && c.nextFollowUp <= t0).length : 0;
     const inboxN = C.filter(c => c.inbox).length;
@@ -131,12 +137,12 @@
           <div class="db-row-h"><b>📞 Prospection</b><button class="db-link" onclick="${go('prospection')}">Ouvrir la prospection →</button></div>
           <div class="db-prosp">
             ${[['Cette semaine', P.w], ['Ce mois-ci', P.m], ['Cette année', P.y]].map(([l, x]) => `<div class="db-pcol"><div class="db-l">${l}</div>
-              <div class="db-nums"><div><b>${x.calls}</b><span>appels</span></div><div><b>${x.conv}</b><span>conversations</span></div><div><b>${x.rdv}</b><span>RDV</span></div></div>
+              <div class="db-nums"><div><b>${x.calls}</b><span>appels</span></div><div><b>${x.conv}</b><span>conversations</span></div><div><b>${x.rdv}</b><span>RDV</span></div><div class="db-hrs"><b>${hm(x.sess)}</b><span>de prospection</span></div></div>
               <div class="db-rates"><span title="Conversations ÷ appels">Taux de contact <b>${pct(x.conv, x.calls)}</b></span><span title="RDV ÷ conversations">Taux de RDV <b>${pct(x.rdv, x.conv)}</b></span></div></div>`).join('')}
           </div>
           <div class="db-pipe">
             ${[['À appeler', D.pipe.appeler], ['En suivi', D.pipe.suivi], ['RDV', D.pipe.rdv], ['Signés', D.pipe.signe]].map(([l, n]) => `<div><b>${n}</b><span>${l}</span></div>`).join('<i>›</i>')}
-            ${D.sessW ? `<div class="db-sess">⏱ ${hm(D.sessW)} de prospection cette semaine</div>` : ''}
+
           </div>
         </div>
 
